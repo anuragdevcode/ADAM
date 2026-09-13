@@ -16,31 +16,31 @@ Build and stabilize text chat completely before starting voice. Voice adds a who
 
 ## 2. Speech-to-text (voice input)
 
-- [ ] **faster-whisper** (CTranslate2 reimplementation of Whisper — up to 4x faster, lower memory) for general transcription.
+- [x] **faster-whisper** (CTranslate2 reimplementation of Whisper — up to 4x faster, lower memory) for general transcription. Hosted **Groq Whisper** (`GROQ_API_KEY`, free tier) is preferred when configured; the browser Web Speech API is the zero-setup fallback.
 - [ ] If Hindi-accented officer speech is a priority, evaluate **IndicWhisper** (AI4Bharat's Whisper fine-tunes for Indian languages) against plain Whisper on real sample audio before committing to one.
 - [ ] Local dev: `faster-whisper` small/medium model runs fine on CPU on the MacBook Air for testing; don't expect real-time streaming transcription on 8GB RAM — batch/chunked transcription is fine for a demo.
 
 ## 3. Text-to-speech (voice output)
 
 - [ ] **AI4Bharat Indic-TTS** (FastPitch + HiFi-GAN, Apache 2.0) for natural Hindi voice responses — purpose-built for Indian languages rather than adapted from English TTS.
-- [ ] For English-only responses or as a lightweight fallback, **Piper TTS** is a good low-resource option.
-- [ ] Read back only the answer text, not the full citation metadata — citations stay visual (Section 1), not spoken, to keep voice responses natural.
+- [x] For English-only responses or as a lightweight fallback, **Piper TTS** is a good low-resource option. Hosted **ElevenLabs** (`ELEVENLABS_API_KEY`, free tier, Hindi + English) is preferred when configured; browser `speechSynthesis` is the zero-setup fallback.
+- [x] Read back only the answer text, not the full citation metadata — citations stay visual (Section 1), not spoken, to keep voice responses natural.
 
 ## 4. Speech-to-speech (natural conversation mode) — phase 2
 
 - [ ] Only attempt this after text chat and one-directional voice (STT-only or TTS-only) are both stable.
-- [ ] Pipeline: STT → Module 03 agent → TTS, chained with a latency budget in mind — each hop adds delay, and a government-official-facing tool needs to feel responsive, not laggy.
-- [ ] Consider a "typing/thinking" audio or visual cue during the retrieval+generation step so the wait doesn't feel broken.
-- [ ] Explicitly test interruption handling (officer starts talking while TTS is still playing) — decide on a simple behavior (e.g. new input cancels current playback) rather than leaving it undefined.
+- [x] Pipeline: STT → Module 03 agent → TTS, chained with a latency budget in mind — each hop adds delay, and a government-official-facing tool needs to feel responsive, not laggy.
+- [x] Consider a "typing/thinking" audio or visual cue during the retrieval+generation step so the wait doesn't feel broken.
+- [x] Explicitly test interruption handling (officer starts talking while TTS is still playing) — decide on a simple behavior (e.g. new input cancels current playback) rather than leaving it undefined. Implemented: the mic is muted while ADAM speaks (no echo); tapping the mic cancels playback and returns to listening.
 
 ## 5. Step-by-step build order
 
 1. [ ] Build the text chat UI against a mocked/static agent response first, to get streaming and citation rendering right independently.
 2. [ ] Connect to the real Module 03 agent.
 3. [ ] Add conversation history + Mem0-backed session continuity in the UI.
-4. [ ] Add speech-to-text input as an additive feature (mic button → transcribed text → same text pipeline).
-5. [ ] Add text-to-speech output as an additive feature (answer text → audio playback), toggleable.
-6. [ ] Only then attempt full speech-to-speech mode, with latency and interruption handling addressed explicitly.
+4. [x] Add speech-to-text input as an additive feature (mic button → transcribed text → same text pipeline).
+5. [x] Add text-to-speech output as an additive feature (answer text → audio playback), toggleable.
+6. [x] Only then attempt full speech-to-speech mode, with latency and interruption handling addressed explicitly.
 
 ## 6. Definition of done for this module
 

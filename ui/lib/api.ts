@@ -14,6 +14,7 @@ import type {
   UserProfile,
   UserPreferenceData,
   VocabularyData,
+  VoiceStatus,
 } from './types';
 
 const API_BASE = '/api';
@@ -157,9 +158,27 @@ export async function deleteSession(sessionId: string, userId: string): Promise<
 
 // ── Voice Input & Output ───────────────────────────────────────────────────
 
+const UNAVAILABLE_VOICE_STATUS: VoiceStatus = {
+  stt: { available: false, provider: 'none', engine: 'unknown' },
+  tts: { available: false, provider: 'none', engine: 'unknown', media_type: 'audio/wav' },
+};
+
+/** Which speech engines the server can offer; falls back to "none" on error. */
+export async function fetchVoiceStatus(): Promise<VoiceStatus> {
+  try {
+    const resp = await fetch(`${API_BASE}/voice/status`);
+    if (!resp.ok) return UNAVAILABLE_VOICE_STATUS;
+    return resp.json();
+  } catch {
+    return UNAVAILABLE_VOICE_STATUS;
+  }
+}
+
 export async function transcribeAudio(audioBlob: Blob, languageHint: string = 'hi'): Promise<SttResult> {
   const form = new FormData();
-  form.append('file', audioBlob, 'recording.webm');
+  // Safari records audio/mp4; Chrome and Firefox record audio/webm.
+  const ext = audioBlob.type.includes('mp4') ? 'mp4' : audioBlob.type.includes('wav') ? 'wav' : 'webm';
+  form.append('file', audioBlob, `recording.${ext}`);
   form.append('language_hint', languageHint);
   const resp = await fetch(`${API_BASE}/voice/transcribe`, { method: 'POST', body: form });
   if (!resp.ok) {

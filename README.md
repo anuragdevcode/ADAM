@@ -41,9 +41,10 @@ ADAM is a platform for turning approved Uttarakhand public records into a connec
 
 ### Voice
 
-- **Speech-to-text:** Fast Whisper (`faster-whisper`) — an optional install (`pip install -e ".[voice]"`, bundled into the Docker image)
-- **Text-to-speech:** Piper
-- Both fall back to a "null engine" so voice features report as unavailable rather than crashing the app when the underlying dependency isn't installed
+- **Speech-to-text:** Groq-hosted Whisper large-v3 (`GROQ_API_KEY`, free tier, Hindi + English) when configured; otherwise Fast Whisper (`faster-whisper`) locally — an optional install (`pip install -e ".[voice]"`, bundled into the Docker image)
+- **Text-to-speech:** ElevenLabs multilingual voices (`ELEVENLABS_API_KEY`, free tier) when configured; otherwise Piper
+- Both fall back to a "null engine" that reports as unavailable via `GET /api/voice/status`, and the UI then uses the browser's Web Speech API — so voice works with no keys and no extra installs
+- **Conversation loop:** the Next.js UI runs a hands-free listen → answer → speak → listen cycle with silence detection, tap-to-interrupt, and Markdown/citation stripping so only the answer prose is spoken (see [Voice conversation](#voice-conversation))
 
 ### Frontend
 
@@ -136,7 +137,7 @@ Production images do not mount application source code or the UI `node_modules` 
 
 ## Configuration
 
-Copy the template only when you need to override defaults:
+Copy the template only when you need to override defaults. Both Docker Compose and a native `adam serve` read `.env` from the repository root (values already set in the shell take precedence):
 
 ```bash
 cp .env.example .env
@@ -154,6 +155,11 @@ cp .env.example .env
 | `ADAM_MODEL_BACKEND` | Model runtime | `ollama` |
 | `OLLAMA_HOST` | Ollama-compatible endpoint | `http://host.docker.internal:11434` |
 | `API_PORT`, `UI_PORT`, `POSTGRES_PORT` | Host port overrides | `8000`, `3000`, `5432` |
+| `ADAM_STT_PROVIDER` | Speech-to-text engine: `auto`, `groq`, `faster_whisper`, `none` | `auto` |
+| `GROQ_API_KEY` | Free Groq key for hosted Whisper (Hindi + English) | empty → local Whisper / browser |
+| `ADAM_TTS_PROVIDER` | Text-to-speech engine: `auto`, `elevenlabs`, `piper`, `none` | `auto` |
+| `ELEVENLABS_API_KEY` | Free ElevenLabs key for natural multilingual voices | empty → browser voice |
+| `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | Voice and model used for spoken answers | `21m00Tcm4TlvDq8ikWAM`, `eleven_flash_v2_5` |
 
 On Linux, `host.docker.internal` may not resolve to a host Ollama installation. Compose includes a host-gateway mapping on modern Docker versions; otherwise set `OLLAMA_HOST` in `.env` to your reachable Ollama address.
 
@@ -172,6 +178,23 @@ ollama pull qwen2.5:3b
 With Docker running, ADAM will reach a host Ollama service through `OLLAMA_HOST`. The model selector only enables models that are actually installed. Never commit model files (`*.gguf`, `*.safetensors`, `*.onnx`, etc.); distribute them through Ollama, an artifact registry, or a separately mounted volume.
 
 Fast Whisper is included in the API Docker image. On first transcription it may download its configured Whisper model into the container cache. For production, mount a managed cache/model volume and document its provenance instead of adding it to Git.
+
+## Voice conversation
+
+ADAM can be used entirely by voice: press **Voice** in the chat composer, ask a question out loud, and the answer is read back to you; ADAM then listens for your next question. Tap the mic while it is speaking to interrupt, and **End** to leave voice mode. The mic button next to it is hold-to-talk for single questions, and the speaker toggle reads answers aloud in text mode. Hindi and English are selectable in the composer.
+
+Speech runs through pluggable engines chosen by `GET /api/voice/status`:
+
+| Direction | Engine | Setup |
+| --- | --- | --- |
+| Speech → text | **Groq Whisper** (`whisper-large-v3-turbo`) | Free key from [console.groq.com/keys](https://console.groq.com/keys) → `GROQ_API_KEY` |
+| Speech → text | faster-whisper (local CPU) | `pip install -e ".[voice]"` — used when no Groq key is set |
+| Speech → text | Browser Web Speech API | Nothing — used when the server has neither (Chrome/Edge) |
+| Text → speech | **ElevenLabs** (`eleven_flash_v2_5`, Hindi + English) | Free key from [elevenlabs.io](https://elevenlabs.io/app/settings/api-keys) → `ELEVENLABS_API_KEY` |
+| Text → speech | Piper (local) | `piper` binary on `PATH` |
+| Text → speech | Browser `speechSynthesis` | Nothing — used when the server has neither |
+
+Put the keys in `.env` (never in tracked files) and restart the API; the composer's status line shows which engines are active. Both hosted tiers are free without a card: Groq bills by audio minutes at generous free limits, ElevenLabs gives ~10 minutes of speech per month, and ADAM only ever sends the cleaned answer prose (no citation metadata) to the TTS engine. Markdown and citation markers are stripped before speaking, so citations stay visual.
 
 ## Native development (without Docker)
 
@@ -207,7 +230,9 @@ cd ui && npm run build
 
 **Model remains disabled** — run `ollama list`, pull the exact requested tag, and wait up to 15 seconds for the UI model inventory refresh. Confirm `OLLAMA_HOST` is reachable from the API container.
 
-**Voice input reports unavailable** — inspect `docker compose logs api`. The API requires Fast Whisper and FFmpeg; rebuild with `docker compose build --no-cache api` if an earlier image predates this setup.
+**Voice input reports unavailable** — check `GET /api/voice/status`. With no `GROQ_API_KEY` the API needs Fast Whisper and FFmpeg (rebuild with `docker compose build --no-cache api` if an earlier image predates this setup); without either, the UI uses the browser's own recognition, which needs Chrome/Edge and microphone permission on `localhost` or HTTPS.
+
+**Answers are not spoken / wrong voice** — with `ELEVENLABS_API_KEY` set, inspect `docker compose logs api` for 401/429 responses (bad key or monthly quota). Without a key the browser's installed voices are used; install a Hindi voice in the OS for `हिन्दी` output.
 
 **Database reset needed** — use `docker compose down --volumes` only when you intentionally want to delete all local Postgres and application storage data.
 
