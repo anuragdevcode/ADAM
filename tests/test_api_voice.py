@@ -57,13 +57,9 @@ def test_stt_null_engine_returns_empty_transcript():
 
 def test_stt_engine_factory_returns_null_when_no_whisper():
     """get_stt_engine() must return NullSttEngine when faster_whisper is not importable."""
-    import importlib.util
-    # Temporarily simulate whisper not being available
     from unittest.mock import patch
     with patch("importlib.util.find_spec", return_value=None):
         from adam.api.voice import stt as stt_module
-        import importlib
-        importlib.reload(stt_module)
         engine = stt_module.get_stt_engine()
         assert isinstance(engine, stt_module.NullSttEngine)
 

@@ -1,194 +1,209 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { transcribeAudio, synthesizeSpeech } from '@/lib/api';
-import { Mic, MicOff, Volume2, VolumeX, Square, Play, Loader2 } from 'lucide-react';
+import type { VoiceConversation } from '@/lib/useVoiceConversation';
+import { VOICE_LANGUAGES } from '@/lib/voice';
+import type { VoiceLanguage } from '@/lib/types';
+import { AudioLines, Mic, Volume2, VolumeX, Square, Play, Loader2, Brain } from 'lucide-react';
 
 interface VoiceControlsProps {
-  onTranscript: (text: string) => void;
-  ttsText: string;
-  ttsEnabled: boolean;
-  onToggleTts: () => void;
-  language?: string;
+  voice: VoiceConversation;
+  /** Whether there is an answer available to read aloud. */
+  hasAnswer: boolean;
 }
 
-export default function VoiceControls({
-  onTranscript,
-  ttsText,
-  ttsEnabled,
-  onToggleTts,
-  language = 'hi',
-}: VoiceControlsProps) {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recordingRef = useRef(false);
-  const lastSpokenTextRef = useRef('');
+const PHASE_LABEL: Record<VoiceConversation['phase'], string> = {
+  idle: 'Voice mode on',
+  listening: 'Listening… tap mic when done',
+  transcribing: 'Transcribing…',
+  thinking: 'Thinking…',
+  speaking: 'Speaking — tap mic to interrupt',
+};
 
-  const speakWithBrowser = useCallback((text: string) => {
-    if (!('speechSynthesis' in window)) return false;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-    return true;
-  }, [language]);
+/**
+ * Voice controls for the chat composer.
+ *
+ * All state lives in `useVoiceConversation` (owned by ChatWindow) so the loop
+ * survives this component being re-mounted when the layout switches from the
+ * empty state to the docked composer.
+ */
+export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) {
+  const {
+    phase,
+    voiceMode,
+    toggleVoiceMode,
+    ttsEnabled,
+    toggleTts,
+    language,
+    setLanguage,
+    level,
+    error,
+    startPushToTalk,
+    stopPushToTalk,
+    speakLatest,
+    stopSpeaking,
+    interrupt,
+    finishTurn,
+    inputSupported,
+    engineLabel,
+    status,
+  } = voice;
 
-  const startRecording = useCallback(async () => {
-    if (recordingRef.current) return;
-    try {
-      recordingRef.current = true;
-      setVoiceError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setIsTranscribing(true);
-        try {
-          const result = await transcribeAudio(blob, language);
-          onTranscript(result.transcript);
-        } catch (err) {
-          console.error('Transcription failed:', err);
-          setVoiceError(err instanceof Error ? err.message : 'Speech-to-text is unavailable.');
-        } finally {
-          setIsTranscribing(false);
-        }
-      };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setIsRecording(true);
-    } catch (err) {
-      recordingRef.current = false;
-      console.error('Microphone access denied:', err);
-    }
-  }, [language, onTranscript]);
+  const isRecording = phase === 'listening';
+  const isTranscribing = phase === 'transcribing';
+  const isSpeaking = phase === 'speaking';
+  const isThinking = phase === 'thinking';
 
-  const stopRecording = useCallback(() => {
-    if (!recordingRef.current) return;
-    recordingRef.current = false;
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
-  }, []);
+  // Inside voice mode the mic button reflects the loop phase and doubles as
+  // the interrupt control; outside it is a plain hold-to-talk button.
+  const micTitle = voiceMode
+    ? PHASE_LABEL[phase]
+    : isRecording
+    ? 'Recording… release to send'
+    : 'Hold to speak';
 
-  const speakText = useCallback(async () => {
-    if (!ttsText || isSpeaking) return;
-    setIsSpeaking(true);
-    try {
-      const blob = await synthesizeSpeech(ttsText, language);
-      // The backend deliberately uses a 44-byte silent WAV when Piper is not
-      // installed.  Use the browser's local speech engine in that case.
-      if (blob.size <= 44 && speakWithBrowser(ttsText)) return;
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        setIsSpeaking(false);
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        setIsSpeaking(false);
-      };
-      await audio.play();
-    } catch (err) {
-      console.error('TTS failed:', err);
-      if (!speakWithBrowser(ttsText)) setIsSpeaking(false);
-    }
-  }, [ttsText, language, isSpeaking, speakWithBrowser]);
+  const micClass = voiceMode
+    ? isRecording
+      ? 'bg-rose-500 text-white shadow-sm'
+      : isSpeaking
+      ? 'bg-purple-600 text-white shadow-sm'
+      : 'bg-purple-50 text-purple-600'
+    : isRecording
+    ? 'bg-rose-500 text-white shadow-sm animate-pulse'
+    : isTranscribing
+    ? 'bg-gray-100 text-gray-400 cursor-wait'
+    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70';
 
-  const stopSpeaking = useCallback(() => {
-    audioRef.current?.pause();
-    window.speechSynthesis?.cancel();
-    setIsSpeaking(false);
-  }, []);
-
-  // With voice output enabled, a spoken prompt completes the STT → chat → TTS
-  // loop without requiring a second click.  Text answers are read the same way.
-  useEffect(() => {
-    if (ttsEnabled && ttsText && ttsText !== lastSpokenTextRef.current && !isSpeaking) {
-      lastSpokenTextRef.current = ttsText;
-      void speakText();
-    }
-  }, [ttsEnabled, ttsText, isSpeaking, speakText]);
+  const micIcon = isTranscribing || isThinking ? (
+    <Loader2 className="w-4 h-4 animate-spin" />
+  ) : voiceMode && isSpeaking ? (
+    <AudioLines className="w-4 h-4" />
+  ) : (
+    <Mic className="w-4 h-4" />
+  );
 
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-1.5">
-        {/* Mic Button */}
-        <button
-        type="button"
-        onPointerDown={startRecording}
-        onPointerUp={stopRecording}
-        onPointerCancel={stopRecording}
-        disabled={isTranscribing}
-        title={isRecording ? 'Recording… release to transcribe' : 'Hold to speak voice input'}
-        className={`p-2 rounded-xl transition-all ${
-          isRecording
-            ? 'bg-rose-500 text-white shadow-sm animate-pulse'
-            : isTranscribing
-            ? 'bg-gray-100 text-gray-400 cursor-wait'
-            : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-        }`}
-      >
-        {isTranscribing ? (
-          <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
-        ) : isRecording ? (
-          <MicOff className="w-4 h-4" />
-        ) : (
-          <Mic className="w-4 h-4" />
-        )}
-        </button>
-
-        {/* Speaker Toggle Button */}
-        <button
-        type="button"
-        onClick={onToggleTts}
-        title={ttsEnabled ? 'Voice output enabled' : 'Enable voice output'}
-        className={`p-2 rounded-xl transition-all ${
-          ttsEnabled
-            ? 'text-purple-600 bg-purple-50/80'
-            : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-        }`}
-      >
-        {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-        </button>
-
-        {/* Read aloud / Stop speaking when TTS enabled & text available */}
-        {ttsEnabled && ttsText && (
-          <button
-          type="button"
-          onClick={isSpeaking ? stopSpeaking : speakText}
-          title={isSpeaking ? 'Stop reading' : 'Read answer aloud'}
-          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 transition-colors"
+        {/* Spoken language (shared by STT and TTS) */}
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value as VoiceLanguage)}
+          title="Spoken language"
+          aria-label="Spoken language"
+          className="h-7 px-1.5 text-[11px] font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none cursor-pointer"
         >
-          {isSpeaking ? (
-            <>
-              <Square className="w-3 h-3 fill-current" />
-              <span>Stop</span>
-            </>
-          ) : (
-            <>
-              <Play className="w-3 h-3 fill-current" />
-              <span>Listen</span>
-            </>
+          {VOICE_LANGUAGES.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Mic: hold-to-talk, or the live phase indicator in voice mode */}
+        <button
+          type="button"
+          onPointerDown={voiceMode ? undefined : startPushToTalk}
+          onPointerUp={voiceMode ? undefined : stopPushToTalk}
+          onPointerCancel={voiceMode ? undefined : stopPushToTalk}
+          onPointerLeave={voiceMode || !isRecording ? undefined : stopPushToTalk}
+          onClick={voiceMode ? (isSpeaking ? interrupt : isRecording ? finishTurn : undefined) : undefined}
+          disabled={!inputSupported || (!voiceMode && isTranscribing) || (voiceMode && !isSpeaking && !isRecording)}
+          title={inputSupported ? micTitle : 'Speech input is not supported in this browser'}
+          aria-label={micTitle}
+          className={`relative p-2 rounded-xl transition-all disabled:cursor-default ${micClass}`}
+        >
+          {isRecording && (
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-xl ring-2 ring-rose-400/70 transition-transform duration-100"
+              style={{ transform: `scale(${1 + Math.min(level, 1) * 0.35})`, opacity: 0.4 + level * 0.6 }}
+            />
           )}
-          </button>
+          <span className="relative">{micIcon}</span>
+        </button>
+
+        {/* Hands-free conversation toggle */}
+        <button
+          type="button"
+          onClick={toggleVoiceMode}
+          disabled={!inputSupported}
+          title={voiceMode ? 'End voice conversation' : 'Start voice conversation (talk, listen, repeat)'}
+          aria-pressed={voiceMode}
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+            voiceMode
+              ? 'text-white bg-gradient-to-r from-purple-600 to-fuchsia-500 border-transparent shadow-sm'
+              : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200/60'
+          }`}
+        >
+          {voiceMode ? <Square className="w-3 h-3 fill-current" /> : <AudioLines className="w-3.5 h-3.5" />}
+          <span>{voiceMode ? 'End' : 'Voice'}</span>
+        </button>
+
+        {/* Text-mode extras: read-aloud toggle and Listen/Stop */}
+        {!voiceMode && (
+          <>
+            <button
+              type="button"
+              onClick={toggleTts}
+              title={ttsEnabled ? 'Voice output enabled' : 'Enable voice output'}
+              aria-pressed={ttsEnabled}
+              className={`p-2 rounded-xl transition-all ${
+                ttsEnabled
+                  ? 'text-purple-600 bg-purple-50/80'
+                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
+              }`}
+            >
+              {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+
+            {ttsEnabled && hasAnswer && (
+              <button
+                type="button"
+                onClick={isSpeaking ? stopSpeaking : speakLatest}
+                title={isSpeaking ? 'Stop reading' : 'Read answer aloud'}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 transition-colors"
+              >
+                {isSpeaking ? (
+                  <>
+                    <Square className="w-3 h-3 fill-current" />
+                    <span>Stop</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3 h-3 fill-current" />
+                    <span>Listen</span>
+                  </>
+                )}
+              </button>
+            )}
+          </>
         )}
       </div>
-      {voiceError && (
+
+      {voiceMode && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-1.5 text-[11px] leading-tight text-purple-700"
+        >
+          {isThinking ? (
+            <Brain className="w-3 h-3" />
+          ) : (
+            <span
+              aria-hidden
+              className={`inline-block w-1.5 h-1.5 rounded-full ${
+                isRecording ? 'bg-rose-500 animate-pulse' : isSpeaking ? 'bg-purple-600 animate-pulse' : 'bg-purple-300'
+              }`}
+            />
+          )}
+          <span>{PHASE_LABEL[phase]}</span>
+          {status && <span className="text-gray-400">· {engineLabel}</span>}
+        </p>
+      )}
+
+      {error && (
         <p role="alert" className="max-w-64 text-right text-[10px] leading-tight text-rose-600">
-          {voiceError}
+          {error}
         </p>
       )}
     </div>

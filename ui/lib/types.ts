@@ -44,6 +44,18 @@ export interface SttResult {
   confidence: number;
 }
 
+/** Mirrors GET /api/voice/status — which speech engines the server offers. */
+export interface VoiceStatus {
+  stt: { available: boolean; provider: string; engine: string };
+  tts: { available: boolean; provider: string; engine: string; media_type: string };
+}
+
+/** Spoken-language setting shared by STT and TTS (BCP-47 tags). */
+export type VoiceLanguage = 'hi-IN' | 'en-IN';
+
+/** Phases of the hands-free voice conversation loop. */
+export type VoicePhase = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'speaking';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';

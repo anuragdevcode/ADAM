@@ -6,6 +6,7 @@ import type { ChatMessage, DepartmentItem } from '@/lib/types';
 import CitationCard from './CitationCard';
 import CurrencyBanner from './CurrencyBanner';
 import VoiceControls from './VoiceControls';
+import { useVoiceConversation, type VoiceAnswer } from '@/lib/useVoiceConversation';
 import {
   Sparkles,
   Paperclip,
@@ -76,8 +77,9 @@ export default function ChatWindow({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [lastAnswerText, setLastAnswerText] = useState('');
+  // Latest completed answer; `seq` bumps every turn so voice mode can tell a
+  // new answer from a repeated one.
+  const [lastAnswer, setLastAnswer] = useState<VoiceAnswer>({ text: '', seq: 0 });
   const [citationEnabled, setCitationEnabled] = useState(true);
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [deptMenuOpen, setDeptMenuOpen] = useState(false);
@@ -206,7 +208,9 @@ export default function ChatWindow({
                     : m,
                 );
                 const finalMsg = updated.find((m) => m.id === assistantMsgId);
-                if (finalMsg) setLastAnswerText(finalMsg.content);
+                if (finalMsg) {
+                  setLastAnswer((prev) => ({ text: finalMsg.content, seq: prev.seq + 1 }));
+                }
                 return updated;
               });
             },
@@ -228,6 +232,25 @@ export default function ChatWindow({
     },
     [isLoading, sessionId, userId, clearanceLevel, selectedDept, modelId, onSessionCreated, idPrefix, citationEnabled],
   );
+
+  // Voice state lives here (not in VoiceControls) because the composer is
+  // re-mounted when the layout switches from the empty state to the docked bar.
+  const voice = useVoiceConversation({
+    onTranscript: (text) => {
+      setInput(text);
+      void sendMessage(text);
+    },
+    onInterim: setInput,
+    isBusy: isLoading,
+    answer: lastAnswer,
+  });
+
+  const composerPlaceholder =
+    voice.phase === 'listening'
+      ? 'Listening… speak your question'
+      : voice.phase === 'transcribing'
+      ? 'Transcribing…'
+      : 'Ask about Uttarakhand Government Orders, circulars, or statutory rules…';
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -271,7 +294,7 @@ export default function ChatWindow({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask about Uttarakhand Government Orders, circulars, or statutory rules…"
+                  placeholder={composerPlaceholder}
                   disabled={isLoading}
                   className="w-full bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none resize-none pt-0.5 leading-relaxed"
                 />
@@ -356,15 +379,7 @@ export default function ChatWindow({
                   </label>
 
                   {/* Voice Controls */}
-                  <VoiceControls
-                    onTranscript={(text) => {
-                      setInput(text);
-                      void sendMessage(text);
-                    }}
-                    ttsText={lastAnswerText}
-                    ttsEnabled={ttsEnabled}
-                    onToggleTts={() => setTtsEnabled(!ttsEnabled)}
-                  />
+                  <VoiceControls voice={voice} hasAnswer={!!lastAnswer.text} />
 
                   {/* Submit Up-Arrow Button */}
                   <button
@@ -574,7 +589,7 @@ export default function ChatWindow({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about Uttarakhand Government Orders, circulars, or statutory rules…"
+                placeholder={composerPlaceholder}
                 disabled={isLoading}
                 className="w-full bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none resize-none pt-0.5"
               />
@@ -650,15 +665,7 @@ export default function ChatWindow({
                   <span className="text-xs text-gray-500 font-medium">Citation</span>
                 </label>
 
-                <VoiceControls
-                  onTranscript={(text) => {
-                    setInput(text);
-                    void sendMessage(text);
-                  }}
-                  ttsText={lastAnswerText}
-                  ttsEnabled={ttsEnabled}
-                  onToggleTts={() => setTtsEnabled(!ttsEnabled)}
-                />
+                <VoiceControls voice={voice} hasAnswer={!!lastAnswer.text} />
 
                 <button
                   type="button"

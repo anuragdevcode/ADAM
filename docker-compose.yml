@@ -35,6 +35,15 @@ services:
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       MAX_CONTEXT_TOKENS: ${MAX_CONTEXT_TOKENS:-4096}
       MAX_CONCURRENT_GENERATIONS: ${MAX_CONCURRENT_GENERATIONS:-1}
+      # Voice: hosted free-tier engines when keyed, local/browser fallbacks otherwise
+      ADAM_STT_PROVIDER: ${ADAM_STT_PROVIDER:-auto}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_STT_MODEL: ${GROQ_STT_MODEL:-whisper-large-v3-turbo}
+      ADAM_TTS_PROVIDER: ${ADAM_TTS_PROVIDER:-auto}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-21m00Tcm4TlvDq8ikWAM}
+      ELEVENLABS_MODEL_ID: ${ELEVENLABS_MODEL_ID:-eleven_flash_v2_5}
+      FASTER_WHISPER_MODEL: ${FASTER_WHISPER_MODEL:-small}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
