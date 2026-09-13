@@ -35,6 +35,7 @@ class ParsedQuery:
     detected_language: str = "en"  # "hi" or "en"
     is_out_of_jurisdiction: bool = False
     has_unsupported_topic: bool = False
+    is_greeting: bool = False
 
 
 @dataclass

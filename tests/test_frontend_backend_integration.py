@@ -18,9 +18,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from unittest.mock import patch
 from adam.api.app import create_app
 from adam.api import deps
-from adam.api.voice.stt import FasterWhisperEngine, get_stt_engine
+from adam.api.voice.stt import FasterWhisperEngine, SttResult, get_stt_engine
 from adam.api.voice.tts import get_tts_engine
 from adam.db.models import (
     Base,
@@ -335,7 +336,16 @@ def test_section3_speech_to_text_roundtrip_and_pipeline_parity(integ_client):
     # Send mock audio webm bytes
     mock_audio = b"\x1a\x45\xdf\xa3" + b"\x00" * 256
     files = {"file": ("test_voice.webm", mock_audio, "audio/webm")}
-    stt_res = integ_client.post("/api/voice/transcribe", files=files)
+    with patch.object(
+        FasterWhisperEngine,
+        "transcribe",
+        return_value=SttResult(
+            transcript="What is the revised rate of Dearness Allowance?",
+            language="hi",
+            confidence=0.95,
+        ),
+    ):
+        stt_res = integ_client.post("/api/voice/transcribe", files=files)
     assert stt_res.status_code == 200
     stt_data = stt_res.json()
     assert "transcript" in stt_data
@@ -376,7 +386,16 @@ def test_section5_speech_to_speech_full_loop(integ_client):
     # Step 1: STT
     mock_audio = b"\x1a\x45\xdf\xa3" + b"\x00" * 128
     files = {"file": ("mic.webm", mock_audio, "audio/webm")}
-    stt_resp = integ_client.post("/api/voice/transcribe", files=files)
+    with patch.object(
+        FasterWhisperEngine,
+        "transcribe",
+        return_value=SttResult(
+            transcript="What is the revised Dearness Allowance rate?",
+            language="hi",
+            confidence=0.95,
+        ),
+    ):
+        stt_resp = integ_client.post("/api/voice/transcribe", files=files)
     assert stt_resp.status_code == 200
 
     # Step 2 & 3: Chat RAG & Generation

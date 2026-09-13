@@ -37,7 +37,7 @@ const EXAMPLE_CARDS = [
     title: 'Dearness Allowance (DA) Revision 2024',
     dept: 'Finance & Treasury',
     query:
-      'What is the revised Dearness Allowance rate for Uttarakhand state employees effective July 2024 under GO UK/FIN/2024/4821?',
+      'What is the revised Dearness Allowance rate for Uttarakhand state employees effective July 2024 under GO UK/FIN/2024/3401?',
     icon: User,
   },
   {
@@ -104,6 +104,7 @@ export default function ChatWindow({
           id: `${idPrefix}-hist-${i}`,
           role: t.role as 'user' | 'assistant',
           content: t.content,
+          modelId: t.model_id || undefined,
         }));
         setMessages(msgs);
       } catch {
@@ -131,6 +132,7 @@ export default function ChatWindow({
         role: 'assistant',
         content: '',
         isStreaming: true,
+        modelId: modelId || undefined,
         citations: [],
         banners: [],
         suggestions: [],
@@ -155,10 +157,17 @@ export default function ChatWindow({
             modelId: modelId || null,
           },
           {
-            onStart: (sid) => {
+            onStart: (sid, returnedModelId) => {
               if (!activeSessionId) {
                 activeSessionId = sid;
                 onSessionCreated(sid);
+              }
+              if (returnedModelId) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId ? { ...m, modelId: returnedModelId } : m,
+                  ),
+                );
               }
             },
             onToken: (text) => {
@@ -424,12 +433,23 @@ export default function ChatWindow({
                 ) : (
                   /* Assistant Message */
                   <div className="w-full max-w-3xl bg-white rounded-2xl border border-[#eaecf0] p-5 shadow-[0_2px_8px_rgba(16,24,40,0.04)]">
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
                       <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-xs">
                         <Sparkles className="w-3.5 h-3.5" />
                       </div>
                       <span className="text-xs font-semibold text-gray-800">ADAM Assistant</span>
-                      <span className="text-[10px] text-gray-400">Uttarakhand Records Repository</span>
+                      <span className="text-[10px] text-gray-400">• Uttarakhand Records Repository</span>
+                      {msg.modelId?.toLowerCase().includes('gemini') ? (
+                        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                          ☁️ Google Gemini 3.6 Flash
+                        </span>
+                      ) : msg.modelId ? (
+                        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          ⚡ {msg.modelId}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">

@@ -13,6 +13,8 @@ from adam.api.deps import get_db, get_user_context
 from adam.model.registry import ModelRegistry
 from adam.rag.models import UserContext
 
+from fastapi import APIRouter, Depends, Header
+
 router = APIRouter()
 
 
@@ -25,6 +27,7 @@ class ChatRequest(BaseModel):
     model_id: Optional[str] = None
     backend: Optional[str] = None
     department_id: Optional[str] = None
+    api_key: Optional[str] = None
 
 
 @router.post("/chat")
@@ -32,17 +35,25 @@ async def chat_endpoint(
     req: ChatRequest,
     db: Session = Depends(get_db),
     user_ctx: UserContext = Depends(get_user_context),
+    x_gemini_api_key: Optional[str] = Header(None),
 ):
     """Stream response tokens and citations using Server-Sent Events (SSE)."""
     # Scope department if explicitly requested in payload
     if req.department_id and req.department_id != "ALL":
         user_ctx.department_id = req.department_id
 
+    effective_gemini_key = x_gemini_api_key or req.api_key
+
     async def generate() -> AsyncGenerator[str, None]:
         try:
             if req.model_id and not ModelRegistry(db).get(req.model_id):
                 raise ValueError(f"Unknown model artifact '{req.model_id}'.")
-            agent = AgentStateMachine(db, model_id=req.model_id, backend=req.backend)
+            agent = AgentStateMachine(
+                db,
+                model_id=req.model_id,
+                backend=req.backend,
+                api_key=effective_gemini_key,
+            )
 
             response = await asyncio.get_event_loop().run_in_executor(
                 None,

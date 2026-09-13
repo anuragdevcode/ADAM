@@ -1,6 +1,6 @@
 """System metadata, model registry, and taxonomy endpoints."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from adam.vocabularies import (
     DepartmentId,
     DocType,
     LifecycleStatus,
+    LicenseStatus,
     ModelStatus,
 )
 
@@ -38,8 +39,55 @@ DEPARTMENT_LABELS: Dict[str, str] = {
 }
 
 
+import os
+import httpx
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Header
+
+
+class ValidateKeyRequest(BaseModel):
+    api_key: str
+
+
+@router.post("/system/validate-gemini-key")
+def validate_gemini_key(req: ValidateKeyRequest) -> Dict[str, Any]:
+    """Test validity of a user-provided Google Gemini API key securely without persisting it."""
+    key = req.api_key.strip()
+    if not key:
+        return {"valid": False, "message": "API key cannot be empty."}
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url)
+            if resp.status_code == 200:
+                return {
+                    "valid": True,
+                    "message": "Google Gemini API key verified successfully.",
+                    "available_models": ["gemini-3.6-flash"],
+                }
+            elif resp.status_code in (400, 401, 403):
+                return {
+                    "valid": False,
+                    "message": "Invalid API key or access denied by Google API.",
+                }
+            else:
+                return {
+                    "valid": False,
+                    "message": f"Google API returned error status {resp.status_code}.",
+                }
+    except Exception as e:
+        return {
+            "valid": False,
+            "message": f"Connection to Google API failed: {str(e)}",
+        }
+
+
 @router.get("/system/models")
-def get_models(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+def get_models(
+    db: Session = Depends(get_db),
+    x_gemini_api_key: Optional[str] = Header(None),
+) -> List[Dict[str, Any]]:
     """Return all approved release-controlled models from the model registry."""
     registry = ModelRegistry(db)
     models = registry.list_all()
@@ -47,8 +95,36 @@ def get_models(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
         # Fallback to canonical models if database has not yet been seeded
         models = list(CANONICAL_MODELS.values())
 
-    return [
-        {
+    # Only gemini-3.6-flash is available with the API key
+    models = [
+        m for m in models
+        if m.id not in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-flash")
+    ]
+
+    result = []
+    for m in models:
+        lic_stat = getattr(m, 'license_status', None)
+        lic_stat_str = str(lic_stat.value if hasattr(lic_stat, 'value') else lic_stat)
+        requires_review = bool(getattr(m, 'requires_legal_review', False))
+        is_supported = (lic_stat == LicenseStatus.APPROVED or lic_stat_str == "APPROVED") and not requires_review
+
+        if getattr(m, 'serving_runtime', '') == "gemini":
+            has_gemini_key = bool(x_gemini_api_key or os.getenv("GEMINI_API_KEY", "").strip())
+            is_installed = has_gemini_key
+            if not has_gemini_key:
+                unavailable_reason = "Requires Google Gemini API key (click 'Add API Key' above to enable)"
+            else:
+                unavailable_reason = None
+        else:
+            is_installed = OllamaModelRuntime(m).is_model_present()
+            if not is_supported or requires_review:
+                unavailable_reason = "Requires legal and governance signoff (Evaluation comparator only)"
+            elif not is_installed:
+                unavailable_reason = "Not installed in Ollama"
+            else:
+                unavailable_reason = None
+
+        result.append({
             "id": m.id,
             "name": m.name,
             "revision": m.revision,
@@ -60,14 +136,16 @@ def get_models(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
             "is_fallback": m.is_fallback,
             "is_comparator": m.is_comparator,
             "license_id": m.license_id,
-            "license_status": str(m.license_status.value if hasattr(m.license_status, 'value') else m.license_status),
+            "license_status": lic_stat_str,
+            "requires_legal_review": requires_review,
+            "is_supported": is_supported,
             "status": str(m.status.value if hasattr(m.status, 'value') else m.status),
             "serving_runtime": m.serving_runtime,
-            "is_installed": OllamaModelRuntime(m).is_model_present(),
-            "unavailable_reason": None if OllamaModelRuntime(m).is_model_present() else "Not installed in Ollama",
-        }
-        for m in models
-    ]
+            "is_installed": is_installed,
+            "unavailable_reason": unavailable_reason,
+            "is_cloud": getattr(m, 'serving_runtime', '') == "gemini",
+        })
+    return result
 
 
 @router.get("/system/vocabularies")

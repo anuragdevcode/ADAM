@@ -17,10 +17,38 @@ import type {
 } from './types';
 
 const API_BASE = '/api';
+const GEMINI_API_KEY_STORAGE_KEY = 'adam_gemini_api_key';
+
+export function getStoredGeminiApiKey(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredGeminiApiKey(key: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (key && key.trim()) {
+      localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, key.trim());
+    } else {
+      localStorage.removeItem(GEMINI_API_KEY_STORAGE_KEY);
+    }
+  } catch {}
+}
+
+export function clearStoredGeminiApiKey(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(GEMINI_API_KEY_STORAGE_KEY);
+  } catch {}
+}
 
 /**
  * Stream a chat query using SSE (Server-Sent Events) via fetch.
- * Passes model_id and department_id for backend agent scoping.
+ * Passes model_id, department_id, and optional geminiApiKey for backend scoping.
  */
 export async function streamChat(
   query: string,
@@ -31,11 +59,13 @@ export async function streamChat(
     clearanceLevel?: string;
     departmentId?: string | null;
     modelId?: string | null;
+    geminiApiKey?: string | null;
   } = {},
   callbacks: StreamCallbacks = {},
   signal?: AbortSignal,
 ): Promise<void> {
   let response: Response;
+  const geminiKey = options.geminiApiKey || getStoredGeminiApiKey();
   try {
     response = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
@@ -45,12 +75,14 @@ export async function streamChat(
         'X-User-Role': options.userRole || 'OFFICER',
         'X-Clearance-Level': options.clearanceLevel || 'PUBLIC',
         ...(options.departmentId ? { 'X-Department-Id': options.departmentId } : {}),
+        ...(geminiKey ? { 'X-Gemini-Api-Key': geminiKey } : {}),
       },
       body: JSON.stringify({
         query,
         session_id: sessionId,
         model_id: options.modelId || null,
         department_id: options.departmentId || null,
+        api_key: geminiKey || null,
       }),
       signal,
     });
@@ -157,11 +189,23 @@ export async function deleteSession(sessionId: string, userId: string): Promise<
 
 // ── Voice Input & Output ───────────────────────────────────────────────────
 
-export async function transcribeAudio(audioBlob: Blob, languageHint: string = 'hi'): Promise<SttResult> {
+export async function transcribeAudio(
+  audioBlob: Blob,
+  languageHint: string = 'hi',
+  apiKey?: string | null,
+): Promise<SttResult> {
   const form = new FormData();
   form.append('file', audioBlob, 'recording.webm');
   form.append('language_hint', languageHint);
-  const resp = await fetch(`${API_BASE}/voice/transcribe`, { method: 'POST', body: form });
+  const geminiKey = apiKey || getStoredGeminiApiKey();
+  if (geminiKey) {
+    form.append('api_key', geminiKey);
+  }
+  const resp = await fetch(`${API_BASE}/voice/transcribe`, {
+    method: 'POST',
+    headers: geminiKey ? { 'X-Gemini-Api-Key': geminiKey } : {},
+    body: form,
+  });
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
     throw new Error(body?.error?.message || body?.detail || `Transcription failed: ${resp.status}`);
@@ -169,10 +213,18 @@ export async function transcribeAudio(audioBlob: Blob, languageHint: string = 'h
   return resp.json();
 }
 
-export async function synthesizeSpeech(text: string, language: string = 'hi'): Promise<Blob> {
+export async function synthesizeSpeech(
+  text: string,
+  language: string = 'hi',
+  apiKey?: string | null,
+): Promise<Blob> {
+  const geminiKey = apiKey || getStoredGeminiApiKey();
   const resp = await fetch(`${API_BASE}/voice/synthesize`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(geminiKey ? { 'X-Gemini-Api-Key': geminiKey } : {}),
+    },
     body: JSON.stringify({ text, language }),
   });
   if (!resp.ok) {
@@ -184,13 +236,34 @@ export async function synthesizeSpeech(text: string, language: string = 'hi'): P
 
 // ── System Metadata & Vocabularies ─────────────────────────────────────────
 
-export async function fetchModels(): Promise<ModelInfo[]> {
+export async function fetchModels(apiKey?: string | null): Promise<ModelInfo[]> {
   try {
-    const resp = await fetch(`${API_BASE}/system/models`);
+    const geminiKey = apiKey || getStoredGeminiApiKey();
+    const resp = await fetch(`${API_BASE}/system/models`, {
+      headers: geminiKey ? { 'X-Gemini-Api-Key': geminiKey } : {},
+    });
     if (!resp.ok) return [];
     return resp.json();
   } catch {
     return [];
+  }
+}
+
+export async function validateGeminiKey(
+  apiKey: string,
+): Promise<{ valid: boolean; message: string; available_models?: string[] }> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/validate-gemini-key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: apiKey }),
+    });
+    if (!resp.ok) {
+      return { valid: false, message: `Server error: ${resp.status}` };
+    }
+    return resp.json();
+  } catch (err) {
+    return { valid: false, message: `Network error: ${err}` };
   }
 }
 

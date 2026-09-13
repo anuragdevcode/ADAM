@@ -26,6 +26,7 @@ export interface ChatTurn {
   content: string;
   created_at: string;
   cited_chunk_ids: string[];
+  model_id?: string | null;
 }
 
 export interface SessionInfo {
@@ -53,6 +54,7 @@ export interface ChatMessage {
   isStreaming?: boolean;
   isNoAnswer?: boolean;
   isHighRisk?: boolean;
+  modelId?: string;
 }
 
 export interface StreamCallbacks {
@@ -85,10 +87,13 @@ export interface ModelInfo {
   is_comparator: boolean;
   license_id: string;
   license_status: string;
+  requires_legal_review?: boolean;
+  is_supported?: boolean;
   status: string;
   serving_runtime: string;
   is_installed: boolean;
   unavailable_reason?: string | null;
+  is_cloud?: boolean;
 }
 
 // ── Controlled Vocabularies ────────────────────────────────────────────────

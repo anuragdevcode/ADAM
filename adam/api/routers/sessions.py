@@ -59,13 +59,24 @@ def get_session_history(
     manager = SessionManager(db)
     try:
         turns = manager.get_turns(session_id, requesting_user_id=x_user_id)
+        from adam.db.models import AgentExecutionAudit
+        audit = (
+            db.query(AgentExecutionAudit)
+            .filter(AgentExecutionAudit.session_id == session_id)
+            .order_by(AgentExecutionAudit.created_at.desc())
+            .first()
+        )
+        model_id = audit.model_id if audit else None
+
         return {
             "session_id": session_id,
+            "model_id": model_id,
             "turns": [
                 {
                     "id": t.id,
                     "role": t.role,
                     "content": t.content,
+                    "model_id": model_id if t.role == "assistant" else None,
                     "created_at": (
                         t.created_at.isoformat()
                         if hasattr(t.created_at, "isoformat")

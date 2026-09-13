@@ -142,6 +142,7 @@ class AgentStateMachine:
         model_id: Optional[str] = None,
         runtime: Optional[BaseModelRuntime] = None,
         backend: Optional[str] = None,
+        api_key: Optional[str] = None,
     ):
         self.session = session
         self.registry = ModelRegistry(session)
@@ -150,6 +151,7 @@ class AgentStateMachine:
         self.model_id = model_id or self.registry.get_primary().id
         self._custom_runtime = runtime
         self.backend = backend
+        self.api_key = api_key
         self.session_manager = SessionManager(session)
         self.summarizer = SessionSummarizer(session)
 
@@ -305,7 +307,25 @@ class AgentStateMachine:
         completion_tokens = 0
         is_research_brief = False
 
-        if is_refusal:
+        if getattr(parsed_query, "is_greeting", False):
+            if parsed_query.detected_language == "hi":
+                answer = (
+                    "नमस्ते! मैं अदम (ADAM) हूँ — उत्तराखण्ड शासन का आधिकारिक सार्वजनिक अभिलेख एवं प्रशासनिक सहायक।\n\n"
+                    "मैं उत्तराखण्ड के विभिन्न विभागों (वित्त, ग्राम्य विकास, राजस्व, कार्मिक आदि) के शासनादेशों (GOs), "
+                    "परिपत्रों, अधिसूचनाओं एवं नियमावलियों को खोजने और प्रमाणित उद्धरणों के साथ विश्लेषण करने में आपकी सहायता कर सकता हूँ।\n\n"
+                    "आप किसी शासनादेश संख्या, विभाग, या विषय (जैसे: 'खरीद सीमा', 'वेतन नियमावली', 'UK/FIN/2023/101') के बारे में पूछ सकते हैं।"
+                )
+            else:
+                answer = (
+                    "Hello! I am ADAM — the authorized AI Assistant for Uttarakhand State Public Records and Governance.\n\n"
+                    "I can assist you in discovering, verifying, and analyzing official Government Orders (GOs), circulars, "
+                    "gazette notifications, and statutory service rules across state departments (Finance & Treasury, Rural Development, Revenue, GAD, Audit).\n\n"
+                    "You can query by GO number (e.g., 'UK/FIN/2023/101'), topic (e.g., 'financial sanction limits for HoD'), or department."
+                )
+            citations = []
+            prompt_tokens = len(query.split()) * 2
+            completion_tokens = len(answer.split()) * 2
+        elif is_refusal:
             answer = self.NO_EVIDENCE_REFUSAL
             if parsed_query.is_out_of_jurisdiction:
                 answer += " The query pertains to an external jurisdiction outside Uttarakhand Public Records."
@@ -321,15 +341,17 @@ class AgentStateMachine:
         elif packet.is_empty:
             with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
                 runtime = self._custom_runtime or self.lifecycle.load_model(
-                    self.model_id, allow_hot_swap=True, backend=self.backend
+                    self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
                 )
+                model_mention = "powered by Google Gemini 3.6 Flash" if "gemini" in (self.model_id or "").lower() else f"running on {self.model_id}"
                 gen_result = runtime.generate(
                     user_prompt=(
                         "### Conversational Turn (No Repository Evidence)\n"
                         f"User: {query}\n\n"
-                        "No approved repository evidence was found for this turn. Reply naturally and briefly as ADAM. "
-                        "For a general or vague request, ask a useful follow-up question and explain how you can "
-                        "search Uttarakhand public records. Do not invent government facts or citations."
+                        f"No approved repository evidence was found for this turn. Reply naturally and concisely as ADAM ({model_mention}), "
+                        "the authorized AI assistant for Uttarakhand State public records and governance. "
+                        "If the user asks about your identity, connectivity, or model, explicitly confirm that you are ADAM connected and active with your current model runtime. "
+                        "For administrative queries, guide the user on how to search official Uttarakhand public records. Do not invent government facts or citations."
                     ),
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -342,7 +364,9 @@ class AgentStateMachine:
             citations = CitationBuilder.build_citations_from_packet(packet)
             # Enforce single heavy worker mutual exclusion on inference
             with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
-                runtime = self._custom_runtime or self.lifecycle.load_model(self.model_id, allow_hot_swap=True, backend=self.backend)
+                runtime = self._custom_runtime or self.lifecycle.load_model(
+                    self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
+                )
                 
                 # Format grounded prompt strictly including evidence packet
                 evidence_text = "\n\n".join(
@@ -371,8 +395,11 @@ class AgentStateMachine:
 
         # ── Stage 6: Validate Citations ─────────────────────────────────────
         transition_to(AgentState.VALIDATE_CITATIONS, "Validating material claim citations against evidence packet")
-        validator = CitationValidator()
-        passed, val_errors = validator.validate(answer, packet)
+        if getattr(parsed_query, "is_greeting", False):
+            passed, val_errors = True, []
+        else:
+            validator = CitationValidator()
+            passed, val_errors = validator.validate(answer, packet)
 
         # Inspect and verify cited source records via read-only tool open_cited_source
         if citations and not is_refusal:
@@ -405,7 +432,7 @@ class AgentStateMachine:
         )
         redacted_audit_log = SecretRedactor.sanitize_text(raw_audit_summary)
 
-        final_state = AgentState.COMPLETED if not is_refusal else AgentState.ABSTAINED
+        final_state = AgentState.COMPLETED if (not is_refusal or getattr(parsed_query, "is_greeting", False)) else AgentState.ABSTAINED
         transition_to(final_state, "Agent execution pipeline completed successfully")
 
         # Persist AgentExecutionAudit
@@ -420,7 +447,7 @@ class AgentStateMachine:
             model_id=self.model_id,
             retrieval_pass_count=retrieval_passes,
             answer_pass_count=answer_passes,
-            is_no_answer=1 if is_refusal else 0,
+            is_no_answer=1 if (is_refusal and not getattr(parsed_query, "is_greeting", False)) else 0,
             is_high_risk=1 if parsed_query.is_high_risk else 0,
             state_transitions_json=[
                 {"from": t.from_state, "to": t.to_state, "at": t.timestamp, "notes": t.notes}
@@ -447,7 +474,7 @@ class AgentStateMachine:
             actor=user.user_id,
             details_json={
                 "model_id": self.model_id,
-                "is_no_answer": is_refusal,
+                "is_no_answer": is_refusal and not getattr(parsed_query, "is_greeting", False),
                 "is_high_risk": parsed_query.is_high_risk,
                 "validation_passed": passed,
                 "latency_ms": round(total_latency_ms, 2),

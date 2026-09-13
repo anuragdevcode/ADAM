@@ -10,9 +10,10 @@ import AuditView from '@/components/AuditView';
 import SourcesView from '@/components/SourcesView';
 import ReviewView from '@/components/ReviewView';
 import SettingsModal from '@/components/SettingsModal';
-import { Sparkles, ChevronDown, Search, Plus, Check, Shield } from 'lucide-react';
+import ApiKeyModal from '@/components/ApiKeyModal';
+import { Sparkles, ChevronDown, Search, Plus, Check, Shield, Lock, Key, Cloud } from 'lucide-react';
 import type { DepartmentItem, ModelInfo } from '@/lib/types';
-import { fetchModels, fetchVocabularies } from '@/lib/api';
+import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey } from '@/lib/api';
 
 const DEFAULT_OFFICER_ID = 'officer_dev_001';
 
@@ -34,15 +35,32 @@ export default function HomePage() {
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [searchFilter, setSearchFilter] = useState('');
 
+  // Gemini API Key & Cloud Models
+  const [geminiApiKey, setGeminiApiKey] = useState<string | null>(null);
+  const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
+
   // Initial Load from API
   useEffect(() => {
+    const key = getStoredGeminiApiKey();
+    setGeminiApiKey(key);
+
     const loadModels = () => {
-      void fetchModels().then((mList) => {
+      const activeKey = getStoredGeminiApiKey();
+      void fetchModels(activeKey).then((mList) => {
         setModels(mList);
-        const installed = mList.filter((m) => m.is_installed);
+        const supportedInstalled = mList.filter((m) => m.is_installed && !m.requires_legal_review && m.is_supported !== false);
+        const storedModelId = typeof window !== 'undefined' ? localStorage.getItem('adam_selected_model_id') : null;
         setSelectedModel((current) => {
-          if (current && installed.some((model) => model.id === current.id)) return current;
-          return installed.find((model) => model.is_primary) || installed[0] || mList.find((model) => model.is_primary) || null;
+          if (current && supportedInstalled.some((model) => model.id === current.id)) return current;
+          if (storedModelId) {
+            const foundStored = supportedInstalled.find((m) => m.id === storedModelId);
+            if (foundStored) return foundStored;
+          }
+          if (activeKey) {
+            const geminiModel = supportedInstalled.find((m) => m.id === 'gemini-3.6-flash');
+            if (geminiModel) return geminiModel;
+          }
+          return supportedInstalled.find((model) => model.is_primary) || supportedInstalled[0] || mList.find((model) => model.is_primary && !model.requires_legal_review) || null;
         });
       });
     };
@@ -117,36 +135,86 @@ export default function HomePage() {
               {modelDropdownOpen && (
                 <div className="absolute left-0 top-full mt-2 w-80 bg-white rounded-2xl border border-[#eaecf0] shadow-[0_16px_36px_rgba(16,24,40,0.12)] py-1.5 z-30">
                   <div className="px-3 py-1 text-[10px] uppercase tracking-wider font-semibold text-gray-400">
-                    Local model inventory
+                    Model inventory
                   </div>
-                  {models.map((model) => (
-                    <button
-                      key={model.id}
-                      type="button"
-                      disabled={!model.is_installed}
-                      onClick={() => {
-                        setSelectedModel(model);
-                        setModelDropdownOpen(false);
-                      }}
-                      title={model.is_installed ? `Use ${model.name}` : model.unavailable_reason || 'Not installed'}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
-                        model.is_installed
-                          ? 'hover:bg-purple-50 text-gray-700'
-                          : 'opacity-45 cursor-not-allowed bg-gray-50/70 text-gray-400'
-                      }`}
-                    >
-                      <div className="min-w-0 pr-2">
-                        <div className="flex items-center gap-1.5">
-                          <p className="font-medium truncate">{model.name}</p>
-                          {!model.is_installed && <span className="text-[9px] uppercase">Not installed</span>}
+                  {models.map((model) => {
+                    const isSelectable = Boolean(model.is_installed && !model.requires_legal_review && model.is_supported !== false);
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        disabled={!isSelectable}
+                        onClick={() => {
+                          if (!isSelectable) return;
+                          setSelectedModel(model);
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('adam_selected_model_id', model.id);
+                          }
+                          setModelDropdownOpen(false);
+                        }}
+                        title={isSelectable ? `Use ${model.name}` : model.unavailable_reason || 'Not supported / pending review'}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
+                          isSelectable
+                            ? 'hover:bg-purple-50 text-gray-700 cursor-pointer'
+                            : 'opacity-40 cursor-not-allowed bg-gray-50/80 text-gray-400 select-none'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium truncate">{model.name}</p>
+                            {model.is_cloud && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold uppercase">
+                                <Cloud className="w-2.5 h-2.5" /> Cloud
+                              </span>
+                            )}
+                            {model.requires_legal_review ? (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold uppercase">
+                                <Lock className="w-2.5 h-2.5" /> Frozen • Legal Review
+                              </span>
+                            ) : !model.is_installed ? (
+                              <span className="text-[9px] uppercase text-gray-400">
+                                {model.is_cloud ? 'Key required' : 'Not installed'}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {isSelectable
+                              ? (model.is_cloud ? 'Google Gemini Cloud • Active' : `${model.quantization} • ready locally`)
+                              : model.unavailable_reason}
+                          </p>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          {model.is_installed ? `${model.quantization} • ready locally` : model.unavailable_reason}
-                        </p>
-                      </div>
-                      {selectedModel?.id === model.id && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
-                    </button>
-                  ))}
+                        {selectedModel?.id === model.id && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
+                      </button>
+                    );
+                  })}
+
+                  <div className="my-1.5 border-t border-[#eaecf0]" />
+
+                  {/* Add / Configure Gemini Key button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModelDropdownOpen(false);
+                      setApiKeyModalOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-purple-50 text-purple-900 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Key className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                      <span className="font-semibold">
+                        {geminiApiKey ? 'Configure Gemini API Key' : '+ Add Gemini API Key'}
+                      </span>
+                    </div>
+                    {geminiApiKey ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-purple-700 bg-purple-100/60 px-1.5 py-0.5 rounded font-medium">
+                        Voice & Models
+                      </span>
+                    )}
+                  </button>
                 </div>
               )}
             </div>
@@ -236,6 +304,39 @@ export default function HomePage() {
         departmentId={departmentId}
         onUpdateDepartmentId={(dept) => setDepartmentId(dept)}
         departments={departments}
+      />
+
+      {/* Google Gemini API Key & Cloud Model Modal */}
+      <ApiKeyModal
+        isOpen={apiKeyModalOpen}
+        onClose={() => setApiKeyModalOpen(false)}
+        currentKey={geminiApiKey}
+        onKeySaved={(newKey) => {
+          setStoredGeminiApiKey(newKey);
+          setGeminiApiKey(newKey);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('adam_selected_model_id', 'gemini-3.6-flash');
+          }
+          void fetchModels(newKey).then((mList) => {
+            setModels(mList);
+            const geminiModel = mList.find((m) => m.id === 'gemini-3.6-flash');
+            if (geminiModel && geminiModel.is_installed) {
+              setSelectedModel(geminiModel);
+            }
+          });
+        }}
+        onKeyCleared={() => {
+          clearStoredGeminiApiKey();
+          setGeminiApiKey(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('adam_selected_model_id');
+          }
+          void fetchModels(null).then((mList) => {
+            setModels(mList);
+            const primary = mList.find((m) => m.is_primary) || mList[0] || null;
+            setSelectedModel(primary);
+          });
+        }}
       />
     </main>
   );

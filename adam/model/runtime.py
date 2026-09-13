@@ -493,6 +493,7 @@ class SingleModelLifecycleManager:
         allow_hot_swap: bool = True,
         runtime_override: Optional[BaseModelRuntime] = None,
         backend: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> BaseModelRuntime:
         """Load an approved model into runtime memory with concurrency locking."""
         with self._mutex:
@@ -507,6 +508,8 @@ class SingleModelLifecycleManager:
                 resolved_backend = backend.lower()
             elif env_backend:
                 resolved_backend = env_backend.lower()
+            elif getattr(artifact, "serving_runtime", "") == "gemini":
+                resolved_backend = "gemini"
             elif OllamaModelRuntime(artifact).is_model_present():
                 resolved_backend = "ollama"
             elif artifact.serving_runtime:
@@ -514,7 +517,13 @@ class SingleModelLifecycleManager:
             else:
                 resolved_backend = "deterministic"
 
-            expected_runtime_cls = OllamaModelRuntime if resolved_backend == "ollama" else DeterministicModelRuntime
+            if resolved_backend == "gemini":
+                from adam.model.gemini import GeminiModelRuntime
+                expected_runtime_cls = GeminiModelRuntime
+            elif resolved_backend == "ollama":
+                expected_runtime_cls = OllamaModelRuntime
+            else:
+                expected_runtime_cls = DeterministicModelRuntime
 
             # If the active runtime already matches both the requested model and the runtime backend, reuse it
             if (
@@ -536,6 +545,9 @@ class SingleModelLifecycleManager:
 
             if runtime_override:
                 self._active_runtime = runtime_override
+            elif resolved_backend == "gemini":
+                from adam.model.gemini import GeminiModelRuntime
+                self._active_runtime = GeminiModelRuntime(artifact, api_key=api_key)
             elif resolved_backend == "ollama":
                 ollama_rt = OllamaModelRuntime(artifact)
                 if ollama_rt.is_available():
