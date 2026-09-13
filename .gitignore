@@ -76,3 +76,10 @@ Thumbs.db
 .fleet/
 .history/
 ui/.git/
+
+# Markdown documentation (only README.md files are committed)
+*.md
+**/*.md
+!README.md
+!**/README.md
+
