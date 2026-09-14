@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from typing import AsyncGenerator, Optional
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -57,10 +58,12 @@ async def chat_endpoint(
             yield f"event: start\ndata: {json.dumps({'session_id': response.session_id, 'model_id': response.model_id, 'query': req.query})}\n\n"
 
             # 2. Simulated Token Streaming
-            words = response.answer.split()
-            for i, word in enumerate(words):
-                space = " " if i < len(words) - 1 else ""
-                yield f"event: token\ndata: {json.dumps({'text': word + space})}\n\n"
+            # Keep each word's surrounding whitespace verbatim: splitting on
+            # whitespace and rejoining with single spaces flattened the answer
+            # onto one line, so the Markdown structure the model produced
+            # (paragraphs, bullet lists, headings) never reached the UI.
+            for chunk in re.findall(r"\s*\S+\s*", response.answer):
+                yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
                 await asyncio.sleep(0.015)
 
             # 3. Citations Event

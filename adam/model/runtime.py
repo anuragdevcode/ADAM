@@ -281,6 +281,10 @@ class OllamaModelRuntime(BaseModelRuntime):
     # These are the actual Ollama tags corresponding to the release artifacts.
     # Do not map one artifact to a different-size model merely because it happens
     # to be installed: the UI's installed state must describe the exact model.
+    # Reasoning models emit a separate ``thinking`` field and will spend the whole
+    # num_predict budget on it, returning empty ``content``. Ask Ollama to skip it.
+    THINKING_MODEL_PREFIXES = ("qwen3", "deepseek-r1", "magistral", "qwq")
+
     ARTIFACT_MODEL_TAGS = {
         "qwen3-4b-instruct-q4": "qwen3:4b",
         "qwen3-1.7b-instruct-q4": "qwen3:1.7b",
@@ -332,6 +336,24 @@ class OllamaModelRuntime(BaseModelRuntime):
             return "llama3.2:3b"
         return "qwen2.5:3b"
 
+    @staticmethod
+    def _strip_reasoning(content: str) -> str:
+        """Drop reasoning traces some models emit inline alongside the answer.
+
+        Reasoning models may wrap their scratchpad in ``<think>...</think>``, and
+        with thinking disabled they can still emit a dangling closing tag before
+        the real answer. Everything up to the last closer is scratchpad.
+        """
+        text = content or ""
+        if "</think>" in text:
+            text = text.rsplit("</think>", 1)[1]
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+    def _is_thinking_model(self) -> bool:
+        """True when the tag is a reasoning model that emits separate thinking tokens."""
+        tag = (self.model_tag or "").lower()
+        return any(tag.startswith(prefix) for prefix in self.THINKING_MODEL_PREFIXES)
+
     def is_available(self) -> bool:
         """Check if Ollama server is running and reachable."""
         try:
@@ -369,6 +391,7 @@ class OllamaModelRuntime(BaseModelRuntime):
 
         payload = {
             "model": self.model_tag,
+            "think": False if self._is_thinking_model() else None,
             "messages": [
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": user_prompt},
@@ -382,12 +405,22 @@ class OllamaModelRuntime(BaseModelRuntime):
             },
         }
 
+        if payload["think"] is None:
+            del payload["think"]
+
         try:
             resp = self._get_client().post("/api/chat", json=payload)
             resp.raise_for_status()
             data = resp.json()
 
-            answer = data.get("message", {}).get("content", "").strip()
+            message = data.get("message", {}) or {}
+            answer = self._strip_reasoning(message.get("content") or "")
+            if not answer and (message.get("thinking") or "").strip():
+                raise RuntimeError(
+                    f"Model '{self.model_tag}' returned only reasoning tokens and no answer "
+                    f"(num_predict={max_tokens} exhausted by thinking). "
+                    "Raise max_tokens or use a non-reasoning model."
+                )
             prompt_tokens = data.get("prompt_eval_count") or max(1, len(user_prompt.split()) * 4 // 3)
             completion_tokens = data.get("eval_count") or max(1, len(answer.split()) * 4 // 3)
             latency_ms = (time.perf_counter() - start_time) * 1000.0
@@ -538,14 +571,25 @@ class SingleModelLifecycleManager:
                 self._active_runtime = runtime_override
             elif resolved_backend == "ollama":
                 ollama_rt = OllamaModelRuntime(artifact)
-                if ollama_rt.is_available():
-                    self._active_runtime = ollama_rt
-                else:
+                if not ollama_rt.is_available():
                     import logging
                     logging.getLogger(__name__).warning(
                         f"Ollama server not reachable at {ollama_rt.host}. Falling back to DeterministicModelRuntime for {model_id}."
                     )
                     self._active_runtime = DeterministicModelRuntime(artifact)
+                elif not ollama_rt.is_model_present():
+                    # The server is up but this exact tag was never pulled. Degrade here
+                    # rather than letting generate() fail with a 404 mid-answer. The tag is
+                    # never swapped for a different-size model that happens to be installed.
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Ollama model '{ollama_rt.model_tag}' is not pulled on {ollama_rt.host} "
+                        f"(run: ollama pull {ollama_rt.model_tag}). "
+                        f"Falling back to DeterministicModelRuntime for {model_id}."
+                    )
+                    self._active_runtime = DeterministicModelRuntime(artifact)
+                else:
+                    self._active_runtime = ollama_rt
             else:
                 self._active_runtime = DeterministicModelRuntime(artifact)
 

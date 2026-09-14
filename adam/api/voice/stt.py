@@ -25,6 +25,25 @@ logger = logging.getLogger(__name__)
 GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_DEFAULT_STT_MODEL = "whisper-large-v3-turbo"
 
+#: Whisper decodes rare proper nouns poorly without context: "Uttarakhand" comes
+#: back as "the truck and", "Dearness Allowance" as "DNS allowance". Both engines
+#: accept a priming prompt that biases decoding toward these spellings. Keep it
+#: well under Whisper's 224-token prompt window, and override per deployment with
+#: ``ADAM_STT_VOCABULARY``.
+STT_DOMAIN_VOCABULARY = (
+    "Uttarakhand, Dehradun, Haridwar, Nainital, Udham Singh Nagar. "
+    "Dearness Allowance (DA), basic pay, arrears, General Provident Fund (GPF). "
+    "Government Order (GO), gazette notification, Secretariat, tehsil, patwari, "
+    "Board of Revenue, dakhil-kharij, varasat, Bhulekh portal, land mutation. "
+    "MGNREGA wage rate, SDRF relief, ex-gratia, Disaster Management Act. "
+    "महंगाई भत्ता, उत्तराखंड, शासनादेश, दाखिल-खारिज, वरासत, भूलेख, तहसील."
+)
+
+
+def _vocabulary_prompt() -> str:
+    """Domain terms used to prime Whisper, overridable per deployment."""
+    return os.getenv("ADAM_STT_VOCABULARY", STT_DOMAIN_VOCABULARY).strip()
+
 
 class SttError(RuntimeError):
     """Raised when a configured engine fails to transcribe."""
@@ -72,6 +91,9 @@ class GroqWhisperEngine(BaseSttEngine):
         elif audio_bytes[4:8] == b"ftyp":
             filename = "recording.mp4"
         data = {"model": self.model, "response_format": "verbose_json"}
+        vocabulary = _vocabulary_prompt()
+        if vocabulary:
+            data["prompt"] = vocabulary
         # Whisper auto-detects when no language is given; only pin a real code.
         if language_hint and language_hint.lower() not in ("auto", ""):
             data["language"] = language_hint.split("-")[0].lower()
@@ -125,7 +147,9 @@ class FasterWhisperEngine(BaseSttEngine):
             audio_io = io.BytesIO(audio_bytes)
             model = self._get_model()
             language = None if language_hint in ("auto", "") else language_hint.split("-")[0]
-            segments, info = model.transcribe(audio_io, language=language)
+            segments, info = model.transcribe(
+                audio_io, language=language, initial_prompt=_vocabulary_prompt() or None
+            )
 
             transcript = " ".join([segment.text for segment in segments])
 

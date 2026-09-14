@@ -159,7 +159,7 @@ class AgentStateMachine:
         user_context: Optional[UserContext] = None,
         top_k: int = 8,
         temperature: float = 0.0,
-        max_tokens: int = 512,
+        max_tokens: int = 1024,
         session_id: Optional[str] = None,
     ) -> AgentResponse:
         """Execute full bounded 7-stage state machine."""
