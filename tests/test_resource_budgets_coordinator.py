@@ -85,7 +85,7 @@ def test_heavy_worker_mutual_exclusion():
 
 def test_heavy_worker_cross_process_locking(tmp_path: Path):
     """Verify that file locking enforces mutual exclusion across independent processes."""
-    import fcntl
+    from adam.agent.filelock import try_lock_exclusive, unlock
     HeavyWorkerCoordinator.reset()
     budget_mgr = ResourceBudgetManager(MACBOOK_AIR_8GB_PROFILE, storage_dir=tmp_path)
     coordinator = HeavyWorkerCoordinator(budget_mgr)
@@ -98,15 +98,15 @@ def test_heavy_worker_cross_process_locking(tmp_path: Path):
         try:
             # Another process attempting non-blocking lock must get BlockingIOError
             with pytest.raises((BlockingIOError, OSError)):
-                fcntl.flock(fd2.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                try_lock_exclusive(fd2)
         finally:
             fd2.close()
 
     # 3. After worker exits, external process can acquire lock freely
     fd3 = open(lock_file, "a+")
     try:
-        fcntl.flock(fd3.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        fcntl.flock(fd3.fileno(), fcntl.LOCK_UN)
+        try_lock_exclusive(fd3)
+        unlock(fd3)
     finally:
         fd3.close()
 

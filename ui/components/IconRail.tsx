@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   Home,
   MessageSquare,
@@ -9,6 +10,8 @@ import {
   Database,
   CheckSquare,
   Settings,
+  Moon,
+  Sun,
 } from 'lucide-react';
 
 export type NavTab = 'home' | 'docs' | 'network' | 'audit' | 'database' | 'review';
@@ -23,6 +26,63 @@ interface IconRailProps {
   clearanceLevel: string;
 }
 
+/** Nav entries are data so the markup stays one loop instead of seven copies. */
+const NAV_ITEMS: { tab: NavTab; icon: typeof Home; label: string }[] = [
+  { tab: 'home', icon: Home, label: 'Chat Studio' },
+  { tab: 'docs', icon: FolderClosed, label: 'Document Repository' },
+  { tab: 'network', icon: Share2, label: 'Precedent Chains' },
+  { tab: 'audit', icon: Bot, label: 'Agent Execution Audits' },
+  { tab: 'database', icon: Database, label: 'Acquisition Sources' },
+  { tab: 'review', icon: CheckSquare, label: 'Review Queue' },
+];
+
+/** Tooltip that reads out to the right of the rail on hover and focus. */
+function RailButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+  badge,
+}: {
+  icon: typeof Home;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  badge?: React.ReactNode;
+}) {
+  return (
+    <div className="relative w-full flex items-center justify-center group">
+      {active && (
+        <span className="absolute left-0 w-[3px] h-6 rounded-r-full bg-brand" aria-hidden />
+      )}
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        aria-current={active ? 'page' : undefined}
+        className={`relative p-2.5 rounded-xl transition-colors duration-150 ${
+          active
+            ? 'text-brand bg-brand-soft'
+            : 'text-ink-faint hover:text-ink-secondary hover:bg-surface-sunken'
+        }`}
+      >
+        <Icon className="w-[18px] h-[18px]" strokeWidth={active ? 2.2 : 1.9} />
+        {badge}
+      </button>
+
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 z-50
+                   whitespace-nowrap rounded-lg bg-surface-inverted px-2.5 py-1.5 text-2xs font-medium
+                   text-[var(--surface)] opacity-0 shadow-lg transition-opacity duration-150
+                   group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export default function IconRail({
   activeTab,
   onSelectTab,
@@ -32,23 +92,43 @@ export default function IconRail({
   userName,
   clearanceLevel,
 }: IconRailProps) {
+  const [isDark, setIsDark] = useState(false);
+
+  // Mirror whatever the pre-paint bootstrap in layout.tsx already applied.
+  useEffect(() => {
+    setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+  }, []);
+
+  const toggleTheme = () => {
+    const next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem('adam-theme', next);
+    } catch {
+      /* private mode — the theme simply won't persist */
+    }
+    setIsDark(!isDark);
+  };
+
   return (
-    <aside className="w-[68px] h-full flex flex-col items-center justify-between py-5 border-r border-[#eaecf0] bg-[#fcfcfd] select-none z-20 shrink-0">
-      {/* Top Brand Logo */}
-      <div className="flex flex-col items-center gap-5 w-full">
+    <aside className="w-[64px] h-full flex flex-col items-center justify-between py-4 border-r border-line bg-surface-subtle select-none z-20 shrink-0">
+      <div className="flex flex-col items-center gap-4 w-full">
+        {/* Brand mark */}
         <button
           onClick={() => onSelectTab('home')}
-          className="w-9 h-9 rounded-xl bg-[#1d2939] flex items-center justify-center text-white shadow-sm hover:bg-black transition-colors"
-          title="ADAM — Uttarakhand Gov Records AI"
+          className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center text-ink-onBrand shadow-sm hover:bg-brand-hover transition-colors"
+          title="ADAM — Uttarakhand Government Records"
+          aria-label="ADAM home"
         >
           <svg
-            className="w-5 h-5 text-white"
+            className="w-[18px] h-[18px]"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
+            aria-hidden
           >
             <circle cx="12" cy="12" r="4" />
             <path d="M12 2v2" />
@@ -62,155 +142,59 @@ export default function IconRail({
           </svg>
         </button>
 
-        {/* Primary Navigation Icons */}
-        <nav className="flex flex-col items-center gap-2.5 w-full">
-          {/* Home / Chat Studio */}
-          <div className="relative flex items-center justify-center w-full">
-            {activeTab === 'home' && !isHistoryOpen && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 rounded-r-md" />
-            )}
-            <button
-              onClick={() => onSelectTab('home')}
-              className={`p-2.5 rounded-xl transition-all ${
-                activeTab === 'home' && !isHistoryOpen
-                  ? 'text-purple-600 bg-purple-50/80 shadow-xs'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-              }`}
-              title="Chat Studio"
-            >
-              <Home className="w-5 h-5" />
-            </button>
-          </div>
+        <div className="w-7 h-px bg-line" aria-hidden />
 
-          {/* Chat Threads Drawer Toggle */}
-          <button
+        <nav className="flex flex-col items-center gap-1 w-full" aria-label="Primary">
+          <RailButton
+            icon={Home}
+            label="Chat Studio"
+            active={activeTab === 'home' && !isHistoryOpen}
+            onClick={() => onSelectTab('home')}
+          />
+          <RailButton
+            icon={MessageSquare}
+            label="Chat Threads"
+            active={isHistoryOpen}
             onClick={onToggleHistory}
-            className={`p-2.5 rounded-xl transition-all ${
-              isHistoryOpen
-                ? 'text-purple-600 bg-purple-50/80 shadow-xs'
-                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-            }`}
-            title="Chat Sessions & Threads"
-          >
-            <MessageSquare className="w-5 h-5" />
-          </button>
+          />
 
-          {/* Document Repository */}
-          <div className="relative flex items-center justify-center w-full">
-            {activeTab === 'docs' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 rounded-r-md" />
-            )}
-            <button
-              onClick={() => onSelectTab('docs')}
-              className={`p-2.5 rounded-xl transition-all ${
-                activeTab === 'docs'
-                  ? 'text-purple-600 bg-purple-50/80 shadow-xs'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-              }`}
-              title="Official Document Repository"
-            >
-              <FolderClosed className="w-5 h-5" />
-            </button>
-          </div>
+          <div className="w-7 h-px bg-line my-1.5" aria-hidden />
 
-          {/* Precedent Relationship Graph */}
-          <div className="relative flex items-center justify-center w-full">
-            {activeTab === 'network' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 rounded-r-md" />
-            )}
-            <button
-              onClick={() => onSelectTab('network')}
-              className={`p-2.5 rounded-xl transition-all ${
-                activeTab === 'network'
-                  ? 'text-purple-600 bg-purple-50/80 shadow-xs'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-              }`}
-              title="Precedent Chains & Supersession"
-            >
-              <Share2 className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Agent State Machine Executions & Audit */}
-          <div className="relative flex items-center justify-center w-full">
-            {activeTab === 'audit' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 rounded-r-md" />
-            )}
-            <button
-              onClick={() => onSelectTab('audit')}
-              className={`p-2.5 rounded-xl transition-all ${
-                activeTab === 'audit'
-                  ? 'text-purple-600 bg-purple-50/80 shadow-xs'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-              }`}
-              title="Agent Execution Audits"
-            >
-              <Bot className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Data Acquisition Sources */}
-          <div className="relative flex items-center justify-center w-full">
-            {activeTab === 'database' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 rounded-r-md" />
-            )}
-            <button
-              onClick={() => onSelectTab('database')}
-              className={`p-2.5 rounded-xl transition-all ${
-                activeTab === 'database'
-                  ? 'text-purple-600 bg-purple-50/80 shadow-xs'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-              }`}
-              title="Data Acquisition Sources"
-            >
-              <Database className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Human QA Review Queue */}
-          <div className="relative flex items-center justify-center w-full">
-            {activeTab === 'review' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 rounded-r-md" />
-            )}
-            <button
-              onClick={() => onSelectTab('review')}
-              className={`p-2.5 rounded-xl transition-all ${
-                activeTab === 'review'
-                  ? 'text-purple-600 bg-purple-50/80 shadow-xs'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
-              }`}
-              title="Human-in-the-Loop Review QA"
-            >
-              <CheckSquare className="w-5 h-5" />
-            </button>
-          </div>
+          {NAV_ITEMS.filter((item) => item.tab !== 'home').map((item) => (
+            <RailButton
+              key={item.tab}
+              icon={item.icon}
+              label={item.label}
+              active={activeTab === item.tab}
+              onClick={() => onSelectTab(item.tab)}
+            />
+          ))}
         </nav>
       </div>
 
-      {/* Bottom Profile & Settings */}
-      <div className="flex flex-col items-center gap-3 w-full">
-        {/* Settings button */}
-        <button
-          onClick={onOpenSettings}
-          className="p-2.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100/70 transition-all"
-          title="Officer Settings & Security Clearance"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
+      <div className="flex flex-col items-center gap-1.5 w-full">
+        <RailButton
+          icon={isDark ? Sun : Moon}
+          label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+          onClick={toggleTheme}
+        />
+        <RailButton icon={Settings} label="Officer Settings" onClick={onOpenSettings} />
 
-        {/* User Clearance Avatar Pill */}
         <button
           onClick={onOpenSettings}
-          className="relative group p-0.5 rounded-full transition-transform hover:scale-105"
-          title={`${userName} (${clearanceLevel} Clearance)`}
+          className="relative mt-1 rounded-full transition-transform hover:scale-105 focus-visible:scale-105"
+          title={`${userName} — ${clearanceLevel} clearance`}
+          aria-label={`${userName}, ${clearanceLevel} clearance. Open settings`}
         >
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-xs">
+          <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-ink-onBrand text-xs font-semibold shadow-sm ring-1 ring-inset ring-white/15">
             {userName[0]?.toUpperCase() || 'O'}
           </div>
           {clearanceLevel !== 'PUBLIC' && (
-            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full border-2 border-white flex items-center justify-center text-[8px] text-white font-bold" title={clearanceLevel}>
-              ★
-            </span>
+            <span
+              className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-seal border-2 border-[var(--surface-subtle)]"
+              title={`${clearanceLevel} clearance`}
+              aria-hidden
+            />
           )}
         </button>
       </div>

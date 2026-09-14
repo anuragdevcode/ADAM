@@ -63,15 +63,15 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
 
   const micClass = voiceMode
     ? isRecording
-      ? 'bg-rose-500 text-white shadow-sm'
+      ? 'bg-danger text-white shadow-sm'
       : isSpeaking
-      ? 'bg-purple-600 text-white shadow-sm'
-      : 'bg-purple-50 text-purple-600'
+      ? 'bg-brand text-ink-onBrand shadow-sm'
+      : 'bg-brand-soft text-brand'
     : isRecording
-    ? 'bg-rose-500 text-white shadow-sm animate-pulse'
+    ? 'bg-danger text-white shadow-sm'
     : isTranscribing
-    ? 'bg-gray-100 text-gray-400 cursor-wait'
-    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70';
+    ? 'bg-surface-sunken text-ink-faint cursor-wait'
+    : 'text-ink-faint hover:text-ink-secondary hover:bg-surface-sunken';
 
   const micIcon = isTranscribing || isThinking ? (
     <Loader2 className="w-4 h-4 animate-spin" />
@@ -90,7 +90,7 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
           onChange={(e) => setLanguage(e.target.value as VoiceLanguage)}
           title="Spoken language"
           aria-label="Spoken language"
-          className="h-7 px-1.5 text-[11px] font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none cursor-pointer"
+          className="h-7 px-1.5 text-2xs font-medium rounded-lg border border-line bg-surface text-ink-secondary hover:bg-surface-sunken outline-none cursor-pointer"
         >
           {VOICE_LANGUAGES.map((l) => (
             <option key={l.value} value={l.value}>
@@ -110,12 +110,12 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
           disabled={!inputSupported || (!voiceMode && isTranscribing) || (voiceMode && !isSpeaking && !isRecording)}
           title={inputSupported ? micTitle : 'Speech input is not supported in this browser'}
           aria-label={micTitle}
-          className={`relative p-2 rounded-xl transition-all disabled:cursor-default ${micClass}`}
+          className={`relative p-2 rounded-xl transition-colors disabled:cursor-default ${micClass}`}
         >
           {isRecording && (
             <span
               aria-hidden
-              className="absolute inset-0 rounded-xl ring-2 ring-rose-400/70 transition-transform duration-100"
+              className="absolute inset-0 rounded-xl ring-2 ring-[var(--danger)] transition-transform duration-100"
               style={{ transform: `scale(${1 + Math.min(level, 1) * 0.35})`, opacity: 0.4 + level * 0.6 }}
             />
           )}
@@ -129,10 +129,10 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
           disabled={!inputSupported}
           title={voiceMode ? 'End voice conversation' : 'Start voice conversation (talk, listen, repeat)'}
           aria-pressed={voiceMode}
-          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+          className={`flex items-center gap-1 h-7 px-2.5 text-2xs font-semibold rounded-lg border transition-colors disabled:opacity-50 ${
             voiceMode
-              ? 'text-white bg-gradient-to-r from-purple-600 to-fuchsia-500 border-transparent shadow-sm'
-              : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200/60'
+              ? 'text-ink-onBrand bg-brand border-transparent shadow-xs'
+              : 'text-brand bg-brand-soft hover:bg-brand-softHover border-brand-border'
           }`}
         >
           {voiceMode ? <Square className="w-3 h-3 fill-current" /> : <AudioLines className="w-3.5 h-3.5" />}
@@ -147,10 +147,10 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
               onClick={toggleTts}
               title={ttsEnabled ? 'Voice output enabled' : 'Enable voice output'}
               aria-pressed={ttsEnabled}
-              className={`p-2 rounded-xl transition-all ${
+              className={`p-2 rounded-xl transition-colors ${
                 ttsEnabled
-                  ? 'text-purple-600 bg-purple-50/80'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
+                  ? 'text-brand bg-brand-soft'
+                  : 'text-ink-faint hover:text-ink-secondary hover:bg-surface-sunken'
               }`}
             >
               {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -161,7 +161,7 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
                 type="button"
                 onClick={isSpeaking ? stopSpeaking : speakLatest}
                 title={isSpeaking ? 'Stop reading' : 'Read answer aloud'}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 transition-colors"
+                className="flex items-center gap-1 h-7 px-2.5 text-2xs font-semibold rounded-lg text-brand bg-brand-soft hover:bg-brand-softHover border border-brand-border transition-colors"
               >
                 {isSpeaking ? (
                   <>
@@ -184,7 +184,7 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
         <p
           role="status"
           aria-live="polite"
-          className="flex items-center gap-1.5 text-[11px] leading-tight text-purple-700"
+          className="flex items-center gap-1.5 text-2xs leading-tight text-brand"
         >
           {isThinking ? (
             <Brain className="w-3 h-3" />
@@ -192,17 +192,21 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
             <span
               aria-hidden
               className={`inline-block w-1.5 h-1.5 rounded-full ${
-                isRecording ? 'bg-rose-500 animate-pulse' : isSpeaking ? 'bg-purple-600 animate-pulse' : 'bg-purple-300'
+                isRecording
+                  ? 'bg-danger animate-pulse'
+                  : isSpeaking
+                  ? 'bg-brand animate-pulse'
+                  : 'bg-brand-border'
               }`}
             />
           )}
           <span>{PHASE_LABEL[phase]}</span>
-          {status && <span className="text-gray-400">· {engineLabel}</span>}
+          {status && <span className="text-ink-faint">· {engineLabel}</span>}
         </p>
       )}
 
       {error && (
-        <p role="alert" className="max-w-64 text-right text-[10px] leading-tight text-rose-600">
+        <p role="alert" className="max-w-64 text-right text-[10px] leading-tight text-danger">
           {error}
         </p>
       )}
