@@ -4,7 +4,6 @@ Per Phase 04 specification:
 - 'reserve >=2GB macOS headroom; do not run OCR/indexing while chatting; use one active heavy worker'
 """
 
-import fcntl
 import json
 import os
 import threading
@@ -15,6 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Generator
 
 from adam.agent.budget import ResourceBudgetManager, MACBOOK_AIR_8GB_PROFILE
+from adam.agent.filelock import try_lock_exclusive, unlock
 
 
 class HeavyTaskType(str, Enum):
@@ -68,7 +68,7 @@ class HeavyWorkerCoordinator:
                 with cls._instance._lock:
                     if cls._instance._lock_file_handle:
                         try:
-                            fcntl.flock(cls._instance._lock_file_handle.fileno(), fcntl.LOCK_UN)
+                            unlock(cls._instance._lock_file_handle)
                             cls._instance._lock_file_handle.close()
                         except (OSError, ValueError):
                             pass
@@ -150,7 +150,7 @@ class HeavyWorkerCoordinator:
                 flock_start = time.time()
                 while True:
                     try:
-                        fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        try_lock_exclusive(fd)
                         break
                     except (BlockingIOError, OSError):
                         if timeout_seconds <= 0.0:
@@ -199,7 +199,7 @@ class HeavyWorkerCoordinator:
                     except OSError:
                         pass
                     try:
-                        fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+                        unlock(fd)
                         fd.close()
                     except OSError:
                         pass
