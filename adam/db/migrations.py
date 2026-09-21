@@ -86,4 +86,6 @@ def apply_ingestion_migrations(engine: Engine) -> None:
                 text("INSERT INTO schema_migrations (version, applied_at) VALUES (:ver, :now)"),
                 {"ver": MIGRATION_VERSION, "now": now},
             )
+            if "sqlite" in str(engine.url):
+                conn.execute(text("REINDEX"))
             logger.info("Applied migration %s successfully.", MIGRATION_VERSION)

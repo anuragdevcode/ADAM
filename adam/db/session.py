@@ -50,6 +50,7 @@ def _migrate_missing_columns(engine: Engine) -> None:
         existing_tables = set(inspector.get_table_names())
         from adam.db.models import Base
         with engine.begin() as conn:
+            altered = False
             for table_name, table in Base.metadata.tables.items():
                 if table_name in existing_tables:
                     existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
@@ -57,6 +58,9 @@ def _migrate_missing_columns(engine: Engine) -> None:
                         if col.name not in existing_cols:
                             col_type = col.type.compile(engine.dialect)
                             conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}"))
+                            altered = True
+            if altered and "sqlite" in str(engine.url):
+                conn.execute(text("REINDEX"))
     except Exception:
         pass
 
