@@ -36,6 +36,8 @@ class ParsedQuery:
     is_out_of_jurisdiction: bool = False
     has_unsupported_topic: bool = False
     is_greeting: bool = False
+    is_system_introspection: bool = False
+    introspection_subtopic: Optional[str] = None  # MODEL, TOOLS, SOURCES, HARNESS, LAST_EXECUTION, CURRENT_STATUS, GENERAL
 
 
 @dataclass

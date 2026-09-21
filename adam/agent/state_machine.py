@@ -402,7 +402,7 @@ class AgentStateMachine:
         # Immediate out-of-jurisdiction or unsupported topic check (English and Hindi)
         is_refusal = False
         lower_q = query.lower()
-        if (
+        if not getattr(parsed_query, "is_system_introspection", False) and (
             parsed_query.is_out_of_jurisdiction
             or parsed_query.has_unsupported_topic
             or any(s in lower_q for s in ("uttar pradesh", "himachal pradesh", "tamil nadu", "delhi", "bihar", "punjab", "rajasthan"))
@@ -423,6 +423,7 @@ class AgentStateMachine:
                 "query_language": parsed_query.detected_language or "en",
                 "is_high_risk": bool(parsed_query.is_high_risk),
                 "is_out_of_jurisdiction": bool(parsed_query.is_out_of_jurisdiction),
+                "is_system_introspection": bool(getattr(parsed_query, "is_system_introspection", False)),
             },
         )
 
@@ -432,49 +433,66 @@ class AgentStateMachine:
             OperationalEventType.RETRIEVAL_STARTED,
             stage="retrieval",
             status="running",
-            message="Searching official Uttarakhand public records",
+            message="Searching official Uttarakhand public records" if not getattr(parsed_query, "is_system_introspection", False) else "Accessing system self-model registry",
         )
-        transition_to(AgentState.RETRIEVE, "Executing single authorized hybrid retrieval pass")
+        transition_to(
+            AgentState.RETRIEVE,
+            "Executing single authorized hybrid retrieval pass" if not getattr(parsed_query, "is_system_introspection", False) else "Bypassing repository search for system introspection",
+        )
         if retrieval_passes >= 1:
             raise TaskSelfExpansionError("State machine attempted second retrieval pass. Max 1 retrieval pass allowed.")
         retrieval_passes += 1
 
-        # Use read-only tool for retrieval
-        retrieval_tool_args = {
-            "query": parsed_query.clean_query,
-            "department_id": parsed_query.department_id,
-            "doc_type": parsed_query.doc_type,
-            "top_k": top_k,
-        }
-        tool_res = ReadOnlyToolRegistry.execute(
-            tool_name="search",
-            arguments=retrieval_tool_args,
-            user_context=user,
-            session=self.session,
-        )
-        tool_calls.append({
-            "tool": "search",
-            "args": SecretRedactor.sanitize_data(retrieval_tool_args),
-            "found_count": tool_res.get("total_found", 0),
-        })
+        if getattr(parsed_query, "is_system_introspection", False):
+            passages = []
+            cand_count = 0
+            emitter.emit(
+                OperationalEventType.RETRIEVAL_COMPLETED,
+                stage="retrieval",
+                status="completed",
+                message="Repository search bypassed for system introspection query",
+                data={
+                    "candidate_count": 0,
+                    "records_considered": 0,
+                },
+            )
+        else:
+            # Use read-only tool for retrieval
+            retrieval_tool_args = {
+                "query": parsed_query.clean_query,
+                "department_id": parsed_query.department_id,
+                "doc_type": parsed_query.doc_type,
+                "top_k": top_k,
+            }
+            tool_res = ReadOnlyToolRegistry.execute(
+                tool_name="search",
+                arguments=retrieval_tool_args,
+                user_context=user,
+                session=self.session,
+            )
+            tool_calls.append({
+                "tool": "search",
+                "args": SecretRedactor.sanitize_data(retrieval_tool_args),
+                "found_count": tool_res.get("total_found", 0),
+            })
 
-        # Reuse passages from the search tool call to avoid redundant database roundtrip
-        passages = tool_res.get("raw_passages")
-        if passages is None:
-            retriever = HybridRetriever(self.session)
-            passages = retriever.retrieve(parsed_query, user_context=user, top_k=top_k)
+            # Reuse passages from the search tool call to avoid redundant database roundtrip
+            passages = tool_res.get("raw_passages")
+            if passages is None:
+                retriever = HybridRetriever(self.session)
+                passages = retriever.retrieve(parsed_query, user_context=user, top_k=top_k)
 
-        cand_count = tool_res.get("total_found", len(passages) if passages else 0)
-        emitter.emit(
-            OperationalEventType.RETRIEVAL_COMPLETED,
-            stage="retrieval",
-            status="completed",
-            message=f"Evaluated repository records ({cand_count} candidates found)",
-            data={
-                "candidate_count": cand_count,
-                "records_considered": cand_count,
-            },
-        )
+            cand_count = tool_res.get("total_found", len(passages) if passages else 0)
+            emitter.emit(
+                OperationalEventType.RETRIEVAL_COMPLETED,
+                stage="retrieval",
+                status="completed",
+                message=f"Evaluated repository records ({cand_count} candidates found)",
+                data={
+                    "candidate_count": cand_count,
+                    "records_considered": cand_count,
+                },
+            )
 
         # ── Stage 4: Evidence / Currency Checks ──────────────────────────────
         emitter.start_stage("evidence")
@@ -482,54 +500,77 @@ class AgentStateMachine:
             OperationalEventType.EVIDENCE_STARTED,
             stage="evidence",
             status="running",
-            message="Evaluating evidence packet and material passages",
+            message="Evaluating evidence packet and material passages" if not getattr(parsed_query, "is_system_introspection", False) else "Evaluating system self-model ground truth",
         )
-        transition_to(AgentState.EVIDENCE_CURRENCY_CHECKS, f"Evaluating evidence packet ({len(passages)} passages)")
-        packet_builder = EvidencePacketBuilder(self.session)
-        packet = packet_builder.build_packet(
-            query=parsed_query,
-            retrieved_passages=passages,
-            user_context=user,
+        transition_to(
+            AgentState.EVIDENCE_CURRENCY_CHECKS,
+            f"Evaluating evidence packet ({len(passages)} passages)" if not getattr(parsed_query, "is_system_introspection", False) else "Evaluating system self-model state",
         )
 
-        currency_banners = []
-        if packet.currency_banner:
-            currency_banners.append(packet.currency_banner)
-
-        if packet.is_empty:
-            emitter.emit(
-                OperationalEventType.EVIDENCE_INSUFFICIENT,
-                stage="evidence",
-                status="warning",
-                message="No approved repository evidence found for query",
-                data={"selected_count": 0},
-            )
-        else:
+        if getattr(parsed_query, "is_system_introspection", False):
+            packet = EvidencePacket(query=parsed_query, passages=[])
+            currency_banners = []
             emitter.emit(
                 OperationalEventType.EVIDENCE_COMPLETED,
                 stage="evidence",
                 status="completed",
-                message=f"{len(packet.passages)} evidence passages selected",
-                data={"selected_count": len(packet.passages)},
+                message="Authoritative system state loaded for self-model inquiry",
+                data={"selected_count": 0},
             )
-
-        emitter.start_stage("currency")
-        if packet.currency_banner:
-            emitter.emit(
-                OperationalEventType.CURRENCY_WARNING,
-                stage="currency",
-                status="warning",
-                message="Document has superseding amendments or currency notices",
-                data={"banner_count": len(currency_banners)},
-            )
-        else:
+            emitter.start_stage("currency")
             emitter.emit(
                 OperationalEventType.CURRENCY_CHECKED,
                 stage="currency",
                 status="completed",
-                message="Document currency verified against official gazette",
+                message="Self-model telemetry verified",
                 data={"banner_count": 0},
             )
+        else:
+            packet_builder = EvidencePacketBuilder(self.session)
+            packet = packet_builder.build_packet(
+                query=parsed_query,
+                retrieved_passages=passages,
+                user_context=user,
+            )
+
+            currency_banners = []
+            if packet.currency_banner:
+                currency_banners.append(packet.currency_banner)
+
+            if packet.is_empty:
+                emitter.emit(
+                    OperationalEventType.EVIDENCE_INSUFFICIENT,
+                    stage="evidence",
+                    status="warning",
+                    message="No approved repository evidence found for query",
+                    data={"selected_count": 0},
+                )
+            else:
+                emitter.emit(
+                    OperationalEventType.EVIDENCE_COMPLETED,
+                    stage="evidence",
+                    status="completed",
+                    message=f"{len(packet.passages)} evidence passages selected",
+                    data={"selected_count": len(packet.passages)},
+                )
+
+            emitter.start_stage("currency")
+            if packet.currency_banner:
+                emitter.emit(
+                    OperationalEventType.CURRENCY_WARNING,
+                    stage="currency",
+                    status="warning",
+                    message="Document has superseding amendments or currency notices",
+                    data={"banner_count": len(currency_banners)},
+                )
+            else:
+                emitter.emit(
+                    OperationalEventType.CURRENCY_CHECKED,
+                    stage="currency",
+                    status="completed",
+                    message="Document currency verified against official gazette",
+                    data={"banner_count": 0},
+                )
 
         # ── Stage 5: Generate Cited Answer or Abstain (Max 1 Answer Pass) ────
         transition_to(AgentState.GENERATE_OR_ABSTAIN, "Generating cited response or abstaining under model controls")
@@ -577,6 +618,97 @@ class AgentStateMachine:
                 status="completed",
                 message="Greeting response generated",
             )
+        elif getattr(parsed_query, "is_system_introspection", False):
+            emitter.start_stage("generation")
+            emitter.emit(
+                OperationalEventType.GENERATION_STARTED,
+                stage="generation",
+                status="running",
+                message="Interpreting system self-model ground truth",
+                data={"model_name": self.model_id},
+            )
+            from adam.agent.introspection import SystemIntrospectionService
+            snapshot = SystemIntrospectionService.get_system_snapshot(
+                session=self.session,
+                user_context=user,
+                session_id=session_id,
+                model_id=self.model_id,
+                backend=self.backend,
+                custom_runtime=self._custom_runtime,
+            )
+            snapshot_context = SystemIntrospectionService.format_snapshot_for_prompt(
+                snapshot=snapshot,
+                subtopic=parsed_query.introspection_subtopic,
+            )
+
+            with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
+                emitter.start_stage("model")
+                emitter.emit(
+                    OperationalEventType.MODEL_LOADING,
+                    stage="model",
+                    status="running",
+                    message=f"Activating model runtime ({self.model_id})",
+                    data={"model_name": self.model_id},
+                )
+                try:
+                    runtime = self._custom_runtime or self.lifecycle.load_model(
+                        self.model_id,
+                        allow_hot_swap=True,
+                        backend=self.backend,
+                        api_key=self.api_key,
+                        clearance_level=user.clearance_level,
+                    )
+                    emitter.emit(
+                        OperationalEventType.MODEL_READY,
+                        stage="model",
+                        status="completed",
+                        message="Model runtime ready",
+                        data={"model_name": self.model_id},
+                    )
+                except Exception as m_err:
+                    emitter.emit(
+                        OperationalEventType.MODEL_FAILED,
+                        stage="model",
+                        status="failed",
+                        message=f"Model activation failed: {str(m_err)}",
+                        data={"model_name": self.model_id},
+                    )
+                    raise
+
+                emitter.start_stage("generation")
+                from adam.harness.routing import HarnessRouter
+                profile = HarnessRouter.resolve_profile(self.model_id)
+                harness_params = profile.resolve_parameters(
+                    intent="introspection",
+                    temperature=temperature if temperature > 0.0 else 0.1,
+                    max_tokens=max_tokens if max_tokens != 512 else 1024,
+                )
+                user_prompt = profile.format_introspection_prompt(query, snapshot_context)
+                system_prompt = profile.resolve_system_prompt("introspection")
+
+                effective_temp = min(temperature, 0.2) if isinstance(runtime, DeterministicModelRuntime) else temperature
+                effective_max_tokens = harness_params.max_tokens or max_tokens
+
+                gen_result = runtime.generate(
+                    user_prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    temperature=effective_temp,
+                    max_tokens=effective_max_tokens,
+                    harness_parameters=harness_params,
+                    token_callback=token_callback,
+                )
+                answer = gen_result.answer
+                prompt_tokens = gen_result.tokens_prompt
+                completion_tokens = gen_result.tokens_completion
+                citations = []
+
+                emitter.emit(
+                    OperationalEventType.GENERATION_COMPLETED,
+                    stage="generation",
+                    status="completed",
+                    message="System self-model response generated",
+                    data={"model_name": self.model_id},
+                )
         elif is_refusal:
             emitter.start_stage("generation")
             emitter.emit(
@@ -849,7 +981,7 @@ class AgentStateMachine:
 
         # ── Stage 6: Validate Citations ─────────────────────────────────────
         transition_to(AgentState.VALIDATE_CITATIONS, "Validating material claim citations against evidence packet")
-        if getattr(parsed_query, "is_greeting", False):
+        if getattr(parsed_query, "is_greeting", False) or getattr(parsed_query, "is_system_introspection", False):
             passed, val_errors = True, []
         else:
             validator = CitationValidator()
@@ -888,7 +1020,11 @@ class AgentStateMachine:
         )
         redacted_audit_log = SecretRedactor.sanitize_text(raw_audit_summary)
 
-        final_state = AgentState.COMPLETED if (not is_refusal or getattr(parsed_query, "is_greeting", False)) else AgentState.ABSTAINED
+        final_state = (
+            AgentState.COMPLETED
+            if (not is_refusal or getattr(parsed_query, "is_greeting", False) or getattr(parsed_query, "is_system_introspection", False))
+            else AgentState.ABSTAINED
+        )
         transition_notes = "Agent execution pipeline completed successfully" if final_state == AgentState.COMPLETED else f"Agent execution abstained: {recorded_abstention_reason or 'No verified records'}"
         transition_to(
             final_state,
@@ -904,11 +1040,15 @@ class AgentStateMachine:
             department_id=user.department_id,
             clearance_level=user.clearance_level,
             query_text=SecretRedactor.sanitize_text(query),
-            detected_intent=parsed_query.high_risk_category or "STANDARD_QUERY",
+            detected_intent=(
+                f"SYSTEM_INTROSPECTION_{parsed_query.introspection_subtopic or 'GENERAL'}"
+                if getattr(parsed_query, "is_system_introspection", False)
+                else (parsed_query.high_risk_category or "STANDARD_QUERY")
+            ),
             model_id=self.model_id,
             retrieval_pass_count=retrieval_passes,
             answer_pass_count=answer_passes,
-            is_no_answer=1 if (is_refusal and not getattr(parsed_query, "is_greeting", False)) else 0,
+            is_no_answer=1 if (is_refusal and not getattr(parsed_query, "is_greeting", False) and not getattr(parsed_query, "is_system_introspection", False)) else 0,
             is_high_risk=1 if parsed_query.is_high_risk else 0,
             state_transitions_json=[
                 t.to_dict() if hasattr(t, "to_dict") else {

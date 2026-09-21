@@ -480,3 +480,93 @@ export interface RagBenchmarkData {
   };
 }
 
+// ── System Introspection & Self-Model Types ─────────────────────────────────
+
+export interface SystemInfoSnapshot {
+  name: string;
+  version: string;
+  jurisdiction: string;
+  air_gapped: boolean;
+  environment: string;
+  current_time_utc: string;
+}
+
+export interface ActiveModelSnapshot {
+  id: string;
+  name: string;
+  family: string;
+  serving_runtime: string;
+  quantization: string;
+  context_window: number;
+  memory_footprint_mb: number;
+  is_loaded: boolean;
+  is_cloud: boolean;
+  air_gapped_restricted: boolean;
+  supports_reasoning: boolean;
+  backend_resolved: string;
+}
+
+export interface ActiveHarnessSnapshot {
+  profile_name: string;
+  family_name: string;
+  temperature_range: number[];
+  max_tokens_budget: number;
+  thinking_enabled: boolean;
+  thinking_budget: number;
+  stop_sequences: string[];
+}
+
+export interface ToolCapabilitySnapshot {
+  allowed_tools: Array<{
+    name: string;
+    description: string;
+    parameters: string[];
+  }>;
+  forbidden_tools: string[];
+  guardrail_invariants: string[];
+}
+
+export interface DataSourceSnapshot {
+  total_sources: number;
+  total_documents: number;
+  total_chunks: number;
+  approved_connectors: string[];
+  registered_departments: string[];
+}
+
+export interface WorkerConcurrencySnapshot {
+  is_busy: boolean;
+  active_task: string | null;
+  active_task_id: string | null;
+  elapsed_seconds: number;
+  mutual_exclusion_enforced: boolean;
+  active_ingestion_jobs: number;
+}
+
+export interface LastExecutionSnapshot {
+  session_id: string | null;
+  query_text_redacted: string | null;
+  detected_intent: string | null;
+  model_id: string | null;
+  total_latency_ms: number;
+  per_stage_latency_ms: Record<string, number>;
+  was_refused: boolean;
+  refusal_reason: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  validation_passed: boolean;
+  validation_errors: string[];
+  tool_calls: Array<Record<string, unknown>>;
+  timestamp: string | null;
+}
+
+export interface SystemSnapshot {
+  system_info: SystemInfoSnapshot;
+  active_model: ActiveModelSnapshot;
+  active_harness: ActiveHarnessSnapshot;
+  tool_capabilities: ToolCapabilitySnapshot;
+  data_sources: DataSourceSnapshot;
+  worker_concurrency: WorkerConcurrencySnapshot;
+  last_execution: LastExecutionSnapshot | null;
+}
+

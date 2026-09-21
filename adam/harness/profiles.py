@@ -32,6 +32,10 @@ class BaseHarnessProfile(ABC):
     def format_conversational_prompt(self, query: str) -> str:
         """Format a conversational turn prompt without contradictory directives."""
 
+    def format_introspection_prompt(self, query: str, snapshot_context: str) -> str:
+        """Format an authoritative introspection prompt suited to this model."""
+        return PromptTemplateRegistry.format_introspection_turn(query, snapshot_context)
+
     @abstractmethod
     def resolve_system_prompt(self, intent: str = "rag") -> str:
         """Resolve system prompt aligned with intent."""
@@ -61,6 +65,9 @@ class QwenHarnessProfile(BaseHarnessProfile):
         elif intent in ("reasoning", "multi_step"):
             temp = overrides.get("temperature", 0.4)
             max_tokens = overrides.get("max_tokens", 2048)
+        elif intent == "introspection":
+            temp = overrides.get("temperature", 0.1)
+            max_tokens = overrides.get("max_tokens", 1024)
         else:  # "rag", "unanswerable", "citation", "administrative"
             temp = overrides.get("temperature", 0.2)
             max_tokens = overrides.get("max_tokens", 1024)

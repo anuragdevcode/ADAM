@@ -38,6 +38,16 @@ class PromptTemplateRegistry:
         "and present conclusions with rigorous justification."
     )
 
+    # System Introspection / Self-Model system prompt: authoritative, objective interpreter
+    INTROSPECTION_SYSTEM_PROMPT = (
+        "You are ADAM, the authorized AI assistant for Uttarakhand State public records and governance. "
+        "You are answering questions about your own operational state, active model runtime, tools, data sources, "
+        "configuration, capabilities, or execution telemetry. "
+        "The System State provided in context is authoritative ground truth. "
+        "Interpret and explain this state accurately, concisely, and transparently. "
+        "Do not hallucinate tools or capabilities you do not possess. Do not refuse or claim you lack repository evidence."
+    )
+
     @classmethod
     def resolve_system_prompt(cls, intent: str = "rag") -> str:
         """Resolve system prompt according to query intent."""
@@ -45,6 +55,8 @@ class PromptTemplateRegistry:
             return cls.CONVERSATIONAL_SYSTEM_PROMPT
         elif intent == "reasoning":
             return cls.REASONING_SYSTEM_PROMPT
+        elif intent == "introspection":
+            return cls.INTROSPECTION_SYSTEM_PROMPT
         return cls.GOVERNED_RAG_SYSTEM_PROMPT
 
     @classmethod
@@ -55,4 +67,17 @@ class PromptTemplateRegistry:
             f"[Context: No specific repository document was referenced for this turn. "
             f"Respond clearly and concisely as {model_mention}. For administrative queries, "
             f"guide the user on how to locate the relevant Uttarakhand Government Order.]"
+        )
+
+    @classmethod
+    def format_introspection_turn(cls, query: str, snapshot_context: str) -> str:
+        """Format an authoritative introspection prompt enclosing system state snapshot."""
+        return (
+            f"{query}\n\n"
+            f"=== AUTHORITATIVE SYSTEM STATE SNAPSHOT ===\n"
+            f"{snapshot_context}\n"
+            f"===========================================\n"
+            f"[Instruction: Use the authoritative system state above to answer the user's question directly, "
+            f"accurately, and concisely. Interpret this state objectively. "
+            f"Do not claim you could not establish this from the approved repository — this system snapshot is your approved source of truth.]"
         )

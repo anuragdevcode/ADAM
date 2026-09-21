@@ -50,6 +50,52 @@ class QueryUnderstanding:
         ],
     }
 
+    # System introspection / self-model trigger patterns
+    INTROSPECTION_PATTERNS = {
+        "MODEL": [
+            r"\b(?:what|which)\s+(?:(?:model|llm|runtime|backend|architecture|weights)(?:\s+and\s+(?:runtime|backend|model))?)\s+(?:are\s+you|is\s+this|do\s+you\s+(?:currently\s+)?use|is\s+(?:currently\s+)?(?:running|loaded|active)|(?:are\s+you\s+(?:currently\s+)?using))\b",
+            r"\b(?:what\s+(?:model|runtime|backend|llm)\s+(?:are\s+you\s+(?:currently\s+)?using|do\s+you\s+use))\b",
+            r"\b(?:what\s+is\s+your\s+(?:active\s+|current\s+)?(?:model|runtime|backend)|tell\s+me\s+about\s+your\s+model|active\s+model|current\s+model)\b",
+            r"\b(?:what\s+runtime|what\s+backend|are\s+you\s+(?:using\s+)?(?:ollama|gemini|llamacpp|deterministic))\b",
+            r"(?:कौन\s*सा\s*मॉडल|मॉडल\s*क्या\s*है|सक्रिय\s*मॉडल|रनटाइम\s*क्या\s*है)",
+        ],
+        "TOOLS": [
+            r"\b(?:what|which)\s+tools\s+(?:do\s+you\s+have|can\s+you\s+use|are\s+available)\b",
+            r"\b(?:list\s+(?:your\s+)?tools|available\s+tools|allowed\s+tools|forbidden\s+tools|tool\s+capabilities)\b",
+            r"\b(?:what\s+actions\s+can\s+you\s+perform|what\s+system\s+capabilities\s+(?:do\s+you\s+have|are\s+available))\b",
+            r"\b(?:can\s+you\s+(?:browse|search)\s+(?:the\s+)?(?:web|internet))\b",
+            r"\b(?:can\s+you\s+send\s+emails?|can\s+you\s+edit\s+records?|can\s+you\s+write\s+to\s+(?:the\s+)?(?:db|database))\b",
+            r"\b(?:can\s+you\s+(?:run|execute)\s+(?:bash|code|python|commands?|scripts?))\b",
+            r"(?:क्या\s*उपकरण|उपकरण\s*क्या\s*हैं|स्वीकृत\s*उपकरण|प्रतिबंधित\s*उपकरण|क्या\s*आप\s*वेब|क्या\s*आप\s*ईमेल)",
+        ],
+        "SOURCES": [
+            r"\b(?:what\s+data\s*sources?|which\s+data\s*sources?|what\s+sources?)\s+(?:do\s+you\s+have|are\s+available|are\s+indexed)\b",
+            r"\b(?:what\s+documents|what\s+records|what\s+collections)\s+(?:can\s+you\s+search|do\s+you\s+have|are\s+available)\b",
+            r"\b(?:approved\s+collections|available\s+data\s*sources?|approved\s+repositories)\b",
+            r"(?:डेटा\s*स्रोत|कौन\s*से\s*दस्तावेज|स्वीकृत\s*संग्रह)",
+        ],
+        "HARNESS": [
+            r"\b(?:what\s+harness|what\s+is\s+your\s+temperature|what\s+temperature|prompt\s+format|active\s+harness|harness\s+profile)\b",
+            r"\b(?:sampling\s+parameters|max\s+tokens\s+limit|inference\s+configuration)\b",
+            r"(?:हर्नेस|कन्फिगरेशन|तापमान)",
+        ],
+        "LAST_EXECUTION": [
+            r"\b(?:why\s+was\s+(?:my\s+)?(?:last\s+)?(?:request|query)\s+(?:refused|rejected|slow|abstained))\b",
+            r"\b(?:why\s+did\s+you\s+(?:refuse|abstain|say\s+you\s+could\s+not\s+establish))\b",
+            r"\b(?:what\s+happened\s+(?:during|in)\s+(?:the\s+)?last\s+(?:execution|query|request))\b",
+            r"\b(?:explain\s+(?:your\s+)?(?:last\s+|previous\s+)?(?:refusal|abstention|latency|slowness))\b",
+            r"(?:पिछला\s*अनुरोध\s*क्यों|अस्वीकार\s*क्यों|धीमा\s*क्यों)",
+        ],
+        "CURRENT_STATUS": [
+            r"\b(?:what\s+are\s+you\s+(?:doing\s+)?right\s+now|are\s+you\s+(?:currently\s+)?busy)\b",
+            r"\b(?:system\s+status|system\s+health|worker\s+status|concurrency\s+status)\b",
+            r"(?:सिस्टम\s*स्थिति|कार्यकर्ता\s*स्थिति|क्या\s*आप\s*व्यस्त\s*हैं)",
+        ],
+        "GENERAL": [
+            r"\b(?:what\s+are\s+your\s+guardrails|how\s+do\s+you\s+work\s+internally|system\s+self[- ]model|system\s+introspection)\b",
+        ],
+    }
+
     # Explicit department patterns
     EXPLICIT_DEPT_PATTERNS = [
         (DepartmentId.FINANCE_TREASURY.value, re.compile(
@@ -253,21 +299,40 @@ class QueryUnderstanding:
         is_out_of_jurisdiction = any(pat.search(raw_query) for pat in cls.OUT_OF_JURISDICTION_PATTERNS)
         has_unsupported_topic = any(pat.search(raw_query) for pat in cls.UNSUPPORTED_TOPIC_PATTERNS)
 
-        # 9. Conversational greeting and system guidance detection
+        # 9. System Introspection & Self-Model Intent Detection
+        is_system_introspection = False
+        introspection_subtopic = None
+        for category, patterns in cls.INTROSPECTION_PATTERNS.items():
+            for pat in patterns:
+                if re.search(pat, raw_query, re.IGNORECASE | re.UNICODE):
+                    is_system_introspection = True
+                    introspection_subtopic = category
+                    break
+            if is_system_introspection:
+                break
+
+        # 10. Conversational greeting detection
         normalized_q = re.sub(r"[^\w\s\u0900-\u097f]", "", raw_query.lower()).strip()
         GREETING_EXACT = {
             "hi", "hello", "hey", "hola", "namaste", "greetings", "good morning",
-            "good afternoon", "good evening", "howdy", "who are you", "what can you do",
+            "good afternoon", "good evening", "howdy", "who are you",
             "what is adam", "who is adam", "how to search", "how do i search", "help",
-            "capabilities", "what are your capabilities", "system status", "how to use",
+            "how to use", "capabilities", "what can you do", "what are your capabilities",
             "नमस्ते", "नमस्कार", "प्रणाम", "सुप्रभात", "आप कौन हैं", "तुम कौन हो",
-            "अदम क्या है", "सहायता", "मदद", "खोज कैसे करें", "आप क्या कर सकते हैं"
+            "अदम क्या है", "सहायता", "मदद", "खोज कैसे करें"
         }
         is_greeting = (
-            normalized_q in GREETING_EXACT
-            or any(normalized_q == g for g in ("hi adam", "hello adam", "hey adam", "namaste adam", "about adam"))
-            or (len(normalized_q.split()) <= 4 and any(k in normalized_q for k in ("what is adam", "who are you", "how to use adam", "help me search")))
+            not is_system_introspection
+            and (
+                normalized_q in GREETING_EXACT
+                or any(normalized_q == g for g in ("hi adam", "hello adam", "hey adam", "namaste adam", "about adam", "what are your capabilities", "help me search"))
+                or (len(normalized_q.split()) <= 4 and any(k in normalized_q for k in ("what is adam", "who are you", "how to use adam", "help me search", "what can you do", "what are your capabilities")))
+            )
         )
+
+        if is_system_introspection:
+            is_out_of_jurisdiction = False
+            has_unsupported_topic = False
 
         return ParsedQuery(
             raw_query=raw_query,
@@ -284,6 +349,8 @@ class QueryUnderstanding:
             is_out_of_jurisdiction=is_out_of_jurisdiction,
             has_unsupported_topic=has_unsupported_topic,
             is_greeting=is_greeting,
+            is_system_introspection=is_system_introspection,
+            introspection_subtopic=introspection_subtopic,
         )
 
     @classmethod

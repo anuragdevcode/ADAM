@@ -23,6 +23,8 @@ import type {
   UserPreferenceData,
   VocabularyData,
   VoiceStatus,
+  SystemSnapshot,
+  LastExecutionSnapshot,
 } from './types';
 
 const API_BASE = '/api';
@@ -788,6 +790,64 @@ export async function recheckModel(modelId: string): Promise<ModelInfo | null> {
     });
     if (!resp.ok) return null;
     return resp.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch authoritative system self-model snapshot.
+ */
+export async function fetchSystemIntrospection(
+  sessionId?: string | null,
+  options: {
+    userId?: string;
+    userRole?: string;
+    clearanceLevel?: string;
+    departmentId?: string | null;
+  } = {},
+): Promise<SystemSnapshot | null> {
+  try {
+    const params = new URLSearchParams();
+    if (sessionId) params.append('session_id', sessionId);
+
+    const headers: Record<string, string> = {
+      'X-User-Id': options.userId || 'anonymous',
+      'X-User-Role': options.userRole || 'PUBLIC',
+      'X-Clearance-Level': options.clearanceLevel || 'PUBLIC',
+    };
+    if (options.departmentId) headers['X-Department-Id'] = options.departmentId;
+
+    const url = `${API_BASE}/system/introspection${params.toString() ? `?${params.toString()}` : ''}`;
+    const resp = await fetch(url, { headers });
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch diagnostics for the last executed query.
+ */
+export async function fetchLastExecutionDiagnostics(
+  sessionId?: string | null,
+  userId?: string,
+): Promise<LastExecutionSnapshot | null> {
+  try {
+    const params = new URLSearchParams();
+    if (sessionId) params.append('session_id', sessionId);
+
+    const headers: Record<string, string> = {
+      'X-User-Id': userId || 'anonymous',
+    };
+
+    const url = `${API_BASE}/system/introspection/last-execution${params.toString() ? `?${params.toString()}` : ''}`;
+    const resp = await fetch(url, { headers });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data.found) return null;
+    return data as LastExecutionSnapshot;
   } catch {
     return null;
   }

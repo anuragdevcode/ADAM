@@ -12,7 +12,8 @@ import ReviewView from '@/components/ReviewView';
 import SettingsModal from '@/components/SettingsModal';
 import ApiKeyModal from '@/components/ApiKeyModal';
 import AddProviderModal from '@/components/AddProviderModal';
-import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud, Globe } from 'lucide-react';
+import SystemIntrospectionModal from '@/components/SystemIntrospectionModal';
+import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud, Globe, Activity } from 'lucide-react';
 import type { DepartmentItem, ModelInfo } from '@/lib/types';
 import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey, triggerModelDiscovery } from '@/lib/api';
 
@@ -23,6 +24,7 @@ export default function HomePage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [introspectionOpen, setIntrospectionOpen] = useState(false);
 
   // Officer Identity & Clearance State
   const [officerUserId, setOfficerUserId] = useState(DEFAULT_OFFICER_ID);
@@ -373,6 +375,17 @@ export default function HomePage() {
                 <span>{clearanceLevel}</span>
               </button>
 
+              {/* Self-Model / System Introspection Button */}
+              <button
+                type="button"
+                onClick={() => setIntrospectionOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:bg-purple-50 text-xs font-semibold text-gray-700 hover:text-purple-700 transition-all"
+                title="View System Introspection & Self-Model diagnostics"
+              >
+                <Activity className="w-3.5 h-3.5 text-purple-600" />
+                <span className="hidden sm:inline">Self-Model</span>
+              </button>
+
               {/* + New Thread Button */}
               <button
                 type="button"
@@ -478,6 +491,15 @@ export default function HomePage() {
           }}
         />
       )}
+
+      {/* System Introspection / Self-Model Modal */}
+      <SystemIntrospectionModal
+        isOpen={introspectionOpen}
+        onClose={() => setIntrospectionOpen(false)}
+        sessionId={activeSessionId}
+        userId={officerUserId}
+        clearanceLevel={clearanceLevel}
+      />
     </main>
   );
 }

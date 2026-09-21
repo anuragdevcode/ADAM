@@ -13,6 +13,8 @@ from adam.config import SIGNING_SECRET
 SECRET_PATTERNS = [
     # API keys / Bearer tokens
     (re.compile(r"(?i)(?:bearer\s+[a-z0-9_\-\.]{15,}|api[_-]?key\s*[:=]\s*['\"]?[a-z0-9_\-\.]{15,}['\"]?)"), "[REDACTED_API_KEY]"),
+    # Google Gemini / Firebase API keys
+    (re.compile(r"\bAIza[0-9A-Za-z\-_]{20,40}\b"), "[REDACTED_API_KEY]"),
     # General secret keys / signing secrets
     (re.compile(r"(?i)(?:signing[_-]?secret\s*[:=]\s*['\"]?[a-z0-9_\-\.]{10,}['\"]?|secret[_-]?key\s*[:=]\s*['\"]?[a-z0-9_\-\.]{10,}['\"]?)"), "[REDACTED_SECRET_KEY]"),
     # Configured ADAM signing secret

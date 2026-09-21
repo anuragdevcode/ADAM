@@ -147,25 +147,26 @@ class DeterministicModelRuntime(BaseModelRuntime):
         lower_prompt = user_prompt.lower()
         is_refusal = False
         refusal_category = None
-        answer = ""
-
+        # Check if this is an authoritative system introspection prompt
+        if "=== authoritative system state snapshot ===" in lower_prompt or "authoritative system state" in lower_prompt:
+            answer = self._synthesize_from_introspection_prompt(user_prompt)
+            is_refusal = False
+            refusal_category = None
         # Unanswerable checks: Out of jurisdiction, future events, non-existent orders, private data (English & Hindi)
-        lower_raw = user_prompt.lower()
-        
-        # 1. Out of jurisdiction checks
-        out_of_jurisdiction_en = any(
-            k in lower_prompt for k in (
-                "uttar pradesh", "himachal pradesh", "tamil nadu", "delhi", "bihar",
-                "punjab", "rajasthan", "karnataka", "kerala", "maharashtra", "gujarat"
+        elif (
+            any(
+                k in lower_prompt for k in (
+                    "uttar pradesh", "himachal pradesh", "tamil nadu", "delhi", "bihar",
+                    "punjab", "rajasthan", "karnataka", "kerala", "maharashtra", "gujarat"
+                )
             )
-        )
-        out_of_jurisdiction_hi = any(
-            k in user_prompt for k in (
-                "उत्तर प्रदेश", "हिमाचल प्रदेश", "तमिलनाडु", "दिल्ली", "बिहार",
-                "पंजाब", "राजस्थान", "कर्नाटक", "केरल", "महाराष्ट्र", "गुजरात"
+            or any(
+                k in user_prompt for k in (
+                    "उत्तर प्रदेश", "हिमाचल प्रदेश", "तमिलनाडु", "दिल्ली", "बिहार",
+                    "पंजाब", "राजस्थान", "कर्नाटक", "केरल", "महाराष्ट्र", "गुजरात"
+                )
             )
-        )
-        if out_of_jurisdiction_en or out_of_jurisdiction_hi:
+        ):
             answer = (
                 f"{self.NO_EVIDENCE_REFUSAL} The query pertains to an external jurisdiction outside "
                 "the Uttarakhand Public Records Repository."
@@ -274,6 +275,97 @@ class DeterministicModelRuntime(BaseModelRuntime):
             return self.NO_EVIDENCE_REFUSAL
 
         return "\n".join(evidence_lines[:15])
+
+    def _synthesize_from_introspection_prompt(self, user_prompt: str) -> str:
+        """Synthesize authoritative answer from system state snapshot context."""
+        query_part = user_prompt.split("===")[0].strip().lower()
+
+        # 1. Model / Runtime
+        if any(k in query_part for k in ("model", "llm", "runtime", "backend", "weights")):
+            model_info = self.artifact.name
+            for line in user_prompt.split("\n"):
+                if "Active Model" in line:
+                    model_info = line.split(":")[-1].strip()
+            return (
+                f"I am currently running the {model_info} model on the {self.artifact.serving_runtime} runtime. "
+                f"This is an authorized model governed under Uttarakhand administrative AI policies with "
+                f"a context window of {self.artifact.context_window} tokens."
+            )
+
+        # 2. Tools & capabilities
+        elif any(k in query_part for k in ("tool", "browse", "email", "write", "capabilit", "can you")):
+            can_browse = "browse" in query_part or "web" in query_part or "internet" in query_part
+            can_email = "email" in query_part
+            can_write = "write" in query_part or "database" in query_part or "db" in query_part
+            if can_browse or can_email or can_write:
+                negations = []
+                if can_browse:
+                    negations.append("web browsing")
+                if can_email:
+                    negations.append("sending emails")
+                if can_write:
+                    negations.append("database writes/modifications")
+                return (
+                    f"No, I cannot perform {' or '.join(negations)}. "
+                    "Under ADAM's governance guardrails, I am equipped strictly with 3 read-only tools: "
+                    "'search' (retrieval over approved records), 'open_cited_source' (document verification), and "
+                    "'list_authorised_collections'. Web browsing, external emailing, arbitrary code execution, "
+                    "and database write operations are hardcoded and completely disabled."
+                )
+            return (
+                "I am equipped with 3 authorized read-only tools:\n"
+                "1. `search`: Semantic and full-text retrieval over approved Uttarakhand public records.\n"
+                "2. `open_cited_source`: Verification and inspection of cited Government Order pages and coordinates.\n"
+                "3. `list_authorised_collections`: Inspection of accessible departmental repositories.\n\n"
+                "All write capabilities, web browsing, emailing, and task self-expansion are strictly prohibited."
+            )
+
+        # 3. Data sources
+        elif any(k in query_part for k in ("source", "data", "repository", "document", "dataset")):
+            return (
+                "My knowledge base is connected to approved Uttarakhand State public records, including:\n"
+                "- Directorate of Treasuries & Accounts (Ekosh)\n"
+                "- Rural Development & Panchayati Raj (UKRD)\n"
+                "- Uttarakhand Official Gazette & Roorkee Press (EGazette)\n"
+                "- ITDA Administrative Archive\n"
+                "These sources comprise official Government Orders (GOs), gazette notifications, circulars, and service rules."
+            )
+
+        # 4. Refusal / Latency / Last execution
+        elif any(k in query_part for k in ("refus", "abstain", "slow", "last", "happened", "latency")):
+            refusal_line = None
+            latency_line = None
+            for line in user_prompt.split("\n"):
+                if "Refusal / Abstention Cause" in line:
+                    refusal_line = line.split(":")[-1].strip()
+                elif "Total Latency" in line:
+                    latency_line = line.split(":")[-1].strip()
+
+            resp = "Here is the diagnosis from the last execution audit:\n"
+            if refusal_line:
+                resp += f"- Abstention/Refusal Reason: {refusal_line}\n"
+            else:
+                resp += "- Outcome: The previous request was completed without refusal.\n"
+            if latency_line:
+                resp += f"- Latency: {latency_line}\n"
+            resp += "ADAM enforces strict zero-evidence abstention; if approved repository records do not establish a claim or the query is out-of-jurisdiction, ADAM must abstain from speculating."
+            return resp
+
+        # 5. Status / Current activity
+        elif any(k in query_part for k in ("status", "busy", "doing", "health")):
+            return (
+                "Current System Status: Normal / Operational.\n"
+                "- Heavy Worker Coordinator: Idle / Ready for inference.\n"
+                "- Concurrency Protection: Unified memory mutual exclusion active (reserving >= 2GB headroom).\n"
+                "- Clearance Policy: Governed single-pass orchestration."
+            )
+
+        # 6. General fallback self-model explanation
+        return (
+            "I am ADAM (v1.0.0), the authorized administrative AI assistant for Uttarakhand State Public Records. "
+            f"I am operating under the {self.artifact.name} model with strict read-only tool constraints, "
+            "governed temperature bounds [0.0, 0.2], and mandatory citation verification against approved Government Orders."
+        )
 
 
 class OllamaModelRuntime(BaseModelRuntime):

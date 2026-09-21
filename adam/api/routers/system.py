@@ -518,3 +518,74 @@ def recheck_model(
         "source": "discovered",
         "technical": technical.to_dict(),
     }
+
+
+# ── System Introspection & Self-Model Endpoints ───────────────────────────
+
+from adam.agent.introspection import SystemIntrospectionService
+from adam.agent.redaction import SecretRedactor
+from adam.rag.models import UserContext
+
+
+@router.get("/system/introspection")
+def get_system_introspection(
+    session_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+    x_user_role: Optional[str] = Header("PUBLIC"),
+    x_clearance_level: Optional[str] = Header(None),
+    x_department_id: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """Return authoritative system self-model snapshot sanitized for user clearance."""
+    user_context = UserContext(
+        user_id=x_user_id or "anonymous",
+        roles=[x_user_role] if x_user_role else ["PUBLIC"],
+        department_id=x_department_id,
+        clearance_level=x_clearance_level or Classification.PUBLIC.value,
+    )
+
+    snapshot = SystemIntrospectionService.get_system_snapshot(
+        session=db,
+        user_context=user_context,
+        session_id=session_id,
+    )
+
+    return SystemIntrospectionService.sanitize_snapshot(
+        snapshot=snapshot,
+        clearance_level=user_context.clearance_level,
+    )
+
+
+@router.get("/system/introspection/last-execution")
+def get_last_execution_diagnostics(
+    session_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+    x_clearance_level: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """Return diagnostic telemetry for the most recent execution in the session or for user."""
+    audit_snap = SystemIntrospectionService._get_last_execution_audit(
+        session=db,
+        session_id=session_id,
+        user_id=x_user_id,
+    )
+    if not audit_snap:
+        return {"found": False, "message": "No previous execution audit found for this session."}
+
+    res = {
+        "found": True,
+        "session_id": audit_snap.session_id,
+        "query_text_redacted": audit_snap.query_text_redacted,
+        "detected_intent": audit_snap.detected_intent,
+        "model_id": audit_snap.model_id,
+        "total_latency_ms": audit_snap.total_latency_ms,
+        "per_stage_latency_ms": audit_snap.per_stage_latency_ms,
+        "was_refused": audit_snap.was_refused,
+        "refusal_reason": audit_snap.refusal_reason,
+        "prompt_tokens": audit_snap.prompt_tokens,
+        "completion_tokens": audit_snap.completion_tokens,
+        "validation_passed": audit_snap.validation_passed,
+        "validation_errors": audit_snap.validation_errors,
+        "timestamp": audit_snap.timestamp,
+    }
+    return SecretRedactor.sanitize_data(res)
