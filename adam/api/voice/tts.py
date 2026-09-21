@@ -266,23 +266,35 @@ def _describe_http_error(provider: str, resp: httpx.Response) -> str:
     return f"{provider} returned {resp.status_code}: {str(message)[:200]}"
 
 
-def get_tts_engine(api_key: Optional[str] = None) -> BaseTtsEngine:
-    """Pick the TTS engine. Order: explicit API key (Gemini) -> ADAM_TTS_PROVIDER -> ElevenLabs -> Piper -> Null."""
+def get_tts_engine(api_key: Optional[str] = None, clearance_level: Optional[str] = None) -> BaseTtsEngine:
+    """Pick the TTS engine, strictly enforcing air-gapped data sovereignty for classified clearance."""
+    is_air_gapped = bool(clearance_level and clearance_level.strip().upper() in ("RESTRICTED", "CONFIDENTIAL"))
     provider = os.getenv("ADAM_TTS_PROVIDER", "auto").strip().lower()
-    gemini = GeminiTtsEngine(api_key=api_key)
 
-    if provider == "gemini":
+    if not is_air_gapped:
+        gemini = GeminiTtsEngine(api_key=api_key)
+
+        if provider == "gemini":
+            if gemini.is_available():
+                return gemini
+            logger.warning("ADAM_TTS_PROVIDER=gemini but GEMINI_API_KEY is empty; using browser fallback")
+            return NullTtsEngine()
+
         if gemini.is_available():
+            logger.info("Selected GeminiTtsEngine for TTS")
             return gemini
-        logger.warning("ADAM_TTS_PROVIDER=gemini but GEMINI_API_KEY is empty; using browser fallback")
-        return NullTtsEngine()
-
-    if gemini.is_available():
-        logger.info("Selected GeminiTtsEngine for TTS")
-        return gemini
 
     eleven = ElevenLabsTtsEngine()
     piper = PiperTtsEngine()
+
+    if is_air_gapped:
+        # In air-gapped mode, only local on-premise Piper or browser speech synthesis is allowed
+        if piper.is_available():
+            logger.info("Selected PiperTtsEngine for air-gapped classified TTS")
+            return piper
+        logger.warning("Classified clearance active: Cloud TTS disabled. Using NullTtsEngine.")
+        return NullTtsEngine()
+
 
     if provider == "elevenlabs":
         if eleven.is_available():

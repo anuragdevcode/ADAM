@@ -11,7 +11,7 @@ import SourcesView from '@/components/SourcesView';
 import ReviewView from '@/components/ReviewView';
 import SettingsModal from '@/components/SettingsModal';
 import ApiKeyModal from '@/components/ApiKeyModal';
-import { Sparkles, ChevronDown, Search, Plus, Check, Shield, Lock, Key, Cloud } from 'lucide-react';
+import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud } from 'lucide-react';
 import type { DepartmentItem, ModelInfo } from '@/lib/types';
 import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey } from '@/lib/api';
 
@@ -40,6 +40,8 @@ export default function HomePage() {
   const [geminiApiKey, setGeminiApiKey] = useState<string | null>(null);
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
 
+  const isAirGapped = clearanceLevel === 'RESTRICTED' || clearanceLevel === 'CONFIDENTIAL';
+
   // Dismiss the model menu on outside click / Escape.
   useEffect(() => {
     if (!modelDropdownOpen) return;
@@ -57,24 +59,34 @@ export default function HomePage() {
     };
   }, [modelDropdownOpen]);
 
-  // Initial Load from API
+  // Initial and reactive load from API
   useEffect(() => {
     const key = getStoredGeminiApiKey();
     setGeminiApiKey(key);
 
     const loadModels = () => {
       const activeKey = getStoredGeminiApiKey();
-      void fetchModels(activeKey).then((mList) => {
+      void fetchModels(activeKey, clearanceLevel).then((mList) => {
         setModels(mList);
-        const supportedInstalled = mList.filter((m) => m.is_installed && !m.requires_legal_review && m.is_supported !== false);
+        const supportedInstalled = mList.filter(
+          (m) =>
+            m.is_installed &&
+            !m.requires_legal_review &&
+            m.is_supported !== false &&
+            !(isAirGapped && m.is_cloud),
+        );
         const storedModelId = typeof window !== 'undefined' ? localStorage.getItem('adam_selected_model_id') : null;
         setSelectedModel((current) => {
+          // If air-gapped is active, current cloud model must be replaced
+          if (isAirGapped && current?.is_cloud) {
+            return supportedInstalled.find((m) => !m.is_cloud && m.is_primary) || supportedInstalled.find((m) => !m.is_cloud) || null;
+          }
           if (current && supportedInstalled.some((model) => model.id === current.id)) return current;
-          if (storedModelId) {
+          if (storedModelId && !(isAirGapped && storedModelId.includes('gemini'))) {
             const foundStored = supportedInstalled.find((m) => m.id === storedModelId);
             if (foundStored) return foundStored;
           }
-          if (activeKey) {
+          if (activeKey && !isAirGapped) {
             const geminiModel = supportedInstalled.find((m) => m.id === 'gemini-3.6-flash');
             if (geminiModel) return geminiModel;
           }
@@ -89,7 +101,7 @@ export default function HomePage() {
       setDepartments(v.departments || []);
     });
     return () => window.clearInterval(modelRefresh);
-  }, []);
+  }, [clearanceLevel, isAirGapped]);
 
   const handleNewThread = () => {
     setActiveNavTab('home');
@@ -156,7 +168,13 @@ export default function HomePage() {
                     Model inventory
                   </div>
                   {models.map((model) => {
-                    const isSelectable = Boolean(model.is_installed && !model.requires_legal_review && model.is_supported !== false);
+                    const isCloudRestricted = isAirGapped && model.is_cloud;
+                    const isSelectable = Boolean(
+                      model.is_installed &&
+                      !model.requires_legal_review &&
+                      model.is_supported !== false &&
+                      !isCloudRestricted,
+                    );
                     return (
                       <button
                         key={model.id}
@@ -170,7 +188,13 @@ export default function HomePage() {
                           }
                           setModelDropdownOpen(false);
                         }}
-                        title={isSelectable ? `Use ${model.name}` : model.unavailable_reason || 'Not supported / pending review'}
+                        title={
+                          isCloudRestricted
+                            ? `Cloud models are disabled for ${clearanceLevel} clearance under air-gapped data sovereignty policy`
+                            : isSelectable
+                            ? `Use ${model.name}`
+                            : model.unavailable_reason || 'Not supported / pending review'
+                        }
                         className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
                           isSelectable
                             ? 'hover:bg-purple-50 text-gray-700 cursor-pointer'
@@ -180,23 +204,29 @@ export default function HomePage() {
                         <div className="min-w-0 pr-2">
                           <div className="flex items-center gap-1.5">
                             <p className="font-medium truncate">{model.name}</p>
-                            {model.is_cloud && (
+                            {isCloudRestricted ? (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 font-semibold uppercase">
+                                <ShieldAlert className="w-2.5 h-2.5" /> Air-Gapped: Cloud Blocked
+                              </span>
+                            ) : model.is_cloud ? (
                               <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold uppercase">
                                 <Cloud className="w-2.5 h-2.5" /> Cloud
                               </span>
-                            )}
+                            ) : null}
                             {model.requires_legal_review ? (
                               <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold uppercase">
                                 <Lock className="w-2.5 h-2.5" /> Frozen • Legal Review
                               </span>
-                            ) : !model.is_installed ? (
+                            ) : !model.is_installed && !isCloudRestricted ? (
                               <span className="text-[9px] uppercase text-gray-400">
                                 {model.is_cloud ? 'Key required' : 'Not installed'}
                               </span>
                             ) : null}
                           </div>
                           <p className="text-[10px] text-gray-400 mt-0.5">
-                            {isSelectable
+                            {isCloudRestricted
+                              ? `Cloud disabled under Air-Gapped Data Sovereignty Policy (${clearanceLevel})`
+                              : isSelectable
                               ? (model.is_cloud ? 'Google Gemini Cloud • Active' : `${model.quantization} • ready locally`)
                               : model.unavailable_reason}
                           </p>
@@ -237,8 +267,15 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Top-Right: Search Threads + Clearance Indicator + New Thread */}
+            {/* Top-Right: Air-Gapped Indicator + Search Threads + Clearance Indicator + New Thread */}
             <div className="flex items-center gap-2.5">
+              {isAirGapped && (
+                <div className="hidden lg:inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-medium">
+                  <ShieldAlert className="w-3 h-3 text-purple-600" />
+                  <span>Air-Gapped Sovereignty Active</span>
+                </div>
+              )}
+
               {/* Search Thread Filter */}
               <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-[#fcfcfd] text-xs text-gray-600 focus-within:border-purple-300 focus-within:bg-white transition-all">
                 <Search className="w-3.5 h-3.5 text-gray-400" />

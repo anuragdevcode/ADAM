@@ -87,8 +87,9 @@ def validate_gemini_key(req: ValidateKeyRequest) -> Dict[str, Any]:
 def get_models(
     db: Session = Depends(get_db),
     x_gemini_api_key: Optional[str] = Header(None),
+    x_clearance_level: Optional[str] = Header(None),
 ) -> List[Dict[str, Any]]:
-    """Return all approved release-controlled models from the model registry."""
+    """Return all approved release-controlled models from the model registry, enforcing air-gap sovereignty."""
     registry = ModelRegistry(db)
     models = registry.list_all()
     if not models:
@@ -101,14 +102,23 @@ def get_models(
         if m.id not in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-flash")
     ]
 
+    is_air_gapped_clearance = bool(
+        x_clearance_level and x_clearance_level.strip().upper() in ("RESTRICTED", "CONFIDENTIAL")
+    )
+
     result = []
     for m in models:
         lic_stat = getattr(m, 'license_status', None)
         lic_stat_str = str(lic_stat.value if hasattr(lic_stat, 'value') else lic_stat)
         requires_review = bool(getattr(m, 'requires_legal_review', False))
+        is_cloud = getattr(m, 'serving_runtime', '') == "gemini"
         is_supported = (lic_stat == LicenseStatus.APPROVED or lic_stat_str == "APPROVED") and not requires_review
 
-        if getattr(m, 'serving_runtime', '') == "gemini":
+        if is_cloud and is_air_gapped_clearance:
+            is_installed = False
+            is_supported = False
+            unavailable_reason = "Cloud models disabled for RESTRICTED/CONFIDENTIAL clearance (Air-Gapped Sovereignty Policy)"
+        elif is_cloud:
             has_gemini_key = bool(x_gemini_api_key or os.getenv("GEMINI_API_KEY", "").strip())
             is_installed = has_gemini_key
             if not has_gemini_key:
@@ -143,7 +153,8 @@ def get_models(
             "serving_runtime": m.serving_runtime,
             "is_installed": is_installed,
             "unavailable_reason": unavailable_reason,
-            "is_cloud": getattr(m, 'serving_runtime', '') == "gemini",
+            "is_cloud": is_cloud,
+            "air_gapped_restricted": is_cloud and is_air_gapped_clearance,
         })
     return result
 

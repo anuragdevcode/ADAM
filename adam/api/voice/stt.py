@@ -275,23 +275,35 @@ def _describe_http_error(provider: str, resp: httpx.Response) -> str:
     return f"{provider} returned {resp.status_code}: {str(message)[:200]}"
 
 
-def get_stt_engine(api_key: Optional[str] = None) -> BaseSttEngine:
-    """Pick the STT engine. Order: explicit API key (Gemini) -> ADAM_STT_PROVIDER -> Groq -> FasterWhisper -> Null."""
+def get_stt_engine(api_key: Optional[str] = None, clearance_level: Optional[str] = None) -> BaseSttEngine:
+    """Pick the STT engine, strictly enforcing air-gapped data sovereignty for classified clearance."""
+    is_air_gapped = bool(clearance_level and clearance_level.strip().upper() in ("RESTRICTED", "CONFIDENTIAL"))
     provider = os.getenv("ADAM_STT_PROVIDER", "auto").strip().lower()
-    gemini = GeminiSttEngine(api_key=api_key)
 
-    if provider == "gemini":
+    if not is_air_gapped:
+        gemini = GeminiSttEngine(api_key=api_key)
+
+        if provider == "gemini":
+            if gemini.is_available():
+                return gemini
+            logger.warning("ADAM_STT_PROVIDER=gemini but GEMINI_API_KEY is empty; STT disabled")
+            return NullSttEngine()
+
         if gemini.is_available():
+            logger.info("Selected GeminiSttEngine for STT")
             return gemini
-        logger.warning("ADAM_STT_PROVIDER=gemini but GEMINI_API_KEY is empty; STT disabled")
-        return NullSttEngine()
-
-    if gemini.is_available():
-        logger.info("Selected GeminiSttEngine for STT")
-        return gemini
 
     groq = GroqWhisperEngine()
     local = FasterWhisperEngine()
+
+    if is_air_gapped:
+        # In air-gapped mode, only local on-premise Whisper or browser STT is allowed
+        if local.is_available():
+            logger.info("Selected FasterWhisperEngine for air-gapped classified STT")
+            return local
+        logger.warning("Classified clearance active: Cloud STT disabled. Using NullSttEngine.")
+        return NullSttEngine()
+
 
     if provider == "groq":
         if groq.is_available():

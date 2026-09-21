@@ -29,6 +29,13 @@ from adam.model.unanswerable_suite import (
     HighRiskTestCase,
     HindiLinguisticTestCase,
 )
+from adam.model.policy import (
+    AirGappedSovereigntyViolationError,
+    AIR_GAPPED_CLEARANCE_LEVELS,
+    is_cloud_model,
+    validate_air_gapped_model_policy,
+    enforce_air_gapped_model_policy,
+)
 
 __all__ = [
     "ModelArtifact",
@@ -52,4 +59,10 @@ __all__ = [
     "UnanswerableTestCase",
     "HighRiskTestCase",
     "HindiLinguisticTestCase",
+    "AirGappedSovereigntyViolationError",
+    "AIR_GAPPED_CLEARANCE_LEVELS",
+    "is_cloud_model",
+    "validate_air_gapped_model_policy",
+    "enforce_air_gapped_model_policy",
 ]
+

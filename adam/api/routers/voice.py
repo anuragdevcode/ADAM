@@ -18,14 +18,16 @@ class SynthesizeRequest(BaseModel):
     language: str = 'hi'
 
 @router.get("/voice/status")
-def voice_status():
-    """Report which speech engines the server can offer.
+def voice_status(
+    x_clearance_level: Optional[str] = Header(None),
+):
+    """Report which speech engines the server can offer under active clearance policy.
 
     The UI uses this to decide between server-side speech (Groq / ElevenLabs /
     local engines) and the browser's built-in Web Speech API.
     """
-    stt_engine = get_stt_engine()
-    tts_engine = get_tts_engine()
+    stt_engine = get_stt_engine(clearance_level=x_clearance_level)
+    tts_engine = get_tts_engine(clearance_level=x_clearance_level)
     return {
         "stt": {
             "available": stt_engine.provider != "none",
@@ -46,12 +48,13 @@ async def transcribe_audio(
     language_hint: str = Form("hi"),
     api_key: Optional[str] = Form(None),
     x_gemini_api_key: Optional[str] = Header(None),
+    x_clearance_level: Optional[str] = Header(None),
 ):
     audio_bytes = await file.read()
     if not audio_bytes:
         raise HTTPException(status_code=422, detail="The uploaded recording is empty.")
     effective_key = x_gemini_api_key or api_key
-    stt_engine = get_stt_engine(api_key=effective_key)
+    stt_engine = get_stt_engine(api_key=effective_key, clearance_level=x_clearance_level)
     if stt_engine.provider == "none":
         raise HTTPException(status_code=503, detail=STT_UNAVAILABLE_DETAIL)
     try:
@@ -78,8 +81,9 @@ async def transcribe_audio(
 def synthesize_speech(
     req: SynthesizeRequest,
     x_gemini_api_key: Optional[str] = Header(None),
+    x_clearance_level: Optional[str] = Header(None),
 ):
-    tts_engine = get_tts_engine(api_key=x_gemini_api_key)
+    tts_engine = get_tts_engine(api_key=x_gemini_api_key, clearance_level=x_clearance_level)
     speech_text = clean_for_speech(req.text)
     if not speech_text:
         raise HTTPException(status_code=422, detail="There is no readable text to speak.")
@@ -92,3 +96,4 @@ def synthesize_speech(
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         raise
     return Response(content=audio_bytes, media_type=tts_engine.media_type)
+

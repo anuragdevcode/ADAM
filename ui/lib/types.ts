@@ -176,6 +176,7 @@ export interface ModelInfo {
   is_installed: boolean;
   unavailable_reason?: string | null;
   is_cloud?: boolean;
+  air_gapped_restricted?: boolean;
 }
 
 // ── Controlled Vocabularies ────────────────────────────────────────────────

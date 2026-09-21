@@ -57,6 +57,15 @@ async def chat_endpoint(
                 loop.call_soon_threadsafe(event_queue.put_nowait, serialized)
 
         try:
+            from adam.model.policy import validate_air_gapped_model_policy, AirGappedSovereigntyViolationError
+            allowed_air_gap, air_gap_reason = validate_air_gapped_model_policy(
+                model_id=req.model_id,
+                clearance_level=user_ctx.clearance_level,
+                backend=req.backend,
+            )
+            if not allowed_air_gap:
+                raise AirGappedSovereigntyViolationError(air_gap_reason)
+
             if req.model_id and not ModelRegistry(db).get(req.model_id):
                 raise ValueError(f"Unknown model artifact '{req.model_id}'.")
             agent = AgentStateMachine(
@@ -197,6 +206,11 @@ async def chat_endpoint(
                 category = "gemini_api_error"
                 title = "Gemini Model Unavailable"
                 suggested_action = "configure_gemini"
+            elif "air-gapped" in lower_err or "sovereignty" in lower_err:
+                category = "air_gapped_policy_violation"
+                title = "Air-Gapped Sovereignty Policy Enforcement"
+                suggested_action = "switch_to_local_model"
+                cmd_hint = "Switch to local Ollama (qwen2.5:3b)"
 
             error_payload = {
                 "message": raw_err,

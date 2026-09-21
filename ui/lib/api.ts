@@ -294,12 +294,17 @@ export async function synthesizeSpeech(
 
 // ── System Metadata & Vocabularies ─────────────────────────────────────────
 
-export async function fetchModels(apiKey?: string | null): Promise<ModelInfo[]> {
+export async function fetchModels(
+  apiKey?: string | null,
+  clearanceLevel?: string | null,
+): Promise<ModelInfo[]> {
   try {
     const geminiKey = apiKey || getStoredGeminiApiKey();
-    const resp = await fetch(`${API_BASE}/system/models`, {
-      headers: geminiKey ? { 'X-Gemini-Api-Key': geminiKey } : {},
-    });
+    const headers: Record<string, string> = {};
+    if (geminiKey) headers['X-Gemini-Api-Key'] = geminiKey;
+    if (clearanceLevel) headers['X-Clearance-Level'] = clearanceLevel;
+
+    const resp = await fetch(`${API_BASE}/system/models`, { headers });
     if (!resp.ok) return [];
     return resp.json();
   } catch {

@@ -323,6 +323,65 @@ class AgentStateMachine:
             self.session.commit()
             raise PermissionError(f"Invalid clearance level '{user.clearance_level}' for user '{user.user_id}'.")
 
+        # Air-Gapped Data Sovereignty Boundary Enforcement:
+        # Under RESTRICTED or CONFIDENTIAL classification clearance, external cloud models (Gemini) are strictly prohibited
+        from adam.model.policy import validate_air_gapped_model_policy, AirGappedSovereigntyViolationError
+        allowed_model, air_gap_reason = validate_air_gapped_model_policy(
+            model_id=self.model_id,
+            clearance_level=user.clearance_level,
+            backend=self.backend,
+        )
+        if not allowed_model:
+            transition_to(
+                AgentState.FAILED,
+                air_gap_reason or "Air-Gapped Data Sovereignty Policy Violation",
+                abstention_reason=air_gap_reason,
+            )
+            emitter.emit(
+                OperationalEventType.SECURITY_DENIED,
+                stage="security",
+                status="failed",
+                message="Access denied: Cloud models strictly prohibited for classified clearance (Air-Gapped Sovereignty Policy)",
+            )
+            emitter.emit(
+                OperationalEventType.EXECUTION_FAILED,
+                stage="security",
+                status="failed",
+                message="Execution terminated: Air-gapped sovereignty boundary violation",
+            )
+            air_audit = AgentExecutionAudit(
+                session_id=session_id,
+                user_id=user.user_id,
+                user_role=user.roles[0] if user.roles else "UNAUTHENTICATED",
+                department_id=user.department_id,
+                clearance_level=user.clearance_level or "NONE",
+                query_text=SecretRedactor.sanitize_text(query),
+                detected_intent="AIR_GAPPED_POLICY_VIOLATION",
+                model_id=self.model_id,
+                retrieval_pass_count=0,
+                answer_pass_count=0,
+                is_no_answer=1,
+                validation_passed=0,
+                validation_errors_json=[air_gap_reason],
+                state_transitions_json=[
+                    t.to_dict() if hasattr(t, "to_dict") else {
+                        "from": t.from_state,
+                        "to": t.to_state,
+                        "at": t.timestamp,
+                        "notes": t.notes,
+                        "duration_ms": getattr(t, "duration_ms", 0.0),
+                        "stage": getattr(t, "stage", None),
+                        "abstention_reason": getattr(t, "abstention_reason", None),
+                    }
+                    for t in state_history
+                ],
+                latency_ms=(time.perf_counter() - start_time) * 1000.0,
+                redacted_audit_log=SecretRedactor.sanitize_text(f"Session {session_id} rejected: {air_gap_reason}"),
+            )
+            self.session.add(air_audit)
+            self.session.commit()
+            raise AirGappedSovereigntyViolationError(air_gap_reason)
+
         emitter.emit(
             OperationalEventType.SECURITY_COMPLETED,
             stage="security",
@@ -561,7 +620,11 @@ class AgentStateMachine:
                 )
                 try:
                     runtime = self._custom_runtime or self.lifecycle.load_model(
-                        self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
+                        self.model_id,
+                        allow_hot_swap=True,
+                        backend=self.backend,
+                        api_key=self.api_key,
+                        clearance_level=user.clearance_level,
                     )
                     emitter.emit(
                         OperationalEventType.MODEL_READY,
@@ -626,7 +689,11 @@ class AgentStateMachine:
                 )
                 try:
                     runtime = self._custom_runtime or self.lifecycle.load_model(
-                        self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
+                        self.model_id,
+                        allow_hot_swap=True,
+                        backend=self.backend,
+                        api_key=self.api_key,
+                        clearance_level=user.clearance_level,
                     )
                     emitter.emit(
                         OperationalEventType.MODEL_READY,

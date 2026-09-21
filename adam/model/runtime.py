@@ -539,12 +539,23 @@ class SingleModelLifecycleManager:
         runtime_override: Optional[BaseModelRuntime] = None,
         backend: Optional[str] = None,
         api_key: Optional[str] = None,
+        clearance_level: Optional[str] = None,
     ) -> BaseModelRuntime:
-        """Load an approved model into runtime memory with concurrency locking."""
+        """Load an approved model into runtime memory with concurrency locking and air-gap verification."""
         with self._mutex:
             artifact = self.registry.get(model_id)
             if not artifact:
                 raise ValueError(f"Unknown model artifact '{model_id}' in registry.")
+
+            # Enforce Air-Gapped Data Sovereignty Policy:
+            # RESTRICTED and CONFIDENTIAL clearances strictly forbid cloud models (Gemini)
+            from adam.model.policy import enforce_air_gapped_model_policy
+            enforce_air_gapped_model_policy(
+                model_id=model_id,
+                clearance_level=clearance_level,
+                backend=backend or getattr(artifact, "serving_runtime", None),
+                serving_runtime=getattr(artifact, "serving_runtime", None),
+            )
 
             # Resolve backend: explicit argument -> env var -> installed Ollama
             # artifact -> declared artifact runtime -> deterministic test fallback.
