@@ -106,3 +106,53 @@ def test_api_presets_and_seed_endpoints():
     assert "src_ukrd_documents" in source_ids
     assert "src_uk_egazette" in source_ids
     assert "src_itda_pilot_batch" in source_ids
+
+
+def test_api_trigger_job_json_and_multipart(monkeypatch):
+    client = TestClient(app)
+
+    from adam.db.models import IngestionJob
+    mock_job = IngestionJob(
+        id="job_mock123",
+        source_id="src_ekosh_treasury_go",
+        status="QUEUED",
+        job_type="FULL",
+        current_stage="IDLE",
+    )
+    monkeypatch.setattr(
+        "adam.api.routers.ingestions.GLOBAL_INGESTION_CONTROL_PLANE.start_job",
+        lambda **kwargs: mock_job,
+    )
+
+    # 1. Trigger via JSON (as used by UI "Run Ingest")
+    resp_json = client.post(
+        "/api/ingestion/jobs",
+        json={
+            "source_id": "src_ekosh_treasury_go",
+            "job_type": "FULL",
+            "max_items": 1,
+        },
+    )
+    assert resp_json.status_code == 200
+    json_data = resp_json.json()
+    assert json_data["job_id"] == "job_mock123"
+    assert json_data["source_id"] == "src_ekosh_treasury_go"
+    assert json_data["status"] == "QUEUED"
+
+    # 2. Trigger via Multipart Form (as used by UI "Upload Files")
+    resp_form = client.post(
+        "/api/ingestion/jobs",
+        data={
+            "source_id": "src_itda_pilot_batch",
+            "job_type": "FULL",
+        },
+        files={"files": ("test_doc.txt", b"Test government document content", "text/plain")},
+    )
+    assert resp_form.status_code == 200
+    form_data = resp_form.json()
+    assert form_data["job_id"] == "job_mock123"
+
+    # 3. Missing source_id returns 400
+    resp_err = client.post("/api/ingestion/jobs", json={})
+    assert resp_err.status_code == 400
+

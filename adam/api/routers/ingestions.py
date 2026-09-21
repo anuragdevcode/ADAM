@@ -26,35 +26,99 @@ class JobActionResponse(BaseModel):
     message: str
 
 
-@router.post("/jobs")
+@router.post(
+    "/jobs",
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "schema": TriggerJobRequest.model_json_schema()
+                },
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string"},
+                            "job_type": {"type": "string", "default": "FULL"},
+                            "max_items": {"type": "integer"},
+                            "files": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "binary"},
+                            },
+                        },
+                        "required": ["source_id"],
+                    }
+                },
+            }
+        }
+    },
+)
 async def trigger_job(
-    req: Optional[TriggerJobRequest] = None,
-    source_id: Optional[str] = Form(None),
-    job_type: Optional[str] = Form("FULL"),
-    max_items: Optional[int] = Form(None),
-    files: Optional[List[UploadFile]] = File(None),
+    request: Request,
     db: Session = Depends(get_db),
     user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
-    """Trigger an ingestion job (Full or Incremental, with optional uploaded files)."""
-    target_source_id = (req.source_id if req else None) or source_id
+    """Trigger an ingestion job (Full or Incremental, with optional uploaded files).
+
+    Seamlessly accepts both application/json (standard sync trigger) and
+    multipart/form-data (in-memory batch file upload).
+    """
+    content_type = request.headers.get("content-type", "").lower()
+    target_source_id: Optional[str] = None
+    target_job_type: str = "FULL"
+    target_max_items: Optional[int] = None
+    file_tuples: Optional[List[tuple[str, bytes]]] = None
+
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body in trigger request.")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Expected JSON object body.")
+        target_source_id = body.get("source_id")
+        target_job_type = body.get("job_type") or "FULL"
+        target_max_items = body.get("max_items")
+    elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        form = await request.form()
+        target_source_id = form.get("source_id")
+        target_job_type = form.get("job_type") or "FULL"
+        max_items_val = form.get("max_items")
+        if max_items_val:
+            try:
+                target_max_items = int(max_items_val)
+            except ValueError:
+                pass
+
+        uploaded_files = form.getlist("files")
+        if uploaded_files:
+            file_tuples = []
+            for f in uploaded_files:
+                if hasattr(f, "read"):
+                    content = await f.read()
+                    file_tuples.append((getattr(f, "filename", None) or "upload.pdf", content))
+    else:
+        # Fallback: attempt JSON first, then form
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                target_source_id = body.get("source_id")
+                target_job_type = body.get("job_type") or "FULL"
+                target_max_items = body.get("max_items")
+        except Exception:
+            try:
+                form = await request.form()
+                target_source_id = form.get("source_id")
+                target_job_type = form.get("job_type") or "FULL"
+            except Exception:
+                pass
+
     if not target_source_id:
         raise HTTPException(status_code=400, detail="source_id is required.")
-
-    target_job_type = (req.job_type if req else None) or job_type or "FULL"
-    target_max_items = (req.max_items if req else None) or max_items
 
     source = db.query(Source).filter(Source.id == target_source_id).first()
     if not source:
         raise HTTPException(status_code=404, detail=f"Source '{target_source_id}' not found.")
-
-    # Read uploaded files if provided
-    file_tuples: Optional[List[tuple[str, bytes]]] = None
-    if files:
-        file_tuples = []
-        for f in files:
-            content = await f.read()
-            file_tuples.append((f.filename or "upload.pdf", content))
 
     job = GLOBAL_INGESTION_CONTROL_PLANE.start_job(
         source_id=target_source_id,
