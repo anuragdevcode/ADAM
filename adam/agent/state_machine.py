@@ -651,18 +651,22 @@ class AgentStateMachine:
                     message="Generating conversational guidance",
                     data={"model_name": self.model_id},
                 )
-                model_mention = "powered by Google Gemini 3.6 Flash" if "gemini" in (self.model_id or "").lower() else f"running on {self.model_id}"
+                from adam.harness.routing import HarnessRouter
+                profile = HarnessRouter.resolve_profile(self.model_id)
+                harness_params = profile.resolve_parameters(
+                    intent="conversational",
+                    temperature=temperature if temperature > 0.0 else 0.2,
+                    max_tokens=max_tokens if max_tokens != 512 else 1024,
+                )
+                user_prompt = profile.format_conversational_prompt(query)
+                system_prompt = profile.resolve_system_prompt("conversational")
+
                 gen_result = runtime.generate(
-                    user_prompt=(
-                        "### Conversational Turn (No Repository Evidence)\n"
-                        f"User: {query}\n\n"
-                        f"No approved repository evidence was found for this turn. Reply naturally and concisely as ADAM ({model_mention}), "
-                        "the authorized AI assistant for Uttarakhand State public records and governance. "
-                        "If the user asks about your identity, connectivity, or model, explicitly confirm that you are ADAM connected and active with your current model runtime. "
-                        "For administrative queries, guide the user on how to search official Uttarakhand public records. Do not invent government facts or citations."
-                    ),
+                    user_prompt=user_prompt,
+                    system_prompt=system_prompt,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    harness_parameters=harness_params,
                 )
                 answer = gen_result.answer
                 prompt_tokens = gen_result.tokens_prompt
@@ -721,21 +725,23 @@ class AgentStateMachine:
                     data={"model_name": self.model_id},
                 )
                 
-                # Format grounded prompt strictly including evidence packet
-                evidence_text = "\n\n".join(
-                    f"Passage [{idx}] (Document: {p.title}, GO: {p.go_number or 'N/A'}, Page: {p.page_start}):\n{p.content}"
-                    for idx, p in enumerate(packet.passages[:5], 1)
+                # Format grounded prompt using model-specific harness profile
+                from adam.harness.routing import HarnessRouter
+                profile = HarnessRouter.resolve_profile(self.model_id)
+                harness_params = profile.resolve_parameters(
+                    intent="rag",
+                    temperature=temperature if temperature > 0.0 else 0.2,
+                    max_tokens=max_tokens if max_tokens != 512 else 1024,
                 )
-                user_prompt = (
-                    f"Question: {parsed_query.clean_query}\n\n"
-                    f"### Evidence Packet:\n{evidence_text}\n\n"
-                    "Synthesize a clear administrative response with exact numerical citations [1], [2] referencing the evidence."
-                )
-                
+                user_prompt = profile.format_rag_prompt(parsed_query.clean_query, packet)
+                system_prompt = profile.resolve_system_prompt("rag")
+
                 gen_result: ModelGenerationResult = runtime.generate(
                     user_prompt=user_prompt,
+                    system_prompt=system_prompt,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    harness_parameters=harness_params,
                 )
                 answer = gen_result.answer
                 prompt_tokens = gen_result.tokens_prompt

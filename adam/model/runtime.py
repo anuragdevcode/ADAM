@@ -53,6 +53,7 @@ class ModelGenerationResult:
     is_refusal: bool = False
     refusal_category: Optional[str] = None
     applied_schema: str = "ADAM_GOVERNANCE_V1"
+    thinking: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -68,6 +69,7 @@ class ModelGenerationResult:
             "is_refusal": self.is_refusal,
             "refusal_category": self.refusal_category,
             "applied_schema": self.applied_schema,
+            "thinking": self.thinking,
         }
 
 
@@ -86,6 +88,7 @@ class BaseModelRuntime(ABC):
         temperature: float = 0.0,
         max_tokens: int = 512,
         stop_sequences: Optional[List[str]] = None,
+        **kwargs: Any,
     ) -> ModelGenerationResult:
         """Generate response bounded by strict temperature and token limits."""
         pass
@@ -125,6 +128,7 @@ class DeterministicModelRuntime(BaseModelRuntime):
         temperature: float = 0.0,
         max_tokens: int = 512,
         stop_sequences: Optional[List[str]] = None,
+        **kwargs: Any,
     ) -> ModelGenerationResult:
         start_time = time.perf_counter()
         valid_temp = self.validate_temperature(temperature)
@@ -205,12 +209,12 @@ class DeterministicModelRuntime(BaseModelRuntime):
             is_refusal = True
             refusal_category = "PRIVATE_EXEMPT_RECORD"
 
-        elif "### conversational turn" in lower_prompt:
+        elif "### conversational turn" in lower_prompt or "[context: no specific repository document" in lower_prompt:
             answer = (
                 "Hello — I’m ADAM, your Uttarakhand Public Records assistant. "
                 "I can help search and explain approved Government Orders, circulars, gazettes, and rules."
             )
-        elif "### evidence passage" in lower_prompt or "### evidence packet" in lower_prompt:
+        elif "### evidence passage" in lower_prompt or "### evidence packet" in lower_prompt or "reference records:" in lower_prompt:
             # Evidence packet is provided directly in the prompt
             answer = self._synthesize_from_packet_prompt(user_prompt)
         elif "### research brief" in lower_prompt or "[human authority required]" in lower_prompt:
@@ -382,32 +386,53 @@ class OllamaModelRuntime(BaseModelRuntime):
         temperature: float = 0.0,
         max_tokens: int = 512,
         stop_sequences: Optional[List[str]] = None,
+        **kwargs: Any,
     ) -> ModelGenerationResult:
         """Execute physical local generation on Apple Silicon Metal via Ollama."""
         start_time = time.perf_counter()
-        valid_temp = self.validate_temperature(temperature)
         sys_prompt = system_prompt or self.artifact.system_prompt_default
 
-        stops = stop_sequences or ["<|im_end|>", "<|endoftext|>", "\n\nUser:", "\n\nQuestion:"]
+        harness_parameters = kwargs.get("harness_parameters")
+        if harness_parameters is not None:
+            from adam.harness.parameters import ModelInferenceParameters
+            if isinstance(harness_parameters, ModelInferenceParameters):
+                params = harness_parameters
+            elif isinstance(harness_parameters, dict):
+                params = ModelInferenceParameters(**harness_parameters)
+            else:
+                params = ModelInferenceParameters()
 
-        payload = {
+            valid_temp = params.temperature
+            options = params.to_ollama_options()
+            effective_max_tokens = params.max_tokens
+            if self._is_thinking_model():
+                think_flag = True if params.thinking_enabled else False
+            else:
+                think_flag = None
+        else:
+            valid_temp = self.validate_temperature(temperature)
+            stops = stop_sequences or ["<|im_end|>", "<|endoftext|>", "\n\nUser:", "\n\nQuestion:"]
+            options = {
+                "temperature": valid_temp,
+                "num_predict": max_tokens,
+                "num_ctx": min(self.artifact.context_window, 4096),
+                "stop": stops,
+            }
+            effective_max_tokens = max_tokens
+            think_flag = False if self._is_thinking_model() else None
+
+        payload: Dict[str, Any] = {
             "model": self.model_tag,
-            "think": False if self._is_thinking_model() else None,
             "messages": [
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             "stream": False,
-            "options": {
-                "temperature": valid_temp,
-                "num_predict": max_tokens,
-                "num_ctx": min(self.artifact.context_window, 4096),
-                "stop": stops,
-            },
+            "options": options,
         }
 
-        if payload["think"] is None:
-            del payload["think"]
+        if think_flag is not None:
+            payload["think"] = think_flag
 
         try:
             resp = self._get_client().post("/api/chat", json=payload)
@@ -415,13 +440,24 @@ class OllamaModelRuntime(BaseModelRuntime):
             data = resp.json()
 
             message = data.get("message", {}) or {}
-            answer = self._strip_reasoning(message.get("content") or "")
-            if not answer and (message.get("thinking") or "").strip():
-                raise RuntimeError(
-                    f"Model '{self.model_tag}' returned only reasoning tokens and no answer "
-                    f"(num_predict={max_tokens} exhausted by thinking). "
-                    "Raise max_tokens or use a non-reasoning model."
-                )
+            raw_content = message.get("content") or ""
+            raw_thinking = message.get("thinking") or None
+
+            from adam.harness.validators import HarnessOutputValidator
+            clean_answer, parsed_thinking = HarnessOutputValidator.separate_thinking_tokens(raw_content)
+            thinking_trace = raw_thinking or parsed_thinking
+            answer = clean_answer
+
+            if not answer and thinking_trace:
+                # If content was wrapped in <think> or only thinking was returned
+                answer = self._strip_reasoning(raw_content)
+                if not answer and not (harness_parameters and getattr(harness_parameters, "thinking_enabled", False)):
+                    raise RuntimeError(
+                        f"Model '{self.model_tag}' returned only reasoning tokens and no answer "
+                        f"(num_predict={options.get('num_predict', max_tokens)} exhausted by thinking). "
+                        "Raise max_tokens or use a non-reasoning model."
+                    )
+
             prompt_tokens = data.get("prompt_eval_count") or max(1, len(user_prompt.split()) * 4 // 3)
             completion_tokens = data.get("eval_count") or max(1, len(answer.split()) * 4 // 3)
             latency_ms = (time.perf_counter() - start_time) * 1000.0
@@ -452,15 +488,16 @@ class OllamaModelRuntime(BaseModelRuntime):
 
             return ModelGenerationResult(
                 answer=answer,
-                raw_completion=answer,
+                raw_completion=raw_content,
                 tokens_prompt=prompt_tokens,
                 tokens_completion=completion_tokens,
                 model_id=self.artifact.id,
                 latency_ms=latency_ms,
                 temperature=valid_temp,
-                finish_reason="stop" if completion_tokens <= max_tokens else "length",
+                finish_reason="stop" if completion_tokens <= effective_max_tokens else "length",
                 is_refusal=is_refusal,
                 refusal_category=refusal_category,
+                thinking=thinking_trace,
             )
 
         except Exception as e:
