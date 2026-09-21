@@ -28,7 +28,7 @@ from adam.db.models import (
 from adam.extract.metadata import AdministrativeMetadataExtractor
 from adam.extract.pdf import PdfExtractor
 from adam.extract.precedents import PrecedentCitationParser
-from adam.extract.ocr import get_ocr_engine, OcrResult
+from adam.extract.ocr import get_ocr_engine, OcrResult, BaseOcrEngine
 from adam.extract.quality import PageQualityGate, determine_review_status
 from adam.storage.base import StorageBackend
 
@@ -49,13 +49,18 @@ class DocumentExtractionPipeline:
     """Coordinates parsing of original document bytes into structured text,
     blocks with coordinates, OCR for scans, quality gates, and precedents."""
 
-    def __init__(self, session: Session, storage: StorageBackend):
+    def __init__(
+        self,
+        session: Session,
+        storage: StorageBackend,
+        ocr_engine: Optional[BaseOcrEngine] = None,
+    ):
         self.session = session
         self.storage = storage
-        self._ocr_engine = None
+        self._ocr_engine = ocr_engine
 
     @property
-    def ocr_engine(self):
+    def ocr_engine(self) -> BaseOcrEngine:
         if self._ocr_engine is None:
             self._ocr_engine = get_ocr_engine()
         return self._ocr_engine

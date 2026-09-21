@@ -37,6 +37,7 @@ from adam.db.models import (
     AuditEvent,
 )
 from adam.db.session import get_engine, get_session
+from adam.extract.ocr import get_ocr_engine
 from adam.extract.pipeline import DocumentExtractionPipeline
 from adam.ingest.checkpoint import CompoundCursor, CheckpointState
 from adam.ingest.crawler import UrlCrawlerGuard, DisallowedUrlError
@@ -400,6 +401,7 @@ class IngestionControlPlane:
                 permitted_domains=source.permitted_domains,
                 permitted_path_prefixes=source.permitted_path_prefixes,
             )
+            ocr_engine = get_ocr_engine()
 
             total_found = job.count_found if is_resume else 0
             ingested_count = job.count_ingested
@@ -587,7 +589,7 @@ class IngestionControlPlane:
                     session.flush()
 
                     # Stage 5: Extraction & OCR Pipeline
-                    extract_pipe = DocumentExtractionPipeline(session, storage)
+                    extract_pipe = DocumentExtractionPipeline(session, storage, ocr_engine=ocr_engine)
                     extract_pipe.process_version(version.id, actor=user_id)
 
                     # Stage 6: Semantic Structure Chunking & Indexing

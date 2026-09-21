@@ -619,6 +619,9 @@ class NullOcrEngine(BaseOcrEngine):
         return OcrResult(text="", confidence=0.0, blocks=[])
 
 
+_WARNED_NO_OCR = False
+
+
 def get_ocr_engine(preferred_engine: Optional[str] = None) -> BaseOcrEngine:
     """Factory function to select and instantiate an OCR engine.
 
@@ -635,18 +638,21 @@ def get_ocr_engine(preferred_engine: Optional[str] = None) -> BaseOcrEngine:
     Returns:
         BaseOcrEngine: The selected OCR engine instance.
     """
+    global _WARNED_NO_OCR
     if preferred_engine:
         name = preferred_engine.strip().lower()
         if name in ("tesseract", "tesseractocr"):
             engine = TesseractOcrEngine()
             if engine.is_available():
                 logger.info("Selected OCR engine: TesseractOcrEngine (preferred)")
+                _WARNED_NO_OCR = False
                 return engine
             logger.warning("Preferred OCR engine 'tesseract' is not available.")
         elif name in ("paddle", "paddleocr"):
             engine = PaddleOcrEngine()
             if engine.is_available():
                 logger.info("Selected OCR engine: PaddleOcrEngine (preferred)")
+                _WARNED_NO_OCR = False
                 return engine
             logger.warning("Preferred OCR engine 'paddle' is not available.")
         elif name in ("null", "nulloct", "none"):
@@ -661,15 +667,23 @@ def get_ocr_engine(preferred_engine: Optional[str] = None) -> BaseOcrEngine:
     tesseract = TesseractOcrEngine()
     if tesseract.is_available():
         logger.info("Selected OCR engine: TesseractOcrEngine")
+        _WARNED_NO_OCR = False
         return tesseract
 
     paddle = PaddleOcrEngine()
     if paddle.is_available():
         logger.info("Selected OCR engine: PaddleOcrEngine")
+        _WARNED_NO_OCR = False
         return paddle
 
-    logger.warning(
-        "No OCR engine available (neither Tesseract nor PaddleOCR). "
-        "Falling back to NullOcrEngine."
-    )
+    if not _WARNED_NO_OCR:
+        logger.warning(
+            "No OCR engine available (neither Tesseract nor PaddleOCR). "
+            "Falling back to NullOcrEngine for scanned pages. "
+            "(To enable OCR for scanned government orders on macOS: brew install tesseract tesseract-lang)"
+        )
+        _WARNED_NO_OCR = True
+    else:
+        logger.debug("No OCR engine available; using NullOcrEngine.")
+
     return NullOcrEngine()
