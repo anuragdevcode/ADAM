@@ -65,6 +65,8 @@ class _Stub_AgentResponse:
     retrieval_pass_count: int = 1
     answer_pass_count: int = 1
     latency_ms: float = 42.0
+    per_stage_latency_ms: Dict[str, float] = field(default_factory=dict)
+    abstention_reason: Optional[str] = None
     prompt_tokens: int = 100
     completion_tokens: int = 50
     model_id: str = "qwen3-4b-instruct-q4"

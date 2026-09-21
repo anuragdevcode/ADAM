@@ -61,6 +61,20 @@ class AgentStateTransition:
     to_state: str
     timestamp: str
     notes: Optional[str] = None
+    duration_ms: float = 0.0
+    stage: Optional[str] = None
+    abstention_reason: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "from": self.from_state,
+            "to": self.to_state,
+            "at": self.timestamp,
+            "notes": self.notes,
+            "duration_ms": round(self.duration_ms, 2),
+            "stage": self.stage,
+            "abstention_reason": self.abstention_reason,
+        }
 
 
 @dataclass
@@ -81,6 +95,8 @@ class AgentResponse:
     retrieval_pass_count: int = 0
     answer_pass_count: int = 0
     latency_ms: float = 0.0
+    per_stage_latency_ms: Dict[str, float] = field(default_factory=dict)
+    abstention_reason: Optional[str] = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
     model_id: str = QWEN3_4B_INSTRUCT.id
@@ -104,12 +120,22 @@ class AgentResponse:
             "retrieval_pass_count": self.retrieval_pass_count,
             "answer_pass_count": self.answer_pass_count,
             "latency_ms": self.latency_ms,
+            "per_stage_latency_ms": self.per_stage_latency_ms,
+            "abstention_reason": self.abstention_reason,
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "model_id": self.model_id,
             "temperature_applied": self.temperature_applied,
             "state_history": [
-                {"from": t.from_state, "to": t.to_state, "at": t.timestamp, "notes": t.notes}
+                t.to_dict() if hasattr(t, "to_dict") else {
+                    "from": t.from_state,
+                    "to": t.to_state,
+                    "at": t.timestamp,
+                    "notes": t.notes,
+                    "duration_ms": getattr(t, "duration_ms", 0.0),
+                    "stage": getattr(t, "stage", None),
+                    "abstention_reason": getattr(t, "abstention_reason", None),
+                }
                 for t in self.state_history
             ],
             "tool_calls": self.tool_calls,
@@ -200,17 +226,42 @@ class AgentStateMachine:
         current_state = AgentState.AUTHENTICATE
         retrieval_passes = 0
         answer_passes = 0
+        per_stage_latency_ms: Dict[str, float] = {}
+        recorded_abstention_reason: Optional[str] = None
+        stage_start_time = time.perf_counter()
 
-        def transition_to(next_state: AgentState, notes: Optional[str] = None):
-            nonlocal current_state
+        def transition_to(
+            next_state: AgentState,
+            notes: Optional[str] = None,
+            abstention_reason: Optional[str] = None,
+        ):
+            nonlocal current_state, stage_start_time, recorded_abstention_reason
+            now_perf = time.perf_counter()
+            duration = (now_perf - stage_start_time) * 1000.0
+            from_name = str(current_state.value if hasattr(current_state, "value") else current_state)
+            per_stage_latency_ms[from_name] = round(duration, 2)
+
+            if abstention_reason:
+                recorded_abstention_reason = abstention_reason
+
+            eff_abstention = abstention_reason or (
+                recorded_abstention_reason
+                if next_state in (AgentState.ABSTAINED, AgentState.FAILED)
+                else None
+            )
+
             t = AgentStateTransition(
                 from_state=str(current_state),
                 to_state=str(next_state),
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 notes=notes,
+                duration_ms=round(duration, 2),
+                stage=from_name,
+                abstention_reason=eff_abstention,
             )
             state_history.append(t)
             current_state = next_state
+            stage_start_time = time.perf_counter()
 
         # ── Stage 1: Authenticate ───────────────────────────────────────────
         emitter.start_stage("security")
@@ -221,7 +272,11 @@ class AgentStateMachine:
             message="Verifying identity and classification clearance",
         )
         if not user.clearance_level or not Classification.is_valid(user.clearance_level):
-            transition_to(AgentState.FAILED, "Authentication failed: invalid classification clearance level.")
+            transition_to(
+                AgentState.FAILED,
+                "Authentication failed: invalid classification clearance level.",
+                abstention_reason="Authentication failed: invalid classification clearance level.",
+            )
             emitter.emit(
                 OperationalEventType.SECURITY_DENIED,
                 stage="security",
@@ -250,7 +305,15 @@ class AgentStateMachine:
                 validation_passed=0,
                 validation_errors_json=["Authentication failed: invalid clearance level."],
                 state_transitions_json=[
-                    {"from": t.from_state, "to": t.to_state, "at": t.timestamp, "notes": t.notes}
+                    t.to_dict() if hasattr(t, "to_dict") else {
+                        "from": t.from_state,
+                        "to": t.to_state,
+                        "at": t.timestamp,
+                        "notes": t.notes,
+                        "duration_ms": getattr(t, "duration_ms", 0.0),
+                        "stage": getattr(t, "stage", None),
+                        "abstention_reason": getattr(t, "abstention_reason", None),
+                    }
                     for t in state_history
                 ],
                 latency_ms=(time.perf_counter() - start_time) * 1000.0,
@@ -285,6 +348,7 @@ class AgentStateMachine:
         ):
             parsed_query.is_out_of_jurisdiction = True
             is_refusal = True
+            recorded_abstention_reason = "Out of jurisdiction: Query pertains to external jurisdiction or unsupported topic outside Uttarakhand Public Records."
 
         emitter.emit(
             OperationalEventType.QUERY_PARSED,
@@ -611,6 +675,8 @@ class AgentStateMachine:
                 completion_tokens = gen_result.tokens_completion
                 if gen_result.is_refusal:
                     is_refusal = True
+                    if not recorded_abstention_reason:
+                        recorded_abstention_reason = "Model determined response cannot be substantiated by verified repository records."
 
                 if packet.currency_banner:
                     answer += f"\n\n*Currency Status: {packet.currency_banner}*"
@@ -630,6 +696,8 @@ class AgentStateMachine:
         else:
             validator = CitationValidator()
             passed, val_errors = validator.validate(answer, packet)
+            if not passed and val_errors and not recorded_abstention_reason and is_refusal:
+                recorded_abstention_reason = f"Citation validation failed: {', '.join(val_errors)}"
 
         # Inspect and verify cited source records via read-only tool open_cited_source
         if citations and not is_refusal:
@@ -663,7 +731,12 @@ class AgentStateMachine:
         redacted_audit_log = SecretRedactor.sanitize_text(raw_audit_summary)
 
         final_state = AgentState.COMPLETED if (not is_refusal or getattr(parsed_query, "is_greeting", False)) else AgentState.ABSTAINED
-        transition_to(final_state, "Agent execution pipeline completed successfully")
+        transition_notes = "Agent execution pipeline completed successfully" if final_state == AgentState.COMPLETED else f"Agent execution abstained: {recorded_abstention_reason or 'No verified records'}"
+        transition_to(
+            final_state,
+            transition_notes,
+            abstention_reason=recorded_abstention_reason if final_state == AgentState.ABSTAINED else None,
+        )
 
         # Persist AgentExecutionAudit
         agent_audit = AgentExecutionAudit(
@@ -680,7 +753,15 @@ class AgentStateMachine:
             is_no_answer=1 if (is_refusal and not getattr(parsed_query, "is_greeting", False)) else 0,
             is_high_risk=1 if parsed_query.is_high_risk else 0,
             state_transitions_json=[
-                {"from": t.from_state, "to": t.to_state, "at": t.timestamp, "notes": t.notes}
+                t.to_dict() if hasattr(t, "to_dict") else {
+                    "from": t.from_state,
+                    "to": t.to_state,
+                    "at": t.timestamp,
+                    "notes": t.notes,
+                    "duration_ms": getattr(t, "duration_ms", 0.0),
+                    "stage": getattr(t, "stage", None),
+                    "abstention_reason": getattr(t, "abstention_reason", None),
+                }
                 for t in state_history
             ],
             tool_calls_json=tool_calls,
@@ -780,11 +861,14 @@ class AgentStateMachine:
             retrieval_pass_count=retrieval_passes,
             answer_pass_count=answer_passes,
             latency_ms=total_latency_ms,
+            per_stage_latency_ms=per_stage_latency_ms,
+            abstention_reason=recorded_abstention_reason if is_refusal else None,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             model_id=self.model_id,
             temperature_applied=temperature,
-            session_summary=updated_summary.to_dict(),
+            applied_schema="ADAM_AGENT_SCHEMA_V1",
+            session_summary=updated_summary.to_dict() if updated_summary else active_session_summary,
         )
 
     def _format_research_brief(

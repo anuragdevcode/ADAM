@@ -1239,7 +1239,9 @@ def audit_agent(session_id: str):
     click.echo(f"Execution Log:    {record.redacted_audit_log}")
     click.echo("\nState Machine Transitions:")
     for t in (record.state_transitions_json or []):
-        click.echo(f"  [{t.get('from')} -> {t.get('to')}] {t.get('notes', '')}")
+        dur = f" ({t['duration_ms']:.1f}ms)" if t.get("duration_ms") is not None else ""
+        abstain = f" [Abstained: {t['abstention_reason']}]" if t.get("abstention_reason") else ""
+        click.echo(f"  [{t.get('from')} -> {t.get('to')}]{dur} {t.get('notes', '')}{abstain}")
     click.echo("\nTool Calls (Read-Only Whitelist):")
     for tc in (record.tool_calls_json or []):
         click.echo(f"  Tool: {tc.get('tool')} | Found: {tc.get('found_count', 0)}")

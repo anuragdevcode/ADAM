@@ -1,4 +1,5 @@
 import type {
+  AuditMetrics,
   AuditRecord,
   Citation,
   ChatTurn,
@@ -149,6 +150,9 @@ export async function streamChat(
           switch (currentEvent) {
             case 'status':
               callbacks.onStatus?.(data as OperationalStatusEvent);
+              break;
+            case 'trail':
+              callbacks.onTrail?.(data);
               break;
             case 'start':
               callbacks.onStart?.(data.session_id, data.model_id);
@@ -541,3 +545,14 @@ export async function saveUserPreferences(
   });
   return resp.ok;
 }
+
+export async function fetchAuditMetrics(): Promise<AuditMetrics | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/audit/metrics`);
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+

@@ -91,6 +91,16 @@ export interface OperationalStatusEvent {
   };
 }
 
+export interface StateTransitionTrailItem {
+  from: string;
+  to: string;
+  at: string;
+  notes?: string | null;
+  duration_ms?: number;
+  stage?: string | null;
+  abstention_reason?: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -104,11 +114,21 @@ export interface ChatMessage {
   modelId?: string;
   error?: ChatErrorDetails;
   operationalEvents?: OperationalStatusEvent[];
+  stateHistory?: StateTransitionTrailItem[];
+  perStageLatency?: Record<string, number>;
+  abstentionReason?: string | null;
+  latencyMs?: number;
 }
 
 export interface StreamCallbacks {
   onStart?: (sessionId: string, modelId: string) => void;
   onStatus?: (event: OperationalStatusEvent) => void;
+  onTrail?: (trail: {
+    state_history: StateTransitionTrailItem[];
+    per_stage_latency?: Record<string, number>;
+    abstention_reason?: string | null;
+    latency_ms?: number;
+  }) => void;
   onToken?: (text: string) => void;
   onCitations?: (citations: Citation[]) => void;
   onBanners?: (banners: string[]) => void;
@@ -118,8 +138,20 @@ export interface StreamCallbacks {
     validation_passed: boolean;
     is_no_answer: boolean;
     is_high_risk: boolean;
+    state_history?: StateTransitionTrailItem[];
+    per_stage_latency?: Record<string, number>;
+    abstention_reason?: string | null;
   }) => void;
   onError?: (error: ChatErrorDetails | string) => void;
+}
+
+export interface AuditMetrics {
+  total_executions: number;
+  avg_latency_ms: number;
+  avg_stage_latencies_ms: Record<string, number>;
+  abstention_count: number;
+  abstention_rate_pct: number;
+  abstention_reasons: Record<string, number>;
 }
 
 // ── Model Registry Types ───────────────────────────────────────────────────

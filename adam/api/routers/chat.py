@@ -119,8 +119,38 @@ async def chat_endpoint(
             if response.search_suggestions:
                 yield f"event: suggestions\ndata: {json.dumps(response.search_suggestions)}\n\n"
 
-            # 6. Completion Event with Latency & Diagnostics
-            yield f"event: done\ndata: {json.dumps({'latency_ms': response.latency_ms, 'validation_passed': response.validation_passed, 'is_no_answer': response.is_no_answer, 'is_high_risk': response.is_high_risk})}\n\n"
+            # 6. Reasoning Trail & State Transition History
+            state_history_data = [
+                t.to_dict() if hasattr(t, "to_dict") else {
+                    "from": getattr(t, "from_state", ""),
+                    "to": getattr(t, "to_state", ""),
+                    "at": getattr(t, "timestamp", ""),
+                    "notes": getattr(t, "notes", None),
+                    "duration_ms": getattr(t, "duration_ms", 0.0),
+                    "stage": getattr(t, "stage", None),
+                    "abstention_reason": getattr(t, "abstention_reason", None),
+                }
+                for t in response.state_history
+            ]
+            trail_payload = {
+                "state_history": state_history_data,
+                "per_stage_latency": getattr(response, "per_stage_latency_ms", {}),
+                "abstention_reason": getattr(response, "abstention_reason", None),
+                "latency_ms": response.latency_ms,
+            }
+            yield f"event: trail\ndata: {json.dumps(trail_payload)}\n\n"
+
+            # 7. Completion Event with Latency & Diagnostics
+            done_payload = {
+                "latency_ms": response.latency_ms,
+                "validation_passed": response.validation_passed,
+                "is_no_answer": response.is_no_answer,
+                "is_high_risk": response.is_high_risk,
+                "state_history": state_history_data,
+                "per_stage_latency": getattr(response, "per_stage_latency_ms", {}),
+                "abstention_reason": getattr(response, "abstention_reason", None),
+            }
+            yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
 
         except Exception as e:
             while not event_queue.empty():

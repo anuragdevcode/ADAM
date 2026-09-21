@@ -373,6 +373,20 @@ export default function ChatWindow({
                 prev.map((m) => (m.id === assistantMsgId ? { ...m, suggestions } : m)),
               );
             },
+            onTrail: (trail) => {
+              setMessages((prev) =>
+                prev.map((m) => {
+                  if (m.id !== assistantMsgId) return m;
+                  return {
+                    ...m,
+                    stateHistory: trail.state_history,
+                    perStageLatency: trail.per_stage_latency,
+                    abstentionReason: trail.abstention_reason,
+                    latencyMs: trail.latency_ms,
+                  };
+                }),
+              );
+            },
             onDone: (meta) => {
               setMessages((prev) => {
                 const updated = prev.map((m) =>
@@ -382,6 +396,10 @@ export default function ChatWindow({
                         isStreaming: false,
                         isNoAnswer: meta.is_no_answer,
                         isHighRisk: meta.is_high_risk,
+                        latencyMs: meta.latency_ms,
+                        stateHistory: meta.state_history || m.stateHistory,
+                        perStageLatency: meta.per_stage_latency || m.perStageLatency,
+                        abstentionReason: meta.abstention_reason || m.abstentionReason,
                       }
                     : m,
                 );
@@ -683,6 +701,10 @@ export default function ChatWindow({
                     {/* Operational Transparency Execution Status */}
                     <ExecutionStatus
                       events={msg.operationalEvents}
+                      stateHistory={msg.stateHistory}
+                      perStageLatency={msg.perStageLatency}
+                      abstentionReason={msg.abstentionReason}
+                      latencyMs={msg.latencyMs}
                       isStreaming={msg.isStreaming}
                       hasError={!!msg.error}
                       isNoAnswer={msg.isNoAnswer}
