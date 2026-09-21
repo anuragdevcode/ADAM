@@ -116,4 +116,20 @@ INITIAL_SOURCES_PLAYBOOK: List[SourceOnboardingSheet] = [
         retention_policy="PERMANENT",
         terms_and_conditions="Government Open Data License - India (GODL).",
     ),
+    # P1: ITDA Curated Representative GO Batch
+    SourceOnboardingSheet(
+        id="src_itda_pilot_batch",
+        name="ITDA Curated Representative GO Batch",
+        department_id=DepartmentId.FINANCE_TREASURY.value,
+        owner_name="ITDA Directorate Uttarakhand",
+        owner_contact="director-itda@uk.gov.in",
+        written_authority_ref="ITDA-SAMPLES-2023-PILOT",
+        permitted_domains=["itda.uk.gov.in", "local.batch"],
+        permitted_path_prefixes=["/"],
+        access_classification=Classification.PUBLIC.value,
+        refresh_cadence=RefreshCadence.WEEKLY.value,
+        rate_limit_per_minute=60,
+        retention_policy="PERMANENT",
+        terms_and_conditions="ITDA curated representative sample files for governed pilot evaluation.",
+    ),
 ]

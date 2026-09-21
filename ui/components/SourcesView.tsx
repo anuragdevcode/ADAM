@@ -19,6 +19,8 @@ import {
   Layers,
   FileText,
   Trash2,
+  Landmark,
+  ShieldCheck,
 } from 'lucide-react';
 import type { SourceItem, IngestionJobItemRecord } from '@/lib/types';
 import {
@@ -32,16 +34,45 @@ import {
   resumeJob,
   stopJob,
   retryJob,
+  seedOfficialSources,
 } from '@/lib/api';
 import AddSourceModal from './AddSourceModal';
 import IngestionJobItemsDrawer from './IngestionJobItemsDrawer';
 
 type ControlTab = 'SOURCES' | 'JOBS' | 'HISTORY';
 
+function getOfficialConnectorInfo(source: SourceItem): { label: string; connector: string } | null {
+  const cfg = source.config_json || {};
+  const cid = String(cfg.connector_id || '').toLowerCase();
+  const id = (source.id || '').toLowerCase();
+  const domains = (source.permitted_domains || []).map((d) => d.toLowerCase());
+
+  if (cid === 'ekosh' || id.includes('ekosh') || domains.some((d) => d.includes('ekosh.uk.gov.in'))) {
+    return { label: 'eKosh IFMS Treasury', connector: 'EkoshTreasuryConnector' };
+  }
+  if (cid === 'ukrd' || id.includes('ukrd') || domains.some((d) => d.includes('ukrd.uk.gov.in'))) {
+    return { label: 'UKRD Rural Development', connector: 'UkrdConnector' };
+  }
+  if (cid === 'egazette' || id.includes('egazette') || domains.some((d) => d.includes('gazettes.uk.gov.in'))) {
+    return { label: 'Official State e-Gazette', connector: 'EGazetteConnector' };
+  }
+  if (cid === 'itda' || id.includes('itda') || id.includes('sample_batch')) {
+    return { label: 'ITDA Curated Batch', connector: 'ITDASampleBatchConnector' };
+  }
+  if (cid === 'audit' || id.includes('audit') || domains.some((d) => d.includes('uttarakhandaudit'))) {
+    return { label: 'Audit Directorate', connector: 'GenericWebsiteConnector' };
+  }
+  if (cid === 'bor' || id.includes('bor') || domains.some((d) => d.includes('bor.uk.gov.in'))) {
+    return { label: 'Board of Revenue', connector: 'GenericWebsiteConnector' };
+  }
+  return null;
+}
+
 export default function SourcesView() {
   const [sources, setSources] = useState<SourceItem[]>([]);
   const [jobs, setJobs] = useState<IngestionJobItemRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seedingLoading, setSeedingLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<ControlTab>('SOURCES');
 
   // Modals & Drawers
@@ -194,6 +225,19 @@ export default function SourcesView() {
     }
   };
 
+  const handleSeedOfficialSources = async () => {
+    setSeedingLoading(true);
+    try {
+      await seedOfficialSources();
+      await loadData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to seed official sources';
+      alert(msg);
+    } finally {
+      setSeedingLoading(false);
+    }
+  };
+
   // Quick file upload handler
   const handleFilePickerSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -293,6 +337,21 @@ export default function SourcesView() {
 
           <button
             type="button"
+            disabled={seedingLoading}
+            onClick={handleSeedOfficialSources}
+            className="p-2 px-3 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 active:scale-[0.98] text-xs font-semibold text-purple-700 flex items-center gap-1.5 shadow-2xs transition-all disabled:opacity-50"
+            title="Populate authentic Uttarakhand sources (eKosh, UKRD, e-Gazette, ITDA Samples)"
+          >
+            {seedingLoading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-700" />
+            ) : (
+              <Landmark className="w-3.5 h-3.5 text-purple-700" />
+            )}
+            <span>Seed Official Sources</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setIsAddModalOpen(true)}
             className="p-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-xs font-semibold text-white flex items-center gap-1.5 shadow-xs transition-all"
           >
@@ -370,17 +429,39 @@ export default function SourcesView() {
         {activeTab === 'SOURCES' && (
           <div>
             {sources.length === 0 ? (
-              <div className="h-64 flex flex-col items-center justify-center text-xs text-gray-400 gap-3">
-                <Database className="w-8 h-8 text-gray-300" />
-                <p>No government data sources registered yet.</p>
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Onboard First Source</span>
-                </button>
+              <div className="py-16 px-4 flex flex-col items-center justify-center text-center max-w-lg mx-auto">
+                <div className="w-14 h-14 rounded-3xl bg-purple-50 border border-purple-100 flex items-center justify-center shadow-xs mb-4">
+                  <Landmark className="w-7 h-7 text-purple-600" />
+                </div>
+                <h3 className="text-base font-bold text-gray-900 mb-1">
+                  No Data Sources Onboarded Yet
+                </h3>
+                <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                  Get started by seeding the official Uttarakhand state government playbook (eKosh Treasury, UKRD Rural Development, State e-Gazette, and ITDA Verified Batch), or register a custom source.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={seedingLoading}
+                    onClick={handleSeedOfficialSources}
+                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white text-xs font-semibold shadow-xs flex items-center gap-2 transition-all disabled:opacity-50"
+                  >
+                    {seedingLoading ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Landmark className="w-3.5 h-3.5" />
+                    )}
+                    <span>Seed Official Playbook (1-Click)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Custom Source</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -389,6 +470,7 @@ export default function SourcesView() {
                   const isActing = actionLoadingId === src.id;
                   const stype = (src.source_type || 'WEBSITE').toUpperCase();
                   const testMsg = testResult && testResult.sourceId === src.id ? testResult : null;
+                  const officialInfo = getOfficialConnectorInfo(src);
 
                   return (
                     <div
@@ -420,6 +502,15 @@ export default function SourcesView() {
                               )}
                               <span>{stype}</span>
                             </span>
+                            {officialInfo && (
+                              <span
+                                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100/90 text-purple-900 border border-purple-200 flex items-center gap-1 shadow-2xs"
+                                title={`Official Uttarakhand Governed Connector: ${officialInfo.connector}`}
+                              >
+                                <Landmark className="w-3 h-3 text-purple-700" />
+                                <span>{officialInfo.label}</span>
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1.5">
@@ -459,6 +550,15 @@ export default function SourcesView() {
                             <span>Cadence: {src.refresh_cadence}</span>
                             <span>Clearance: {src.access_classification}</span>
                           </div>
+                          {officialInfo && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-purple-800">
+                              <ShieldCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <span className="text-gray-400">Governed Connector:</span>
+                              <span className="font-mono font-semibold px-1.5 py-0.2 rounded bg-purple-50 border border-purple-100">
+                                {officialInfo.connector}
+                              </span>
+                            </div>
+                          )}
                           {src.last_run_at && (
                             <p className="text-[10px] text-purple-700">
                               Last Run: {new Date(src.last_run_at).toLocaleString()} ({src.last_run_status})

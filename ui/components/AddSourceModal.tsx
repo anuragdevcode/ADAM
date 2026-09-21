@@ -1,9 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Globe, Database, FolderPlus, Plug, CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react';
-import { createSource, testSourceConnection } from '@/lib/api';
-import type { SourceItem } from '@/lib/types';
+import { useState, useEffect } from 'react';
+import {
+  X,
+  Globe,
+  Database,
+  FolderPlus,
+  Plug,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Sparkles,
+  Landmark,
+  ShieldCheck,
+  Check,
+} from 'lucide-react';
+import { createSource, testSourceConnection, fetchSourcePresets } from '@/lib/api';
+import type { SourceItem, SourcePreset } from '@/lib/types';
 
 interface AddSourceModalProps {
   isOpen: boolean;
@@ -20,6 +33,11 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
   const [classification, setClassification] = useState('PUBLIC');
   const [refreshCadence, setRefreshCadence] = useState('WEEKLY');
   const [rateLimit, setRateLimit] = useState(30);
+
+  // Presets State
+  const [presets, setPresets] = useState<SourcePreset[]>([]);
+  const [loadingPresets, setLoadingPresets] = useState(false);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
   // Website fields
   const [websiteDomain, setWebsiteDomain] = useState('');
@@ -41,6 +59,42 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      setLoadingPresets(true);
+      fetchSourcePresets()
+        .then((data) => setPresets(data))
+        .catch((err) => console.error('Failed to load presets:', err))
+        .finally(() => setLoadingPresets(false));
+    } else {
+      setSelectedPresetId(null);
+      setError(null);
+      setTestResult(null);
+    }
+  }, [isOpen]);
+
+  const handleSelectPreset = (preset: SourcePreset) => {
+    setSelectedPresetId(preset.preset_id);
+    setName(preset.name);
+    setSourceType(preset.source_type as SourceType);
+    setDepartmentId(preset.department_id);
+    setClassification(preset.access_classification);
+    setRefreshCadence(preset.refresh_cadence);
+    setRateLimit(preset.rate_limit_per_minute);
+
+    if (preset.source_type === 'WEBSITE') {
+      setWebsiteDomain(preset.permitted_domains[0] || '');
+      setPathPrefix(preset.permitted_path_prefixes[0] || '/');
+      setSitemapUrl('');
+    } else if (preset.source_type === 'FILE_UPLOAD') {
+      setBatchDir(preset.batch_dir || '');
+    }
+  };
+
+  const handleClearPreset = () => {
+    setSelectedPresetId(null);
+  };
+
   if (!isOpen) return null;
 
   const handleTestDirect = async () => {
@@ -59,10 +113,16 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
 
       // Build temporary config payload
       const configJson: Record<string, unknown> = {};
+      const selectedPreset = presets.find((p) => p.preset_id === selectedPresetId);
+      if (selectedPreset) {
+        configJson.connector_id = selectedPreset.connector_id;
+      }
       const permittedDomains = websiteDomain ? [websiteDomain.trim().replace(/^https?:\/\//, '')] : [];
       if (sourceType === 'DATABASE') {
         configJson.connection_uri = connectionUri.trim();
         configJson.table_name = tableName.trim();
+      } else if (sourceType === 'FILE_UPLOAD') {
+        if (batchDir) configJson.batch_dir = batchDir.trim();
       }
 
       // Temporary source submission for test
@@ -106,6 +166,10 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
 
     try {
       const configJson: Record<string, unknown> = {};
+      const selectedPreset = presets.find((p) => p.preset_id === selectedPresetId);
+      if (selectedPreset) {
+        configJson.connector_id = selectedPreset.connector_id;
+      }
       const permittedDomains = websiteDomain ? [websiteDomain.trim().replace(/^https?:\/\//, '')] : [];
 
       if (sourceType === 'WEBSITE') {
@@ -157,9 +221,11 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
     }
   };
 
+  const selectedPreset = presets.find((p) => p.preset_id === selectedPresetId);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50/40">
           <div className="flex items-center gap-2.5">
@@ -168,7 +234,7 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
             </div>
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Onboard Government Data Source</h2>
-              <p className="text-[11px] text-gray-500">Configure websites, databases, or local files for ingestion</p>
+              <p className="text-[11px] text-gray-500">Configure websites, databases, or official Uttarakhand state portals</p>
             </div>
           </div>
           <button
@@ -179,15 +245,82 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
           </button>
         </div>
 
+        {/* Official Presets Section */}
+        <div className="p-5 border-b border-gray-100 bg-purple-50/20">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-1.5">
+              <Landmark className="w-3.5 h-3.5 text-purple-700" />
+              <span className="text-[11px] font-bold text-purple-900 tracking-wide uppercase">
+                Official Uttarakhand Presets
+              </span>
+              <span className="text-[10px] text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full font-semibold">
+                1-Click Quick Select
+              </span>
+            </div>
+            {selectedPresetId && (
+              <button
+                type="button"
+                onClick={handleClearPreset}
+                className="text-[11px] text-purple-700 hover:text-purple-900 font-medium underline"
+              >
+                Clear Preset
+              </button>
+            )}
+          </div>
+
+          {loadingPresets ? (
+            <div className="flex items-center gap-2 py-2 text-xs text-gray-500">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+              <span>Loading official Uttarakhand portal presets...</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {presets.map((p) => {
+                const isSelected = selectedPresetId === p.preset_id;
+                return (
+                  <button
+                    key={p.preset_id}
+                    type="button"
+                    onClick={() => handleSelectPreset(p)}
+                    className={`p-2.5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-purple-600 bg-purple-100/60 shadow-xs ring-1 ring-purple-500 text-purple-950'
+                        : 'border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50/30 text-gray-700'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-gray-900 line-clamp-1">{p.name}</span>
+                        {isSelected && <Check className="w-3 h-3 text-purple-700 shrink-0" />}
+                      </div>
+                      <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{p.department_name}</p>
+                    </div>
+                    <div className="mt-2 flex items-center gap-1">
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-purple-100 text-purple-800">
+                        {p.connector_class}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Source Type Selector */}
-        <div className="p-6 pb-2 border-b border-gray-100 bg-gray-50/50">
+        <div className="px-6 py-4 pb-2 border-b border-gray-100 bg-gray-50/50">
           <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Select Ingestion Connector Type
+            Ingestion Connector Type
           </label>
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
-              onClick={() => setSourceType('WEBSITE')}
+              onClick={() => {
+                setSourceType('WEBSITE');
+                if (selectedPreset && selectedPreset.source_type !== 'WEBSITE') {
+                  setSelectedPresetId(null);
+                }
+              }}
               className={`p-3 rounded-2xl border text-left transition-all flex flex-col gap-1.5 ${
                 sourceType === 'WEBSITE'
                   ? 'border-purple-600 bg-purple-50/50 text-purple-900 shadow-xs'
@@ -201,7 +334,12 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
 
             <button
               type="button"
-              onClick={() => setSourceType('DATABASE')}
+              onClick={() => {
+                setSourceType('DATABASE');
+                if (selectedPreset && selectedPreset.source_type !== 'DATABASE') {
+                  setSelectedPresetId(null);
+                }
+              }}
               className={`p-3 rounded-2xl border text-left transition-all flex flex-col gap-1.5 ${
                 sourceType === 'DATABASE'
                   ? 'border-purple-600 bg-purple-50/50 text-purple-900 shadow-xs'
@@ -215,7 +353,12 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
 
             <button
               type="button"
-              onClick={() => setSourceType('FILE_UPLOAD')}
+              onClick={() => {
+                setSourceType('FILE_UPLOAD');
+                if (selectedPreset && selectedPreset.source_type !== 'FILE_UPLOAD') {
+                  setSelectedPresetId(null);
+                }
+              }}
               className={`p-3 rounded-2xl border text-left transition-all flex flex-col gap-1.5 ${
                 sourceType === 'FILE_UPLOAD'
                   ? 'border-purple-600 bg-purple-50/50 text-purple-900 shadow-xs'
@@ -231,6 +374,24 @@ export default function AddSourceModal({ isOpen, onClose, onSourceCreated }: Add
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1">
+          {selectedPreset && (
+            <div className="p-3.5 rounded-2xl bg-purple-50/90 border border-purple-200 flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-purple-900">
+                    Pre-configured Connector:
+                  </span>
+                  <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-purple-200 text-purple-900">
+                    {selectedPreset.connector_class}
+                  </span>
+                </div>
+                <p className="text-[11px] text-purple-700 mt-1 leading-relaxed">
+                  {selectedPreset.description}
+                </p>
+              </div>
+            </div>
+          )}
           {error && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />

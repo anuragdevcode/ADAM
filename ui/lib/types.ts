@@ -325,6 +325,24 @@ export interface SourceItem {
   created_at?: string | null;
 }
 
+export interface SourcePreset {
+  preset_id: string;
+  name: string;
+  connector_id: string;
+  connector_class: string;
+  source_type: string;
+  department_id: string;
+  department_name: string;
+  permitted_domains: string[];
+  permitted_path_prefixes: string[];
+  base_url: string;
+  description: string;
+  rate_limit_per_minute: number;
+  refresh_cadence: string;
+  access_classification: string;
+  batch_dir?: string;
+}
+
 export interface IngestionJobItemRecord {
   id: string;
   source_id: string;

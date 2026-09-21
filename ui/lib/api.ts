@@ -13,6 +13,7 @@ import type {
   ReviewPageItem,
   SessionInfo,
   SourceItem,
+  SourcePreset,
   IngestionJobItemRecord,
   IngestionJobDetail,
   PaginatedJobItemsResponse,
@@ -484,6 +485,25 @@ export async function testSourceConnection(sourceId: string): Promise<{ success:
     method: 'POST',
   });
   if (!resp.ok) throw new Error(`Failed to test connection: ${resp.status}`);
+  return resp.json();
+}
+
+export async function fetchSourcePresets(): Promise<SourcePreset[]> {
+  try {
+    const resp = await fetch(`${API_BASE}/sources/presets`);
+    if (!resp.ok) return [];
+    return resp.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function seedOfficialSources(): Promise<{ success: boolean; seeded_count: number; total_active_sources: number }> {
+  const resp = await fetch(`${API_BASE}/sources/seed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok) throw new Error(`Failed to seed official sources: ${resp.status}`);
   return resp.json();
 }
 

@@ -30,10 +30,64 @@ class CreateSourceRequest(BaseModel):
     rate_limit_per_minute: Optional[int] = Field(default=30)
 
 
+def _seed_playbook(db: Session, actor: str = "system_bootstrap") -> int:
+    """Seed official Uttarakhand source playbook into the database."""
+    from adam.seeds import INITIAL_SOURCES_PLAYBOOK
+    from adam.ingest.registry import SourceRegistry
+
+    registry = SourceRegistry(db)
+    seeded = 0
+    for sheet in INITIAL_SOURCES_PLAYBOOK:
+        existing = registry.get(sheet.id)
+        if not existing:
+            cfg: Dict[str, Any] = {}
+            if "ekosh" in sheet.id:
+                cfg["connector_id"] = "ekosh"
+            elif "ukrd" in sheet.id:
+                cfg["connector_id"] = "ukrd"
+            elif "egazette" in sheet.id or "gazette" in sheet.id:
+                cfg["connector_id"] = "egazette"
+            elif "itda" in sheet.id:
+                cfg["connector_id"] = "itda"
+                cfg["batch_dir"] = "/tmp/itda_samples"
+            src = registry.onboard(sheet, actor=actor)
+            src.config_json = cfg
+            registry.approve(src.id, approver=actor)
+            seeded += 1
+        else:
+            existing.permitted_domains = sheet.permitted_domains
+            existing.permitted_path_prefixes = sheet.permitted_path_prefixes
+            if existing.status != "APPROVED":
+                registry.approve(existing.id, approver=actor)
+    db.commit()
+    return seeded
+
+
+@router.get("/sources/presets")
+def get_source_presets() -> List[Dict[str, Any]]:
+    """Return catalog of pre-defined official Uttarakhand state connectors."""
+    return ConnectorRegistry.get_official_presets()
+
+
+@router.post("/sources/seed")
+def seed_official_sources(
+    db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(get_user_context),
+) -> Dict[str, Any]:
+    """Seed or update official Uttarakhand government data sources."""
+    count = _seed_playbook(db, actor=user_ctx.user_id or "records_officer")
+    total = db.query(Source).filter(Source.status != SourceStatus.REMOVED.value).count()
+    return {"success": True, "seeded_count": count, "total_active_sources": total}
+
+
 @router.get("/sources")
 def list_sources(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
     """Return all registered data sources, connectors, and crawl status."""
-    sources = db.query(Source).order_by(Source.name.asc()).all()
+    active_count = db.query(Source).filter(Source.status != SourceStatus.REMOVED.value).count()
+    if active_count == 0:
+        _seed_playbook(db)
+
+    sources = db.query(Source).filter(Source.status != SourceStatus.REMOVED.value).order_by(Source.name.asc()).all()
 
     items = []
     for s in sources:
