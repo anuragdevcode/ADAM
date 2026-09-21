@@ -2,163 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Design tokens.
-
-   ADAM is a system of record for government orders, so the palette is
-   deliberately institutional: a deep official blue for interactive intent, a
-   muted seal gold reserved for authority/verification signals, and a slate
-   neutral ramp underneath. Every colour is a token so the dark theme is a
-   token swap rather than a second set of component styles.
-   ────────────────────────────────────────────────────────────────────────── */
-
 :root {
-  color-scheme: light;
-
-  /* Surfaces */
-  --bg: #eef1f5;
+  --background: #f8fafc;
+  --foreground: #182230;
   --surface: #ffffff;
-  --surface-subtle: #f7f9fb;
-  --surface-sunken: #f1f4f8;
-  --surface-inverted: #0f1729;
-
-  /* Lines */
-  --border: #e1e6ed;
-  --border-strong: #cbd3de;
-  --border-inverted: #23304a;
-
-  /* Text */
-  --text: #0d1726;
-  --text-secondary: #44546b;
-  --text-muted: #6b7a90;
-  --text-faint: #9aa7b8;
-  --text-on-brand: #ffffff;
-
-  /* Brand — official blue */
-  --brand: #1b4b91;
-  --brand-hover: #153c76;
-  --brand-active: #102e5a;
-  --brand-soft: #e9f0fa;
-  --brand-soft-hover: #dce8f7;
-  --brand-border: #bcd0ea;
-  --brand-ring: rgba(27, 75, 145, 0.32);
-
-  /* Accent — seal gold, reserved for authority + verification */
-  --accent: #9a6b16;
-  --accent-soft: #fbf3e2;
-  --accent-border: #e8d4a8;
-
-  /* Status */
-  --success: #0f6b4a;
-  --success-soft: #e6f4ee;
-  --warning: #9a5b09;
-  --warning-soft: #fdf2e0;
-  --danger: #a4262c;
-  --danger-soft: #fbeaea;
-
-  /* Elevation */
-  --shadow-xs: 0 1px 2px rgba(13, 23, 38, 0.05);
-  --shadow-sm: 0 1px 3px rgba(13, 23, 38, 0.07), 0 1px 2px rgba(13, 23, 38, 0.04);
-  --shadow-md: 0 4px 12px rgba(13, 23, 38, 0.08), 0 1px 3px rgba(13, 23, 38, 0.05);
-  --shadow-lg: 0 12px 28px rgba(13, 23, 38, 0.11), 0 2px 6px rgba(13, 23, 38, 0.05);
-  --shadow-xl: 0 24px 56px rgba(13, 23, 38, 0.16), 0 4px 12px rgba(13, 23, 38, 0.06);
+  --border: #e7eaf0;
+  --muted: #667085;
+  --accent: #7c3aed;
 }
 
-:root[data-theme='dark'],
-:root:not([data-theme='light']).dark {
-  color-scheme: dark;
-
-  --bg: #080d17;
-  --surface: #111a2b;
-  --surface-subtle: #0d1524;
-  --surface-sunken: #0a111e;
-  --surface-inverted: #e8edf5;
-
-  --border: #223049;
-  --border-strong: #31425f;
-  --border-inverted: #cbd3de;
-
-  --text: #eef2f8;
-  --text-secondary: #b3c0d2;
-  --text-muted: #8593a8;
-  --text-faint: #617087;
-  --text-on-brand: #ffffff;
-
-  --brand: #5b93e0;
-  --brand-hover: #74a6e9;
-  --brand-active: #8fb8ef;
-  --brand-soft: #16263f;
-  --brand-soft-hover: #1c3252;
-  --brand-border: #2b4671;
-  --brand-ring: rgba(91, 147, 224, 0.4);
-
-  --accent: #d9ab5a;
-  --accent-soft: #2a2113;
-  --accent-border: #4a3b1d;
-
-  --success: #4cba8d;
-  --success-soft: #11291f;
-  --warning: #d99a3f;
-  --warning-soft: #2b2113;
-  --danger: #e4797f;
-  --danger-soft: #2e1618;
-
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
-  --shadow-xl: 0 24px 56px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html,
-body {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  color: var(--text);
-  background: var(--bg);
-  font-feature-settings: 'cv05' 1, 'ss01' 1;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-button,
-input,
-textarea,
-select {
+button, input, textarea {
   font: inherit;
-  color: inherit;
 }
 
-/* One focus treatment everywhere, keyboard-only. */
-:focus-visible {
-  outline: 2px solid var(--brand);
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid rgba(124, 58, 237, 0.45);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
 ::selection {
-  background: var(--brand-soft-hover);
-  color: var(--brand-active);
+  color: #3b0764;
+  background: #e9d5ff;
 }
 
-/* Numeric columns (dates, GO numbers, token counts) should align. */
-.tabular {
-  font-variant-numeric: tabular-nums;
+/* 3D Purple Orb styling */
+.purple-orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f5d0fe 0%, #d946ef 45%, #9333ea 70%, #581c87 100%);
+  box-shadow: 
+    0 12px 28px -4px rgba(168, 85, 247, 0.45),
+    inset -4px -4px 10px rgba(88, 28, 135, 0.5),
+    inset 4px 4px 10px rgba(253, 224, 271, 0.7);
+  animation: orb-float 4s ease-in-out infinite alternate;
 }
 
-/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+@keyframes orb-float {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  100% {
+    transform: translateY(-4px) scale(1.02);
+  }
+}
+
+/* Custom minimal scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -166,138 +73,14 @@ select {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border: 3px solid transparent;
-  background-clip: content-box;
+  background: #e2e4e8;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-faint);
-  background-clip: content-box;
-}
-
-/* ── The ADAM mark ──────────────────────────────────────────────────────────
-   Replaces the old floating purple orb. A seal-like concentric disc: static,
-   institutional, and legible at small sizes. The slow sheen is the only
-   motion, and it stops for reduced-motion users.
-   ──────────────────────────────────────────────────────────────────────── */
-.adam-seal {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.28) 0%, transparent 55%),
-    linear-gradient(155deg, #2a63b4 0%, var(--brand) 46%, #0e2d59 100%);
-  box-shadow:
-    0 12px 32px -8px var(--brand-ring),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    inset 0 -8px 18px rgba(0, 0, 0, 0.22);
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-}
-
-.adam-seal::before {
-  content: '';
-  position: absolute;
-  inset: 9px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-}
-
-.adam-seal::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.22) 50%, transparent 62%);
-  animation: seal-sheen 5.5s ease-in-out infinite;
-}
-
-@keyframes seal-sheen {
-  0%,
-  100% {
-    transform: translateX(-72%);
-  }
-  55% {
-    transform: translateX(72%);
-  }
-}
-
-/* ── Motion ─────────────────────────────────────────────────────────────── */
-@keyframes fade-rise {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.animate-fade-rise {
-  animation: fade-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes caret-blink {
-  0%,
-  45% {
-    opacity: 1;
-  }
-  50%,
-  95% {
-    opacity: 0.15;
-  }
-}
-
-/* Streaming caret shown while tokens arrive. */
-.stream-caret::after {
-  content: '';
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 2px;
-  vertical-align: text-bottom;
-  background: var(--brand);
-  animation: caret-blink 1.1s steps(1) infinite;
-}
-
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-.skeleton {
-  position: relative;
-  overflow: hidden;
-  background: var(--surface-sunken);
-}
-
-.skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(127, 145, 170, 0.16), transparent);
-  animation: shimmer 1.5s infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  background: #cbd0d6;
 }
 
 @media (max-width: 640px) {
-  body {
-    overflow: auto;
-  }
+  body { overflow: auto; }
 }

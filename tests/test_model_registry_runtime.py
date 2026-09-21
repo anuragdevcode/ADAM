@@ -238,6 +238,7 @@ def test_lifecycle_backend_switching_and_serving_runtime_resolution(monkeypatch)
 
     # Mock Ollama availability
     monkeypatch.setattr(OllamaModelRuntime, "is_available", lambda self: True)
+    monkeypatch.setattr(OllamaModelRuntime, "is_model_present", lambda self: True)
 
     # 1. Automatic resolution from artifact.serving_runtime='ollama'
     rt_ollama = lifecycle.load_model(QWEN2_5_3B_INSTRUCT.id)

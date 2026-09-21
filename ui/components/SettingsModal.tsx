@@ -69,21 +69,21 @@ export default function SettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-      <div className="bg-surface rounded-3xl border border-line shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-brand-soft text-brand flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
               <Shield className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-ink">Officer Context &amp; Security Governance</h2>
-              <p className="text-[11px] text-ink-faint">Manage identity, classification clearance, and memory preferences</p>
+              <h2 className="text-sm font-semibold text-gray-800">Officer Context &amp; Security Governance</h2>
+              <p className="text-[11px] text-gray-400">Manage identity, classification clearance, and memory preferences</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-ink-faint hover:text-ink-secondary hover:bg-surface-sunken"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
           >
             <X className="w-4 h-4" />
           </button>
@@ -93,8 +93,8 @@ export default function SettingsModal({
         <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
           {/* Officer ID input */}
           <div>
-            <label className="block text-xs font-semibold text-ink-secondary mb-1.5 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-ink-faint" />
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-gray-400" />
               <span>Officer User Identifier (X-User-Id)</span>
             </label>
             <input
@@ -102,23 +102,23 @@ export default function SettingsModal({
               value={tempUserId}
               onChange={(e) => setTempUserId(e.target.value)}
               placeholder="e.g. officer_anurag_singh"
-              className="w-full px-3.5 py-2 rounded-xl border border-line text-xs text-ink focus:border-brand-border focus:ring-1 focus:ring-brand outline-none"
+              className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs text-gray-800 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none"
             />
-            <p className="text-[10px] text-ink-faint mt-1">
+            <p className="text-[10px] text-gray-400 mt-1">
               Controls access audits and private conversation session ownership.
             </p>
           </div>
 
           {/* Department Assignment */}
           <div>
-            <label className="block text-xs font-semibold text-ink-secondary mb-1.5 flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5 text-ink-faint" />
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-gray-400" />
               <span>Department Assignment (X-Department-Id)</span>
             </label>
             <select
               value={departmentId}
               onChange={(e) => onUpdateDepartmentId(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl border border-line text-xs text-ink focus:border-brand-border outline-none bg-surface"
+              className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs text-gray-800 focus:border-purple-400 outline-none bg-white"
             >
               <option value="ALL">All State Departments (General Clearance)</option>
               {departments.map((d) => (
@@ -131,8 +131,8 @@ export default function SettingsModal({
 
           {/* Clearance Level Radios */}
           <div>
-            <label className="block text-xs font-semibold text-ink-secondary mb-2 flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-ink-faint" />
+            <label className="block text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-gray-400" />
               <span>Security Clearance Ceiling (X-Clearance-Level)</span>
             </label>
             <div className="space-y-2">
@@ -144,27 +144,27 @@ export default function SettingsModal({
                     onClick={() => onUpdateClearanceLevel(lvl.id)}
                     className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
                       isSelected
-                        ? 'border-brand-border bg-brand-soft/60 shadow-xs'
-                        : 'border-line hover:border-line-strong bg-surface'
+                        ? 'border-purple-300 bg-purple-50/60 shadow-xs'
+                        : 'border-gray-200 hover:border-gray-300 bg-white'
                     }`}
                   >
                     <div
                       className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
-                        isSelected ? 'border-brand bg-brand text-white' : 'border-line-strong'
+                        isSelected ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-300'
                       }`}
                     >
                       {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-ink">{lvl.name}</span>
+                        <span className="text-xs font-semibold text-gray-800">{lvl.name}</span>
                         {lvl.id !== 'PUBLIC' && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-warn-soft text-warn">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
                             PROTECTED
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-ink-muted mt-0.5">{lvl.desc}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">{lvl.desc}</p>
                     </div>
                   </div>
                 );
@@ -173,21 +173,21 @@ export default function SettingsModal({
           </div>
 
           {/* Persistent Preferences (Phase 05 Opt-In) */}
-          <div className="pt-3 border-t border-line">
+          <div className="pt-3 border-t border-gray-100">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-xs font-semibold text-ink">Encrypted Preference Storage</span>
-                <p className="text-[10px] text-ink-faint">Explicit opt-in under governance standards</p>
+                <span className="text-xs font-semibold text-gray-800">Encrypted Preference Storage</span>
+                <p className="text-[10px] text-gray-400">Explicit opt-in under governance standards</p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <div
                   onClick={() => setOptIn(!optIn)}
                   className={`w-9 h-5 rounded-full transition-colors relative flex items-center p-0.5 ${
-                    optIn ? 'bg-brand' : 'bg-surface-sunken'
+                    optIn ? 'bg-purple-600' : 'bg-gray-200'
                   }`}
                 >
                   <div
-                    className={`w-4 h-4 rounded-full bg-surface shadow-xs transition-transform ${
+                    className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform ${
                       optIn ? 'translate-x-4' : 'translate-x-0'
                     }`}
                   />
@@ -196,8 +196,8 @@ export default function SettingsModal({
             </div>
 
             {optIn && (
-              <div className="mt-3 p-3 rounded-2xl bg-surface-subtle border border-line/60 space-y-2">
-                <label className="block text-[11px] font-medium text-ink-secondary">Response Linguistic Register</label>
+              <div className="mt-3 p-3 rounded-2xl bg-gray-50 border border-gray-200/60 space-y-2">
+                <label className="block text-[11px] font-medium text-gray-600">Response Linguistic Register</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { id: 'hi', name: 'Hindi' },
@@ -210,8 +210,8 @@ export default function SettingsModal({
                       onClick={() => setLanguagePref(lang.id)}
                       className={`py-1.5 text-xs rounded-xl border text-center transition-all ${
                         languagePref === lang.id
-                          ? 'border-brand-border bg-brand-soft text-brand font-semibold'
-                          : 'border-line bg-surface text-ink-secondary'
+                          ? 'border-purple-400 bg-purple-50 text-purple-700 font-semibold'
+                          : 'border-gray-200 bg-white text-gray-600'
                       }`}
                     >
                       {lang.name}
@@ -224,18 +224,18 @@ export default function SettingsModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-line bg-surface-subtle flex items-center justify-between">
+        <div className="px-6 py-3.5 border-t border-gray-100 bg-gray-50/70 flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-ink-muted hover:text-ink transition-colors"
+            className="px-4 py-2 text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand hover:bg-brand-hover text-white text-xs font-semibold shadow-xs transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs transition-all"
           >
             {savedSuccess ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
             <span>{savedSuccess ? 'Saved!' : 'Save Changes'}</span>

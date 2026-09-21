@@ -1,16 +1,9 @@
 /**
  * Minimal Markdown renderer for model answers.
  *
- * The models emit Markdown (`**bold**`, bullet lists, headings), which the chat
- * view previously printed verbatim — officers saw the raw asterisks. This
- * renders the small subset the models actually produce and leaves everything
- * else as literal text.
- *
- * It builds React elements directly and never touches `dangerouslySetInnerHTML`,
- * so model output cannot inject markup. Emphasis is deliberately limited to `*`
- * and `**`: underscores are left alone because identifiers that appear
- * throughout these records (`FINANCE_TREASURY`, `doc_pilot_fin_da_2024`) would
- * otherwise be mangled into italics.
+ * The models emit Markdown (`**bold**`, bullet lists, headings, inline code),
+ * which would otherwise print with literal asterisks. This renders the formatted
+ * elements safely without dangerouslySetInnerHTML.
  */
 import { Fragment, type ReactNode } from 'react';
 
@@ -27,7 +20,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       return (
         <code
           key={key}
-          className="px-1 py-0.5 rounded bg-surface-sunken border border-line font-mono text-[0.9em] text-ink"
+          className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-900 border border-purple-100 font-mono text-[0.88em]"
         >
           {part.slice(1, -1)}
         </code>
@@ -35,7 +28,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     }
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return (
-        <strong key={key} className="font-semibold text-ink">
+        <strong key={key} className="font-semibold text-gray-900">
           {part.slice(2, -2)}
         </strong>
       );
@@ -72,7 +65,6 @@ function parseBlocks(text: string): Block[] {
     const last = blocks[blocks.length - 1];
 
     if (line.trim() === '') {
-      // A blank line closes whatever block was open.
       if (last && last.kind === 'p') blocks.push({ kind: 'p', lines: [] });
       continue;
     }
@@ -110,7 +102,7 @@ function parseBlocks(text: string): Block[] {
   return blocks.filter((b) => b.kind !== 'p' || b.lines.length > 0);
 }
 
-/** Renders a model answer as formatted prose. */
+/** Renders a model answer as formatted prose matching the purple/gray UI design. */
 export function Markdown({ text }: { text: string }) {
   const blocks = parseBlocks(text);
 
@@ -121,13 +113,13 @@ export function Markdown({ text }: { text: string }) {
 
         switch (block.kind) {
           case 'hr':
-            return <hr key={key} className="border-line my-3" />;
+            return <hr key={key} className="border-gray-200 my-3" />;
 
           case 'h': {
             const size =
               block.level <= 2 ? 'text-[15px]' : block.level === 3 ? 'text-sm' : 'text-xs';
             return (
-              <p key={key} className={`${size} font-semibold text-ink mt-3 first:mt-0`}>
+              <p key={key} className={`${size} font-semibold text-gray-900 mt-3 first:mt-0`}>
                 {renderInline(block.text, key)}
               </p>
             );
@@ -135,7 +127,7 @@ export function Markdown({ text }: { text: string }) {
 
           case 'ul':
             return (
-              <ul key={key} className="list-disc pl-5 space-y-1 marker:text-ink-faint">
+              <ul key={key} className="list-disc pl-5 space-y-1 marker:text-purple-500">
                 {block.items.map((item, ii) => (
                   <li key={`${key}-${ii}`}>{renderInline(item, `${key}-${ii}`)}</li>
                 ))}
@@ -144,7 +136,7 @@ export function Markdown({ text }: { text: string }) {
 
           case 'ol':
             return (
-              <ol key={key} className="list-decimal pl-5 space-y-1 marker:text-ink-faint tabular">
+              <ol key={key} className="list-decimal pl-5 space-y-1 marker:text-purple-500">
                 {block.items.map((item, ii) => (
                   <li key={`${key}-${ii}`}>{renderInline(item, `${key}-${ii}`)}</li>
                 ))}
@@ -153,7 +145,7 @@ export function Markdown({ text }: { text: string }) {
 
           default:
             return (
-              <p key={key} className="leading-relaxed">
+              <p key={key} className="leading-relaxed text-gray-800">
                 {block.lines.map((line, li) => (
                   <Fragment key={`${key}-l${li}`}>
                     {li > 0 && <br />}

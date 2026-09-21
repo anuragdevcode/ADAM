@@ -11,20 +11,11 @@ import SourcesView from '@/components/SourcesView';
 import ReviewView from '@/components/ReviewView';
 import SettingsModal from '@/components/SettingsModal';
 import ApiKeyModal from '@/components/ApiKeyModal';
-import { ChevronDown, Search, Plus, Check, Shield, Cpu, Cloud, Lock, Key } from 'lucide-react';
+import { Sparkles, ChevronDown, Search, Plus, Check, Shield, Lock, Key, Cloud } from 'lucide-react';
 import type { DepartmentItem, ModelInfo } from '@/lib/types';
 import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey } from '@/lib/api';
 
 const DEFAULT_OFFICER_ID = 'officer_dev_001';
-
-const VIEW_TITLES: Record<NavTab, { title: string; caption: string }> = {
-  home: { title: 'Chat Studio', caption: 'Ask across approved Uttarakhand public records' },
-  docs: { title: 'Document Repository', caption: 'Government orders, circulars and notifications' },
-  network: { title: 'Precedent Chains', caption: 'Supersession, amendment and continuation links' },
-  audit: { title: 'Execution Audits', caption: 'Bounded agent runs and their evidence trail' },
-  database: { title: 'Acquisition Sources', caption: 'Approved departmental crawl targets' },
-  review: { title: 'Review Queue', caption: 'Pages held for human verification' },
-};
 
 export default function HomePage() {
   const [activeNavTab, setActiveNavTab] = useState<NavTab>('home');
@@ -48,6 +39,23 @@ export default function HomePage() {
   // Gemini API Key & Cloud Models
   const [geminiApiKey, setGeminiApiKey] = useState<string | null>(null);
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
+
+  // Dismiss the model menu on outside click / Escape.
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!modelMenuRef.current?.contains(e.target as Node)) setModelDropdownOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModelDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [modelDropdownOpen]);
 
   // Initial Load from API
   useEffect(() => {
@@ -83,35 +91,16 @@ export default function HomePage() {
     return () => window.clearInterval(modelRefresh);
   }, []);
 
-  // Dismiss the model menu on outside click / Escape.
-  useEffect(() => {
-    if (!modelDropdownOpen) return;
-    const onPointer = (e: MouseEvent) => {
-      if (!modelMenuRef.current?.contains(e.target as Node)) setModelDropdownOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setModelDropdownOpen(false);
-    };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [modelDropdownOpen]);
-
   const handleNewThread = () => {
     setActiveNavTab('home');
     setActiveSessionId(null);
     setIsHistoryOpen(false);
   };
 
-  const view = VIEW_TITLES[activeNavTab];
-  const installedCount = models.filter((m) => m.is_installed).length;
-
   return (
-    <main className="w-screen h-screen min-h-[600px] bg-bg overflow-hidden">
-      <div className="w-full h-full bg-surface flex overflow-hidden relative">
+    <main className="w-screen h-screen min-h-[600px] bg-[#f8fafc] overflow-hidden">
+      <div className="w-full h-full bg-white flex overflow-hidden relative">
+        {/* Left Navigation Rail */}
         <IconRail
           activeTab={activeNavTab}
           onSelectTab={(tab) => {
@@ -125,6 +114,7 @@ export default function HomePage() {
           clearanceLevel={clearanceLevel}
         />
 
+        {/* Slide-out Session History Drawer */}
         {isHistoryOpen && (
           <ConversationHistory
             userId={officerUserId}
@@ -139,25 +129,119 @@ export default function HomePage() {
           />
         )}
 
-        <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-          {/* ── Top bar ─────────────────────────────────────────────────── */}
-          <header className="h-16 px-4 sm:px-6 border-b border-line flex items-center justify-between gap-4 bg-surface shrink-0 z-10">
-            {/* View identity */}
-            <div className="min-w-0 flex items-center gap-3">
-              <div className="min-w-0">
-                <h1 className="text-sm font-semibold text-ink truncate leading-tight">
-                  {view.title}
-                </h1>
-                <p className="text-2xs text-ink-muted truncate leading-tight mt-0.5">
-                  {view.caption}
-                </p>
-              </div>
+        {/* Main Application Area */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
+          {/* Top Header Bar */}
+          <header className="h-[68px] px-4 sm:px-6 border-b border-[#eaecf0] flex items-center justify-between bg-white shrink-0 z-10">
+            {/* Installed artifacts are selectable; unavailable artifacts remain visible but frozen. */}
+            <div ref={modelMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setModelDropdownOpen((open) => !open)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:border-purple-200 hover:bg-purple-50/40 text-xs font-medium text-gray-700 shadow-sm transition-all"
+                title="Select an installed model"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <span className="font-semibold">{selectedModel?.name || 'ADAM model'}</span>
+                {selectedModel?.quantization && (
+                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-[10px] font-mono text-gray-500">
+                    {selectedModel.quantization}
+                  </span>
+                )}
+                <ChevronDown className="w-3 h-3 text-gray-400" />
+              </button>
+              {modelDropdownOpen && (
+                <div className="absolute left-0 top-full mt-2 w-80 bg-white rounded-2xl border border-[#eaecf0] shadow-[0_16px_36px_rgba(16,24,40,0.12)] py-1.5 z-30">
+                  <div className="px-3 py-1 text-[10px] uppercase tracking-wider font-semibold text-gray-400">
+                    Model inventory
+                  </div>
+                  {models.map((model) => {
+                    const isSelectable = Boolean(model.is_installed && !model.requires_legal_review && model.is_supported !== false);
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        disabled={!isSelectable}
+                        onClick={() => {
+                          if (!isSelectable) return;
+                          setSelectedModel(model);
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('adam_selected_model_id', model.id);
+                          }
+                          setModelDropdownOpen(false);
+                        }}
+                        title={isSelectable ? `Use ${model.name}` : model.unavailable_reason || 'Not supported / pending review'}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
+                          isSelectable
+                            ? 'hover:bg-purple-50 text-gray-700 cursor-pointer'
+                            : 'opacity-40 cursor-not-allowed bg-gray-50/80 text-gray-400 select-none'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium truncate">{model.name}</p>
+                            {model.is_cloud && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold uppercase">
+                                <Cloud className="w-2.5 h-2.5" /> Cloud
+                              </span>
+                            )}
+                            {model.requires_legal_review ? (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold uppercase">
+                                <Lock className="w-2.5 h-2.5" /> Frozen • Legal Review
+                              </span>
+                            ) : !model.is_installed ? (
+                              <span className="text-[9px] uppercase text-gray-400">
+                                {model.is_cloud ? 'Key required' : 'Not installed'}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {isSelectable
+                              ? (model.is_cloud ? 'Google Gemini Cloud • Active' : `${model.quantization} • ready locally`)
+                              : model.unavailable_reason}
+                          </p>
+                        </div>
+                        {selectedModel?.id === model.id && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
+                      </button>
+                    );
+                  })}
+
+                  <div className="my-1.5 border-t border-[#eaecf0]" />
+
+                  {/* Add / Configure Gemini Key button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModelDropdownOpen(false);
+                      setApiKeyModalOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-purple-50 text-purple-900 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Key className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                      <span className="font-semibold">
+                        {geminiApiKey ? 'Configure Gemini API Key' : '+ Add Gemini API Key'}
+                      </span>
+                    </div>
+                    {geminiApiKey ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-purple-700 bg-purple-100/60 px-1.5 py-0.5 rounded font-medium">
+                        Voice & Models
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* Thread search */}
-              <div className="hidden lg:flex items-center gap-2 h-9 px-3 rounded-xl border border-line bg-surface-subtle text-xs text-ink-secondary focus-within:border-brand-border focus-within:bg-surface transition-colors">
-                <Search className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+            {/* Top-Right: Search Threads + Clearance Indicator + New Thread */}
+            <div className="flex items-center gap-2.5">
+              {/* Search Thread Filter */}
+              <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-[#fcfcfd] text-xs text-gray-600 focus-within:border-purple-300 focus-within:bg-white transition-all">
+                <Search className="w-3.5 h-3.5 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search threads"
@@ -166,188 +250,34 @@ export default function HomePage() {
                     setSearchFilter(e.target.value);
                     if (!isHistoryOpen) setIsHistoryOpen(true);
                   }}
-                  className="bg-transparent outline-none w-32 text-xs placeholder-ink-faint"
-                  aria-label="Search conversation threads"
+                  className="bg-transparent outline-none w-28 text-xs placeholder-gray-400"
                 />
               </div>
 
-              {/* Model selector — installed local models and keyed cloud models are selectable */}
-              <div className="relative" ref={modelMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setModelDropdownOpen((open) => !open)}
-                  aria-haspopup="listbox"
-                  aria-expanded={modelDropdownOpen}
-                  className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-line bg-surface hover:bg-surface-subtle text-xs font-medium text-ink-secondary transition-colors"
-                  title="Select a model"
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                      selectedModel?.is_installed ? 'bg-ok' : 'bg-warn'
-                    }`}
-                    aria-hidden
-                  />
-                  {selectedModel?.is_cloud ? (
-                    <Cloud className="w-3.5 h-3.5 text-ink-faint hidden sm:block" />
-                  ) : (
-                    <Cpu className="w-3.5 h-3.5 text-ink-faint hidden sm:block" />
-                  )}
-                  <span className="font-semibold text-ink max-w-[150px] truncate">
-                    {selectedModel?.name || 'Select model'}
-                  </span>
-                  <ChevronDown
-                    className={`w-3 h-3 text-ink-faint transition-transform ${
-                      modelDropdownOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </button>
-
-                {modelDropdownOpen && (
-                  <div
-                    role="listbox"
-                    className="absolute right-0 top-full mt-2 w-[340px] bg-surface rounded-panel border border-line shadow-xl py-1.5 z-30 animate-fade-rise"
-                  >
-                    <div className="px-3 py-2 flex items-center justify-between">
-                      <span className="text-2xs uppercase tracking-wider font-semibold text-ink-faint">
-                        Model inventory
-                      </span>
-                      <span className="text-2xs text-ink-faint tabular">
-                        {installedCount}/{models.length} available
-                      </span>
-                    </div>
-
-                    <div className="max-h-[340px] overflow-y-auto">
-                      {models.map((model) => {
-                        const isSelected = selectedModel?.id === model.id;
-                        const isSelectable = Boolean(
-                          model.is_installed && !model.requires_legal_review && model.is_supported !== false,
-                        );
-                        return (
-                          <button
-                            key={model.id}
-                            type="button"
-                            role="option"
-                            aria-selected={isSelected}
-                            disabled={!isSelectable}
-                            onClick={() => {
-                              if (!isSelectable) return;
-                              setSelectedModel(model);
-                              if (typeof window !== 'undefined') {
-                                localStorage.setItem('adam_selected_model_id', model.id);
-                              }
-                              setModelDropdownOpen(false);
-                            }}
-                            title={
-                              isSelectable
-                                ? `Use ${model.name}`
-                                : model.unavailable_reason || 'Not supported / pending review'
-                            }
-                            className={`w-full text-left px-3 py-2.5 flex items-start gap-2.5 transition-colors ${
-                              isSelectable
-                                ? 'hover:bg-brand-soft cursor-pointer'
-                                : 'opacity-55 cursor-not-allowed'
-                            }`}
-                          >
-                            <span
-                              className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
-                                isSelectable ? 'bg-ok' : 'bg-line-strong'
-                              }`}
-                              aria-hidden
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-xs font-medium text-ink truncate">
-                                  {model.name}
-                                </span>
-                                {model.is_primary && (
-                                  <span className="px-1.5 py-px rounded bg-seal-soft text-seal text-[10px] font-semibold uppercase tracking-wide shrink-0">
-                                    Primary
-                                  </span>
-                                )}
-                                {model.is_cloud && (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded bg-brand-soft text-brand border border-brand-border text-[10px] font-semibold uppercase tracking-wide shrink-0">
-                                    <Cloud className="w-2.5 h-2.5" /> Cloud
-                                  </span>
-                                )}
-                                {model.requires_legal_review ? (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded bg-warn-soft text-warn text-[10px] font-semibold uppercase tracking-wide shrink-0">
-                                    <Lock className="w-2.5 h-2.5" /> Frozen · Legal review
-                                  </span>
-                                ) : !model.is_installed ? (
-                                  <span className="text-[10px] uppercase tracking-wide text-ink-faint shrink-0">
-                                    {model.is_cloud ? 'Key required' : 'Not installed'}
-                                  </span>
-                                ) : null}
-                              </span>
-                              <span className="block text-2xs text-ink-muted mt-0.5 truncate">
-                                {isSelectable
-                                  ? model.is_cloud
-                                    ? 'Google Gemini Cloud · active'
-                                    : `${model.quantization} · ${model.context_window} ctx · ready locally`
-                                  : model.unavailable_reason}
-                              </span>
-                            </span>
-                            {isSelected && (
-                              <Check className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="my-1.5 border-t border-line" />
-
-                    {/* Add / configure Gemini API key (unlocks cloud models and hosted voice) */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModelDropdownOpen(false);
-                        setApiKeyModalOpen(true);
-                      }}
-                      className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-brand-soft transition-colors"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <Key className="w-3.5 h-3.5 text-brand shrink-0" />
-                        <span className="text-xs font-semibold text-ink truncate">
-                          {geminiApiKey ? 'Configure Gemini API key' : 'Add Gemini API key'}
-                        </span>
-                      </span>
-                      {geminiApiKey ? (
-                        <span className="px-1.5 py-px rounded bg-ok-soft text-ok text-[10px] font-semibold uppercase tracking-wide shrink-0">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="text-2xs text-ink-faint shrink-0">Voice &amp; cloud models</span>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Clearance */}
+              {/* Clearance Badge */}
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-line bg-surface hover:bg-surface-subtle text-xs font-semibold text-ink-secondary transition-colors"
-                title="View or change officer clearance"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 transition-all"
+                title="Click to view or change officer clearance"
               >
-                <Shield className="w-3.5 h-3.5 text-seal" />
-                <span className="hidden sm:inline">{clearanceLevel}</span>
+                <Shield className="w-3.5 h-3.5 text-purple-600" />
+                <span>{clearanceLevel}</span>
               </button>
 
-              {/* New thread */}
+              {/* + New Thread Button */}
               <button
                 type="button"
                 onClick={handleNewThread}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-brand hover:bg-brand-hover active:bg-brand-active text-ink-onBrand text-xs font-semibold shadow-sm transition-colors"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#292c33] hover:bg-[#17191d] active:scale-[0.98] text-white text-xs font-semibold shadow-sm transition-all"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">New Thread</span>
+                <span>New Thread</span>
               </button>
             </div>
           </header>
 
-          {/* ── Active view ─────────────────────────────────────────────── */}
+          {/* Dynamic Main View Switcher */}
           <section className="flex-1 overflow-hidden relative">
             {activeNavTab === 'home' && (
               <ChatWindow
@@ -371,13 +301,17 @@ export default function HomePage() {
             )}
 
             {activeNavTab === 'network' && <PrecedentsView />}
+
             {activeNavTab === 'audit' && <AuditView />}
+
             {activeNavTab === 'database' && <SourcesView />}
+
             {activeNavTab === 'review' && <ReviewView userId={officerUserId} />}
           </section>
         </div>
       </div>
 
+      {/* Settings & Officer Clearance Governance Modal */}
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}

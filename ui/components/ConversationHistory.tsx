@@ -61,12 +61,12 @@ export default function ConversationHistory({
   });
 
   return (
-    <aside className="w-72 h-full flex flex-col border-r border-line bg-[#fafafa]/95 backdrop-blur-md select-none shrink-0 z-10">
+    <aside className="w-72 h-full flex flex-col border-r border-gray-100 bg-[#fafafa]/95 backdrop-blur-md select-none shrink-0 z-10">
       {/* Top Header */}
-      <div className="flex items-center justify-between px-4 py-3.5 border-b border-line">
+      <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
         <div className="flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-brand" />
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-secondary">
+          <MessageSquare className="w-4 h-4 text-purple-600" />
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-700">
             Chat Threads
           </h2>
         </div>
@@ -74,7 +74,7 @@ export default function ConversationHistory({
           <button
             onClick={load}
             title="Refresh threads"
-            className="p-1 rounded-lg text-ink-faint hover:text-ink-secondary hover:bg-surface-sunken transition-colors"
+            className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -82,7 +82,7 @@ export default function ConversationHistory({
             <button
               onClick={onClose}
               title="Close panel"
-              className="p-1 rounded-lg text-ink-faint hover:text-ink-secondary hover:bg-surface-sunken transition-colors"
+              className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -91,18 +91,18 @@ export default function ConversationHistory({
       </div>
 
       {/* Search Input Filter */}
-      <div className="p-3 border-b border-line">
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-line/80 bg-surface text-xs text-ink-secondary focus-within:border-brand-border focus-within:ring-1 focus-within:ring-brand">
-          <Search className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+      <div className="p-3 border-b border-gray-100">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-gray-200/80 bg-white text-xs text-gray-600 focus-within:border-purple-400 focus-within:ring-1 focus-within:ring-purple-400">
+          <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
           <input
             type="text"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Filter threads..."
-            className="bg-transparent outline-none w-full placeholder-ink-faint"
+            className="bg-transparent outline-none w-full placeholder-gray-400"
           />
           {filterText && (
-            <button onClick={() => setFilterText('')} className="text-ink-faint hover:text-ink-secondary">
+            <button onClick={() => setFilterText('')} className="text-gray-400 hover:text-gray-600">
               <X className="w-3 h-3" />
             </button>
           )}
@@ -112,9 +112,9 @@ export default function ConversationHistory({
       {/* Session list */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {loading ? (
-          <div className="p-4 text-center text-xs text-ink-faint">Loading threads…</div>
+          <div className="p-4 text-center text-xs text-gray-400">Loading threads…</div>
         ) : filteredSessions.length === 0 ? (
-          <div className="p-6 text-center text-xs text-ink-faint">
+          <div className="p-6 text-center text-xs text-gray-400">
             {filterText ? 'No matching threads found.' : 'No threads yet. Ask a question to start!'}
           </div>
         ) : (
@@ -126,16 +126,16 @@ export default function ConversationHistory({
                 onClick={() => onSelectSession(s.session_id)}
                 className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer text-xs transition-all ${
                   isSelected
-                    ? 'bg-brand-soft text-brand-active font-medium shadow-xs border border-brand-border'
-                    : 'text-ink-secondary hover:bg-surface-sunken border border-transparent'
+                    ? 'bg-purple-50 text-purple-900 font-medium shadow-xs border border-purple-200/60'
+                    : 'text-gray-700 hover:bg-gray-100/80 border border-transparent'
                 }`}
               >
                 <div className="min-w-0 flex-1 pr-2">
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3 h-3 text-ink-faint shrink-0" />
+                    <Calendar className="w-3 h-3 text-gray-400 shrink-0" />
                     <span className="truncate">{timeAgo(s.created_at)}</span>
                   </div>
-                  <p className="text-[11px] text-ink-faint mt-0.5 font-normal">
+                  <p className="text-[11px] text-gray-400 mt-0.5 font-normal">
                     {s.turn_count} {s.turn_count === 1 ? 'interaction' : 'interactions'}
                   </p>
                 </div>
@@ -143,7 +143,7 @@ export default function ConversationHistory({
                 <button
                   onClick={(e) => handleDelete(e, s.session_id)}
                   title="Delete conversation"
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-ink-faint hover:text-danger hover:bg-danger-soft transition-all"
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
