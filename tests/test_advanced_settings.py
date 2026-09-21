@@ -74,9 +74,20 @@ def test_preset_bundles_exist_and_validate():
     # Precise must be more conservative than Thorough
     precise = PRESET_BUNDLES[AdvancedSettingsPreset.PRECISE]
     thorough = PRESET_BUNDLES[AdvancedSettingsPreset.THOROUGH]
+    balanced = PRESET_BUNDLES[AdvancedSettingsPreset.BALANCED]
     assert precise.generation.temperature_rag <= thorough.generation.temperature_rag
     assert precise.generation.max_tokens_rag < thorough.generation.max_tokens_rag
     assert precise.retrieval.top_k < thorough.retrieval.top_k
+    assert balanced.generation.thinking_enabled is True
+    assert precise.generation.thinking_enabled is True
+    assert thorough.generation.thinking_enabled is True
+
+
+def test_thinking_mode_enabled_by_default():
+    """Thinking mode for Qwen must be enabled by default in GenerationSettings and default bundle."""
+    gen = GenerationSettings()
+    assert gen.thinking_enabled is True
+    assert DEFAULT_BUNDLE.generation.thinking_enabled is True
 
 
 def test_validation_rejects_out_of_bounds_parameters():

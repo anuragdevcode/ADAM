@@ -59,8 +59,8 @@ class GenerationSettings:
     context_size: int = 8192
     # Max passages injected into RAG prompt
     max_rag_prompt_passages: int = 4
-    # Qwen3 thinking mode
-    thinking_enabled: bool = False
+    # Qwen3 thinking mode (recommended ON by default for Qwen reasoning variants)
+    thinking_enabled: bool = True
     thinking_budget: int = 1024
 
     def validate(self) -> List[str]:
@@ -242,7 +242,7 @@ PRESET_BUNDLES: Dict[AdvancedSettingsPreset, AdvancedSettingsBundle] = {
             min_p=0.05,
             context_size=4096,
             max_rag_prompt_passages=3,
-            thinking_enabled=False,
+            thinking_enabled=True,
             thinking_budget=512,
         ),
         retrieval=RetrievalSettings(
@@ -273,7 +273,7 @@ PRESET_BUNDLES: Dict[AdvancedSettingsPreset, AdvancedSettingsBundle] = {
             min_p=0.05,
             context_size=8192,
             max_rag_prompt_passages=4,
-            thinking_enabled=False,
+            thinking_enabled=True,
             thinking_budget=1024,
         ),
         retrieval=RetrievalSettings(
@@ -304,7 +304,7 @@ PRESET_BUNDLES: Dict[AdvancedSettingsPreset, AdvancedSettingsBundle] = {
             min_p=0.03,
             context_size=16384,
             max_rag_prompt_passages=6,
-            thinking_enabled=False,
+            thinking_enabled=True,
             thinking_budget=1024,
         ),
         retrieval=RetrievalSettings(
@@ -391,9 +391,9 @@ SETTINGS_METADATA: Dict[str, Dict[str, Any]] = {
         "impact": "memory", "default": 4,
     },
     "generation.thinking_enabled": {
-        "label": "Extended Thinking (Qwen3)",
-        "description": "Enable internal chain-of-thought scratchpad. Qwen3 reasoning variants only.",
-        "type": "bool", "impact": "speed", "default": False,
+        "label": "Thinking Mode (Qwen)",
+        "description": "Internal chain-of-thought reasoning for Qwen models. Recommended ON by default — never toggle off for Qwen to ensure accurate administrative interpretation.",
+        "type": "bool", "impact": "accuracy", "default": True,
     },
     "generation.thinking_budget": {
         "label": "Thinking Budget (tokens)",

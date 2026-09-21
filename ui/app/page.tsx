@@ -213,7 +213,7 @@ export default function HomePage() {
                         <div key={model.id}>
                           {showGroupHeader && (
                             <div className="px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-gray-400">
-                              {currentGroup === 'LOCAL' ? '⬛ Local' : '🌐 Remote'}
+                              {currentGroup === 'LOCAL' ? 'Local' : 'Remote'}
                             </div>
                           )}
                           <button

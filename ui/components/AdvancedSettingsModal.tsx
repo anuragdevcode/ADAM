@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   X, SlidersHorizontal, Zap, Target, Cpu, Mic2,
   ChevronRight, RotateCcw, Check, Save, Info,
+  BookOpen, AlertCircle, CheckCircle2,
 } from 'lucide-react';
 import type {
   AdvancedSettingsBundle,
@@ -26,39 +27,39 @@ interface AdvancedSettingsModalProps {
   onSettingsChange?: (bundle: AdvancedSettingsBundle) => void;
 }
 
-// ── Preset display config ──────────────────────────────────────────────────────
+// ── Preset display config (clean text, no emojis) ──────────────────────────────
 
 const PRESET_DISPLAY: Record<AdvancedSettingsPreset, {
-  label: string; tagline: string; icon: string; color: string; bg: string; border: string;
+  label: string; tagline: string; badge: string; color: string; bg: string; border: string;
 }> = {
   PRECISE: {
     label: 'Precise',
-    tagline: 'Strictest grounding · fastest · shortest answers',
-    icon: '🎯',
+    tagline: 'Strictest grounding, fastest latency, shortest answers',
+    badge: 'High Grounding',
     color: 'text-blue-700',
     bg: 'bg-blue-50',
     border: 'border-blue-200',
   },
   BALANCED: {
     label: 'Balanced',
-    tagline: 'Default ADAM behaviour · calibrated for governance',
-    icon: '⚖️',
+    tagline: 'Default ADAM profile — optimal calibrated settings for governance',
+    badge: 'Recommended Default',
     color: 'text-purple-700',
     bg: 'bg-purple-50',
     border: 'border-purple-200',
   },
   THOROUGH: {
     label: 'Thorough',
-    tagline: 'Broader search · longer answers · more evidence',
-    icon: '🔬',
+    tagline: 'Broader repository search, longer answers, more evidence passages',
+    badge: 'Broad Search',
     color: 'text-emerald-700',
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
   },
   CUSTOM: {
     label: 'Custom',
-    tagline: 'Your own individual values',
-    icon: '🛠️',
+    tagline: 'Individual user-defined parameter overrides',
+    badge: 'Manual',
     color: 'text-gray-700',
     bg: 'bg-gray-50',
     border: 'border-gray-200',
@@ -66,15 +67,15 @@ const PRESET_DISPLAY: Record<AdvancedSettingsPreset, {
 };
 
 const IMPACT_BADGE: Record<string, { label: string; cls: string }> = {
-  accuracy: { label: '🎯 Accuracy', cls: 'bg-blue-50 text-blue-700' },
-  speed:    { label: '⚡ Speed',    cls: 'bg-amber-50 text-amber-700' },
-  memory:   { label: '🖥️ Memory',  cls: 'bg-violet-50 text-violet-700' },
+  accuracy: { label: 'Accuracy', cls: 'bg-blue-50 text-blue-700' },
+  speed:    { label: 'Speed',    cls: 'bg-amber-50 text-amber-700' },
+  memory:   { label: 'Memory',   cls: 'bg-violet-50 text-violet-700' },
 };
 
 const ENV_PROFILES = [
-  { value: 'MACBOOK_AIR_8GB', label: 'MacBook Air 8GB', desc: 'Single request, strict mutual exclusion (Chat blocks OCR/indexing)' },
+  { value: 'MACBOOK_AIR_8GB', label: 'MacBook Air 8GB', desc: 'Single request concurrency, strict mutual exclusion (Chat blocks heavy OCR/indexing)' },
   { value: 'DEV_SERVER',      label: 'Dev Server 8–16GB', desc: '4 concurrent requests, relaxed mutual exclusion' },
-  { value: 'GOV_PRODUCTION',  label: 'Gov Production GPU', desc: '16 concurrent, independent workers' },
+  { value: 'GOV_PRODUCTION',  label: 'Gov Production GPU', desc: '16 concurrent requests, independent background workers' },
 ];
 
 const VOICE_LANGS = [
@@ -85,7 +86,7 @@ const VOICE_LANGS = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-type TabId = 'presets' | 'generation' | 'retrieval' | 'performance';
+type TabId = 'presets' | 'generation' | 'retrieval' | 'performance' | 'guide';
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
 function round2(v: number) { return Math.round(v * 100) / 100; }
@@ -258,10 +259,11 @@ export default function AdvancedSettingsModal({
   const dp = defaults?.performance;
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
-    { id: 'presets',     label: 'Presets',     icon: <SlidersHorizontal className="w-3.5 h-3.5" /> },
-    { id: 'generation',  label: 'Generation',  icon: <Zap className="w-3.5 h-3.5" /> },
-    { id: 'retrieval',   label: 'Retrieval',   icon: <Target className="w-3.5 h-3.5" /> },
+    { id: 'presets',     label: 'Presets',             icon: <SlidersHorizontal className="w-3.5 h-3.5" /> },
+    { id: 'generation',  label: 'Generation',          icon: <Zap className="w-3.5 h-3.5" /> },
+    { id: 'retrieval',   label: 'Retrieval',           icon: <Target className="w-3.5 h-3.5" /> },
     { id: 'performance', label: 'Performance & Voice', icon: <Cpu className="w-3.5 h-3.5" /> },
+    { id: 'guide',       label: 'Guide',               icon: <BookOpen className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -281,8 +283,8 @@ export default function AdvancedSettingsModal({
           </div>
           <div className="flex items-center gap-2">
             {bundle && (
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${PRESET_DISPLAY[bundle.preset]?.bg} ${PRESET_DISPLAY[bundle.preset]?.color} ${PRESET_DISPLAY[bundle.preset]?.border}`}>
-                {PRESET_DISPLAY[bundle.preset]?.icon} {PRESET_DISPLAY[bundle.preset]?.label}
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${PRESET_DISPLAY[bundle.preset]?.bg} ${PRESET_DISPLAY[bundle.preset]?.color} ${PRESET_DISPLAY[bundle.preset]?.border}`}>
+                {PRESET_DISPLAY[bundle.preset]?.label}
               </span>
             )}
             <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100">
@@ -292,12 +294,12 @@ export default function AdvancedSettingsModal({
         </div>
 
         {/* Tab bar */}
-        <div className="flex border-b border-gray-100 shrink-0 px-4 pt-2 gap-1">
+        <div className="flex border-b border-gray-100 shrink-0 px-4 pt-2 gap-1 overflow-x-auto">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-semibold transition-all border-b-2 ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-semibold transition-all border-b-2 shrink-0 ${
                 activeTab === t.id
                   ? 'border-purple-600 text-purple-700 bg-purple-50/60'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -318,10 +320,29 @@ export default function AdvancedSettingsModal({
 
             /* ── Tab: Presets ── */
             activeTab === 'presets' ? (
-              <div className="space-y-3">
-                <p className="text-[11px] text-gray-500">
-                  Choose a named preset to apply all settings at once. Adjusting any individual value on the other tabs automatically switches to <strong>Custom</strong>.
-                </p>
+              <div className="space-y-4">
+                {/* Recommended Configuration Guide Callout */}
+                <div className="p-4 rounded-2xl bg-purple-50/80 border border-purple-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-purple-600 text-white tracking-wide">
+                        RECOMMENDED CONFIGURATION
+                      </span>
+                      <span className="text-xs font-bold text-purple-950">Optimal Settings Pre-Selected by Default</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('guide')}
+                      className="text-[11px] font-semibold text-purple-700 hover:text-purple-950 underline cursor-pointer"
+                    >
+                      Read Full Guide
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-purple-900 leading-relaxed">
+                    ADAM picks the most optimal settings by default via the <strong>Balanced</strong> preset. For Qwen models, <strong>Thinking Mode is enabled by default and must never be toggled off</strong> to ensure rigorous administrative deduction across Uttarakhand Government Orders and service rules.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   {(['PRECISE', 'BALANCED', 'THOROUGH', 'CUSTOM'] as AdvancedSettingsPreset[]).map(preset => {
                     const pd = PRESET_DISPLAY[preset];
@@ -336,14 +357,18 @@ export default function AdvancedSettingsModal({
                             : 'border-gray-200 hover:border-gray-300 bg-white'
                         } ${preset === 'CUSTOM' ? 'cursor-default opacity-80' : ''}`}
                       >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-lg">{pd.icon}</span>
-                          <span className={`text-sm font-bold ${isActive ? pd.color : 'text-gray-700'}`}>{pd.label}</span>
-                          {isActive && <Check className="w-3.5 h-3.5 ml-auto text-purple-600" />}
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className={`text-sm font-bold ${isActive ? pd.color : 'text-gray-800'}`}>{pd.label}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">
+                              {pd.badge}
+                            </span>
+                            {isActive && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
+                          </div>
                         </div>
                         <p className="text-[10px] text-gray-500 leading-tight">{pd.tagline}</p>
                         {preset !== 'CUSTOM' && presets && (
-                          <div className="mt-2 pt-2 border-t border-gray-200/60 grid grid-cols-2 gap-1 text-[9px] text-gray-500">
+                          <div className="mt-2.5 pt-2 border-t border-gray-200/60 grid grid-cols-2 gap-1 text-[9px] text-gray-600">
                             <span>Top-K: <strong>{presets[preset].retrieval.top_k}</strong></span>
                             <span>Max tokens: <strong>{presets[preset].generation.max_tokens_rag}</strong></span>
                             <span>Temp (RAG): <strong>{presets[preset].generation.temperature_rag}</strong></span>
@@ -356,10 +381,10 @@ export default function AdvancedSettingsModal({
                 </div>
 
                 {/* Governance notice */}
-                <div className="flex gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-100">
-                  <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-amber-800 leading-relaxed">
-                    <strong>Phase 04 governance:</strong> RAG temperature is hard-bounded to [0.0, 0.2] regardless of preset. Conversational temperature, memory retention TTLs for classified content, cryptographic secrets, and database paths are protected and not user-adjustable.
+                <div className="flex gap-2.5 p-3.5 rounded-2xl bg-gray-50 border border-gray-200/80">
+                  <Info className="w-4 h-4 text-gray-500 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-gray-600 leading-relaxed">
+                    <strong>Phase 04 Governance Compliance:</strong> RAG temperature is strictly bounded to [0.0, 0.2] across all presets. Cryptographic keys, storage paths, and classified session TTLs remain protected and are excluded from user adjustment.
                   </p>
                 </div>
               </div>
@@ -370,6 +395,40 @@ export default function AdvancedSettingsModal({
                 <p className="text-[11px] text-gray-500">Controls inference parameters passed to the model harness. Settings apply to every chat query in this session.</p>
 
                 <div className="space-y-4">
+                  {/* Qwen Thinking Mode - Prominent Section */}
+                  <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-purple-950">Thinking Mode (Qwen models)</h4>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-600 text-white">
+                          RECOMMENDED ON
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-purple-900 leading-relaxed">
+                      <strong>Rule:</strong> Never toggle off thinking mode for Qwen. Qwen utilizes internal chain-of-thought tokens to cross-reference dates, resolve conflicting Government Orders, and calculate statutory allowances before formulating answers.
+                    </p>
+                    <ToggleSetting
+                      label="Enable Thinking Mode" description="Internal reasoning scratchpad. Recommended to always leave ON for Qwen."
+                      value={g!.thinking_enabled} impact="accuracy"
+                      onChange={v => patchBundle(b => { b.generation.thinking_enabled = v; })}
+                    />
+                    {!g!.thinking_enabled && (
+                      <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[10px] text-amber-800 font-medium">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <span>Warning: Thinking mode is disabled. Disabling thinking mode for Qwen is strongly discouraged as it significantly impairs statutory reasoning over state records.</span>
+                      </div>
+                    )}
+                    {g!.thinking_enabled && dg && (
+                      <SettingSlider
+                        label="Thinking Budget (tokens)" description="Token headroom reserved for internal reasoning"
+                        value={g!.thinking_budget} defaultValue={dg.thinking_budget}
+                        min={256} max={4096} step={256} impact="speed"
+                        onChange={v => patchBundle(b => { b.generation.thinking_budget = v; })}
+                      />
+                    )}
+                  </div>
+
                   <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
                     <h4 className="text-xs font-semibold text-gray-700">Governed RAG (citation-grounded)</h4>
                     {dg && <SettingSlider
@@ -434,23 +493,6 @@ export default function AdvancedSettingsModal({
                       min={0.0} max={0.2} step={0.01} impact="accuracy"
                       onChange={v => patchBundle(b => { b.generation.min_p = v; })}
                     />}
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-3">
-                    <h4 className="text-xs font-semibold text-gray-700">Extended Thinking (Qwen3 reasoning variants only)</h4>
-                    <ToggleSetting
-                      label="Enable Thinking Mode" description="Internal chain-of-thought scratchpad. Qwen3 only."
-                      value={g!.thinking_enabled} impact="speed"
-                      onChange={v => patchBundle(b => { b.generation.thinking_enabled = v; })}
-                    />
-                    {g!.thinking_enabled && dg && (
-                      <SettingSlider
-                        label="Thinking Budget (tokens)" description="Reserved headroom for reasoning"
-                        value={g!.thinking_budget} defaultValue={dg.thinking_budget}
-                        min={256} max={4096} step={256} impact="speed"
-                        onChange={v => patchBundle(b => { b.generation.thinking_budget = v; })}
-                      />
-                    )}
                   </div>
                 </div>
               </div>
@@ -531,7 +573,7 @@ export default function AdvancedSettingsModal({
               </div>
 
             /* ── Tab: Performance & Voice ── */
-            ) : (
+            ) : activeTab === 'performance' ? (
               <div className="space-y-5">
 
                 {/* Environment profile */}
@@ -623,6 +665,55 @@ export default function AdvancedSettingsModal({
                     >
                       <div className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform ${optIn ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
+                  </div>
+                </div>
+              </div>
+
+            /* ── Tab: Guide ── */
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-purple-700 shrink-0" />
+                    <h3 className="text-xs font-bold text-purple-950">Recommended Settings Baseline</h3>
+                  </div>
+                  <p className="text-[11px] text-purple-900 leading-relaxed">
+                    ADAM is designed to operate out-of-the-box with the most optimal, governance-calibrated settings. By default, the <strong>Balanced</strong> preset is active, selecting the highest-performing combination of precision, retrieval quality, and hardware stability.
+                  </p>
+                </div>
+
+                <div className="space-y-3 text-xs text-gray-700">
+                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
+                    <h4 className="font-bold text-gray-800 text-xs flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-purple-600" />
+                      1. Never Toggle Off Thinking Mode for Qwen
+                    </h4>
+                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                      For all Qwen reasoning models, Thinking Mode is turned ON by default. Qwen requires this internal scratchpad to inspect date precedence, reconcile conflicting Government Orders, and evaluate departmental sanction limits. Turning off thinking mode removes these reasoning tokens and causes shallow or incomplete answers. Always keep Thinking Mode enabled.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
+                    <h4 className="font-bold text-gray-800 text-xs">2. Default Preset (Balanced) is Recommended</h4>
+                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                      The <strong>Balanced</strong> preset is the official recommended configuration for all daily administrative queries. It fetches 8 candidates, applies cross-encoder reranking, uses a strict RAG temperature of 0.0, and allocates up to 1024 completion tokens.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
+                    <h4 className="font-bold text-gray-800 text-xs">3. When to Use Other Presets</h4>
+                    <ul className="list-disc list-inside text-[11px] text-gray-600 space-y-1 pl-1">
+                      <li><strong>Precise:</strong> Use when latency is critical and you only want brief, strictly bounded factual verification.</li>
+                      <li><strong>Thorough:</strong> Use when conducting comprehensive statutory audits or preparing in-depth policy briefs across many historical gazettes.</li>
+                      <li><strong>Custom:</strong> Use only when you have explicit operational or benchmark requirements.</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
+                    <h4 className="font-bold text-gray-800 text-xs">4. Governed Security Invariants</h4>
+                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                      RAG temperature is strictly bounded to [0.0, 0.2] to uphold Phase 04 anti-hallucination mandates. System API keys, signing secrets, and storage directories cannot be changed through this menu and remain secure.
+                    </p>
                   </div>
                 </div>
               </div>
