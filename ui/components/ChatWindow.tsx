@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { streamChat, getSessionHistory } from '@/lib/api';
-import type { ChatMessage, DepartmentItem } from '@/lib/types';
+import type { ChatMessage, DepartmentItem, ChatErrorDetails } from '@/lib/types';
 import CitationCard from './CitationCard';
 import CurrencyBanner from './CurrencyBanner';
+import ExecutionStatus from './ExecutionStatus';
 import VoiceControls from './VoiceControls';
 import { useVoiceConversation, type VoiceAnswer } from '@/lib/useVoiceConversation';
 import { Markdown } from '@/lib/markdown';
@@ -21,6 +22,12 @@ import {
   Landmark,
   Clock,
   LifeBuoy,
+  AlertTriangle,
+  RotateCcw,
+  Key,
+  Copy,
+  ServerOff,
+  Cloud,
 } from 'lucide-react';
 
 interface ChatWindowProps {
@@ -32,6 +39,158 @@ interface ChatWindowProps {
   modelId?: string;
   departments: DepartmentItem[];
   onOpenUpload?: () => void;
+  onOpenApiKeyModal?: () => void;
+  onOpenModelSelector?: () => void;
+}
+
+function CopyableCommand({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div className="mt-2.5 flex items-center justify-between gap-3 px-3 py-2 bg-[#1f242e] text-gray-200 rounded-lg font-mono text-xs border border-gray-700/60 shadow-inner">
+      <div className="flex items-center gap-2 overflow-x-auto select-all">
+        <span className="text-purple-400 select-none font-bold">$</span>
+        <span className="text-gray-100">{command}</span>
+      </div>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="shrink-0 inline-flex items-center gap-1 text-[11px] font-sans font-medium text-gray-300 hover:text-white px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
+      >
+        {copied ? (
+          <>
+            <Check className="w-3 h-3 text-emerald-400" />
+            <span className="text-emerald-400">Copied</span>
+          </>
+        ) : (
+          <>
+            <Copy className="w-3 h-3 text-gray-400" />
+            <span>Copy</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function AiErrorCard({
+  error,
+  onRetry,
+  onOpenApiKeyModal,
+  onOpenModelSelector,
+}: {
+  error: ChatErrorDetails;
+  onRetry: () => void;
+  onOpenApiKeyModal?: () => void;
+  onOpenModelSelector?: () => void;
+}) {
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+
+  const isOllamaIssue = error.category === 'ollama_offline' || error.category === 'model_not_pulled';
+  const isGeminiIssue = error.category === 'gemini_key_missing' || error.category === 'gemini_api_error';
+
+  return (
+    <div className="w-full rounded-xl border border-rose-200/90 bg-rose-50/40 p-4 sm:p-5 shadow-xs text-left transition-all">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center shrink-0 text-rose-700 mt-0.5 shadow-xs">
+          {isGeminiIssue ? (
+            <Key className="w-4 h-4" />
+          ) : isOllamaIssue ? (
+            <ServerOff className="w-4 h-4" />
+          ) : (
+            <AlertTriangle className="w-4 h-4" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <h3 className="text-sm font-semibold text-gray-900 leading-tight">
+              {error.title || 'Inference Service Unavailable'}
+            </h3>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-100/80 text-rose-800 border border-rose-200/60">
+              {error.category === 'ollama_offline'
+                ? 'Local Service Offline'
+                : error.category === 'model_not_pulled'
+                ? 'Model Missing'
+                : error.category === 'gemini_key_missing'
+                ? 'API Key Required'
+                : error.category === 'gemini_api_error'
+                ? 'API Configuration'
+                : error.category === 'rate_limit'
+                ? 'Rate Limited'
+                : 'Connection Issue'}
+            </span>
+          </div>
+
+          <p className="text-xs text-gray-700 leading-relaxed">
+            {error.message}
+          </p>
+
+          {error.commandHint && (
+            <CopyableCommand command={error.commandHint} />
+          )}
+
+          <div className="mt-3.5 flex items-center gap-2 flex-wrap pt-2.5 border-t border-rose-200/60">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 shadow-xs transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+              <span>Retry</span>
+            </button>
+
+            {(isGeminiIssue || isOllamaIssue) && onOpenApiKeyModal && (
+              <button
+                type="button"
+                onClick={onOpenApiKeyModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-colors"
+              >
+                {isGeminiIssue ? <Key className="w-3.5 h-3.5" /> : <Cloud className="w-3.5 h-3.5" />}
+                <span>{isGeminiIssue ? 'Configure Gemini API Key' : 'Switch to Google Gemini Cloud'}</span>
+              </button>
+            )}
+
+            {onOpenModelSelector && (
+              <button
+                type="button"
+                onClick={onOpenModelSelector}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 shadow-xs transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <span>Switch Model</span>
+              </button>
+            )}
+
+            {error.raw && error.raw !== error.message && (
+              <button
+                type="button"
+                onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+                className="ml-auto text-[11px] text-gray-500 hover:text-gray-700 underline underline-offset-2 transition-colors"
+              >
+                {showTechnicalDetails ? 'Hide details' : 'Technical details'}
+              </button>
+            )}
+          </div>
+
+          {showTechnicalDetails && error.raw && (
+            <div className="mt-2.5 p-2.5 rounded-lg bg-gray-900 text-gray-300 font-mono text-[11px] overflow-x-auto leading-normal">
+              {error.raw}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const EXAMPLE_CARDS = [
@@ -72,6 +231,8 @@ export default function ChatWindow({
   modelId,
   departments,
   onOpenUpload,
+  onOpenApiKeyModal,
+  onOpenModelSelector,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -175,6 +336,20 @@ export default function ChatWindow({
                 );
               }
             },
+            onStatus: (event) => {
+              setMessages((prev) =>
+                prev.map((m) => {
+                  if (m.id !== assistantMsgId) return m;
+                  const existing = m.operationalEvents || [];
+                  const idx = existing.findIndex((e) => e.sequence === event.sequence);
+                  const updated =
+                    idx !== -1
+                      ? existing.map((e, i) => (i === idx ? event : e))
+                      : [...existing, event];
+                  return { ...m, operationalEvents: updated };
+                }),
+              );
+            },
             onToken: (text) => {
               setMessages((prev) =>
                 prev.map((m) =>
@@ -217,11 +392,22 @@ export default function ChatWindow({
                 return updated;
               });
             },
-            onError: (msg) => {
+            onError: (err) => {
+              const errorObj: ChatErrorDetails =
+                typeof err === 'string'
+                  ? {
+                      title: 'Inference Connection Error',
+                      message: err,
+                      category: err.toLowerCase().includes('gemini') ? 'gemini_key_missing' : 'general',
+                      suggestedAction: 'retry',
+                      raw: err,
+                    }
+                  : err;
+
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantMsgId
-                    ? { ...m, content: `Notice: ${msg}`, isStreaming: false }
+                    ? { ...m, content: '', isStreaming: false, error: errorObj }
                     : m,
                 ),
               );
@@ -234,6 +420,30 @@ export default function ChatWindow({
       }
     },
     [isLoading, sessionId, userId, clearanceLevel, selectedDept, modelId, onSessionCreated, idPrefix, citationEnabled],
+  );
+
+  const handleRetry = useCallback(
+    (failedMsg: ChatMessage) => {
+      const idx = messages.findIndex((m) => m.id === failedMsg.id);
+      let queryText = '';
+      if (idx !== -1) {
+        for (let i = idx - 1; i >= 0; i--) {
+          if (messages[i].role === 'user') {
+            queryText = messages[i].content;
+            break;
+          }
+        }
+      }
+      if (!queryText) {
+        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+        if (lastUser) queryText = lastUser.content;
+      }
+      if (!queryText) return;
+
+      setMessages((prev) => prev.filter((m) => m.id !== failedMsg.id));
+      void sendMessage(queryText);
+    },
+    [messages, sendMessage],
   );
 
   // Voice state lives here (not in VoiceControls) because the composer is
@@ -470,12 +680,29 @@ export default function ChatWindow({
                       ) : null}
                     </div>
 
-                    <div className="text-sm text-gray-800 leading-relaxed">
-                      <Markdown text={msg.content} />
-                      {msg.isStreaming && (
-                        <span className="inline-block w-1.5 h-4 ml-1 bg-purple-600 animate-pulse rounded-full align-middle" />
-                      )}
-                    </div>
+                    {/* Operational Transparency Execution Status */}
+                    <ExecutionStatus
+                      events={msg.operationalEvents}
+                      isStreaming={msg.isStreaming}
+                      hasError={!!msg.error}
+                      isNoAnswer={msg.isNoAnswer}
+                    />
+
+                    {msg.error ? (
+                      <AiErrorCard
+                        error={msg.error}
+                        onRetry={() => handleRetry(msg)}
+                        onOpenApiKeyModal={onOpenApiKeyModal}
+                        onOpenModelSelector={onOpenModelSelector}
+                      />
+                    ) : (
+                      <div className="text-sm text-gray-800 leading-relaxed">
+                        <Markdown text={msg.content} />
+                        {msg.isStreaming && (
+                          <span className="inline-block w-1.5 h-4 ml-1 bg-purple-600 animate-pulse rounded-full align-middle" />
+                        )}
+                      </div>
+                    )}
 
                     {/* Precedent / Amendment Notice Banners */}
                     {msg.banners && msg.banners.length > 0 && (

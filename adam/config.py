@@ -41,8 +41,26 @@ def load_dotenv(path: Path | None = None, *, override: bool = False) -> int:
 if os.getenv("ADAM_SKIP_DOTENV", "").lower() not in ("1", "true", "yes"):
     load_dotenv()
 
-# Database configuration
+# ── Database Configuration ──────────────────────────────────────────────────
+# ADAM supports two database backends with distinct, explicit environmental roles:
+#
+# 1. Native Local Development & Testing (Canonical: SQLite)
+#    - URI: sqlite:///{BASE_DIR}/adam.db (or in-memory sqlite:///:memory: for pytest)
+#    - Zero external dependencies: no Docker or PostgreSQL daemon required.
+#    - Automatic schema table creation and missing-column migration via SQLAlchemy.
+#    - Enabled by default whenever `DATABASE_URL` is omitted.
+#
+# 2. Docker Compose, Staging & Production (Canonical: PostgreSQL 16 + pgvector)
+#    - URI: postgresql+psycopg://adam:change-me@postgres:5432/adam
+#    - Used in containerized deployments defined in docker-compose.yml and production.
+#    - Provides multi-user concurrent transactions and pgvector similarity indexing.
+#    - Configured explicitly via the `DATABASE_URL` environment variable.
 def get_database_url() -> str:
+    """Return the database connection URL based on the environment.
+
+    Defaults to local SQLite (`adam.db`) for native development and tests unless
+    `DATABASE_URL` is explicitly set (e.g., in Docker Compose or production).
+    """
     return os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'adam.db'}")
 
 DATABASE_URL = get_database_url()

@@ -283,3 +283,80 @@ def test_chat_endpoint_no_answer_refusal_reflected_in_done(test_client):
                         done = json.loads(lines[j][len("data:"):].strip())
                         assert done["is_no_answer"] is True
                         return
+
+
+def test_chat_endpoint_error_event_structured_ollama_offline(test_client):
+    """When agent raises Ollama offline exception, structured error SSE event must be emitted."""
+    with patch("adam.api.routers.chat.AgentStateMachine") as MockClass:
+        instance = MagicMock()
+        instance.run.side_effect = RuntimeError("Cannot connect to local Ollama service at http://localhost:11434. The Ollama server is offline.")
+        MockClass.return_value = instance
+
+        resp = test_client.post(
+            "/api/chat",
+            json={"query": "Test query"},
+            headers={"X-User-Id": "officer_1"},
+        )
+        assert resp.status_code == 200
+        assert "event: error" in resp.text
+        lines = resp.text.split("\n")
+        found = False
+        for i, line in enumerate(lines):
+            if line == "event: error":
+                for j in range(i + 1, len(lines)):
+                    if lines[j].startswith("data:"):
+                        err_data = json.loads(lines[j][len("data:"):].strip())
+                        assert err_data["category"] == "ollama_offline"
+                        assert err_data["command_hint"] == "ollama serve"
+                        assert err_data["suggested_action"] == "start_ollama"
+                        assert "Ollama Service Offline" in err_data["title"]
+                        found = True
+                        break
+        assert found is True
+
+
+def test_chat_endpoint_error_event_structured_gemini_key_missing(test_client):
+    """When agent raises Gemini key missing exception, structured error SSE event must be emitted."""
+    with patch("adam.api.routers.chat.AgentStateMachine") as MockClass:
+        instance = MagicMock()
+        instance.run.side_effect = RuntimeError("Gemini API key is not configured.")
+        MockClass.return_value = instance
+
+        resp = test_client.post(
+            "/api/chat",
+            json={"query": "Test query"},
+            headers={"X-User-Id": "officer_1"},
+        )
+        assert resp.status_code == 200
+        assert "event: error" in resp.text
+        lines = resp.text.split("\n")
+        found = False
+        for i, line in enumerate(lines):
+            if line == "event: error":
+                for j in range(i + 1, len(lines)):
+                    if lines[j].startswith("data:"):
+                        err_data = json.loads(lines[j][len("data:"):].strip())
+                        assert err_data["category"] == "gemini_key_missing"
+                        assert err_data["suggested_action"] == "configure_gemini"
+                        assert "Key Required" in err_data["title"]
+                        found = True
+                        break
+        assert found is True
+
+
+def test_chat_endpoint_error_event_redacts_api_key(test_client):
+    """Effective Gemini key must never leak into SSE error stream."""
+    secret_key = "AIzaSySecretKeyXYZ12345"
+    with patch("adam.api.routers.chat.AgentStateMachine") as MockClass:
+        instance = MagicMock()
+        instance.run.side_effect = RuntimeError(f"Failed call with key {secret_key}")
+        MockClass.return_value = instance
+
+        resp = test_client.post(
+            "/api/chat",
+            json={"query": "Test query", "api_key": secret_key},
+            headers={"X-User-Id": "officer_1"},
+        )
+        assert resp.status_code == 200
+        assert secret_key not in resp.text
+        assert "[REDACTED_KEY]" in resp.text

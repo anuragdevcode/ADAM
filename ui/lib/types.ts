@@ -56,6 +56,41 @@ export type VoiceLanguage = 'hi-IN' | 'en-IN';
 /** Phases of the hands-free voice conversation loop. */
 export type VoicePhase = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'speaking';
 
+export interface ChatErrorDetails {
+  title: string;
+  message: string;
+  category?: 'ollama_offline' | 'model_not_pulled' | 'gemini_key_missing' | 'gemini_api_error' | 'rate_limit' | 'network' | 'general';
+  suggestedAction?: 'configure_gemini' | 'start_ollama' | 'pull_model' | 'retry' | 'switch_model';
+  commandHint?: string | null;
+  raw?: string;
+}
+
+export interface OperationalStatusEvent {
+  sequence: number;
+  type: string;
+  stage: string;
+  status: 'running' | 'completed' | 'warning' | 'failed';
+  message: string;
+  duration_ms?: number | null;
+  timestamp: number;
+  trace_id?: string;
+  data?: {
+    candidate_count?: number;
+    selected_count?: number;
+    records_considered?: number;
+    duration_ms?: number;
+    banner_count?: number;
+    citation_count?: number;
+    query_language?: string;
+    is_out_of_jurisdiction?: boolean;
+    is_high_risk?: boolean;
+    model_name?: string;
+    suggested_action?: string;
+    command_hint?: string;
+    [key: string]: string | number | boolean | null | undefined;
+  };
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -67,10 +102,13 @@ export interface ChatMessage {
   isNoAnswer?: boolean;
   isHighRisk?: boolean;
   modelId?: string;
+  error?: ChatErrorDetails;
+  operationalEvents?: OperationalStatusEvent[];
 }
 
 export interface StreamCallbacks {
   onStart?: (sessionId: string, modelId: string) => void;
+  onStatus?: (event: OperationalStatusEvent) => void;
   onToken?: (text: string) => void;
   onCitations?: (citations: Citation[]) => void;
   onBanners?: (banners: string[]) => void;
@@ -81,7 +119,7 @@ export interface StreamCallbacks {
     is_no_answer: boolean;
     is_high_risk: boolean;
   }) => void;
-  onError?: (message: string) => void;
+  onError?: (error: ChatErrorDetails | string) => void;
 }
 
 // ── Model Registry Types ───────────────────────────────────────────────────

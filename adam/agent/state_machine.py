@@ -13,7 +13,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Callable
 
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,11 @@ from adam.model.runtime import (
     DeterministicModelRuntime,
     SingleModelLifecycleManager,
     ModelGenerationResult,
+)
+from adam.observability.events import (
+    OperationalEventType,
+    OperationalEvent,
+    OperationalEventEmitter,
 )
 from adam.rag.citation import CitationBuilder
 from adam.rag.evidence import EvidencePacketBuilder
@@ -163,10 +168,13 @@ class AgentStateMachine:
         temperature: float = 0.0,
         max_tokens: int = 1024,
         session_id: Optional[str] = None,
+        on_event: Optional[Callable[[OperationalEvent], None]] = None,
+        trace_id: Optional[str] = None,
     ) -> AgentResponse:
         """Execute full bounded 7-stage state machine."""
         start_time = time.perf_counter()
         user = user_context or UserContext()
+        emitter = OperationalEventEmitter(on_event=on_event, trace_id=trace_id)
 
         # Enforce Phase 04 temperature constraints [0.0, 0.2]
         if temperature < 0.0 or temperature > 0.2:
@@ -205,8 +213,27 @@ class AgentStateMachine:
             current_state = next_state
 
         # ── Stage 1: Authenticate ───────────────────────────────────────────
+        emitter.start_stage("security")
+        emitter.emit(
+            OperationalEventType.SECURITY_STARTED,
+            stage="security",
+            status="running",
+            message="Verifying identity and classification clearance",
+        )
         if not user.clearance_level or not Classification.is_valid(user.clearance_level):
             transition_to(AgentState.FAILED, "Authentication failed: invalid classification clearance level.")
+            emitter.emit(
+                OperationalEventType.SECURITY_DENIED,
+                stage="security",
+                status="failed",
+                message="Access denied: invalid classification clearance level",
+            )
+            emitter.emit(
+                OperationalEventType.EXECUTION_FAILED,
+                stage="security",
+                status="failed",
+                message="Execution terminated due to security denial",
+            )
             # Audit failed authentication attempt for governance integrity
             auth_audit = AgentExecutionAudit(
                 session_id=session_id,
@@ -233,7 +260,15 @@ class AgentStateMachine:
             self.session.commit()
             raise PermissionError(f"Invalid clearance level '{user.clearance_level}' for user '{user.user_id}'.")
 
+        emitter.emit(
+            OperationalEventType.SECURITY_COMPLETED,
+            stage="security",
+            status="completed",
+            message="Security and classification clearance verified",
+        )
+
         # ── Stage 2: Classify Request ───────────────────────────────────────
+        emitter.start_stage("query")
         transition_to(AgentState.CLASSIFY_REQUEST, "Classifying administrative query and explicit filters")
         parsed_query: ParsedQuery = QueryUnderstanding.parse(query)
 
@@ -251,7 +286,26 @@ class AgentStateMachine:
             parsed_query.is_out_of_jurisdiction = True
             is_refusal = True
 
+        emitter.emit(
+            OperationalEventType.QUERY_PARSED,
+            stage="query",
+            status="completed",
+            message="Query intent parsed and classified",
+            data={
+                "query_language": parsed_query.detected_language or "en",
+                "is_high_risk": bool(parsed_query.is_high_risk),
+                "is_out_of_jurisdiction": bool(parsed_query.is_out_of_jurisdiction),
+            },
+        )
+
         # ── Stage 3: Retrieve (Strict Limit: Max 1 Retrieval Pass) ───────────
+        emitter.start_stage("retrieval")
+        emitter.emit(
+            OperationalEventType.RETRIEVAL_STARTED,
+            stage="retrieval",
+            status="running",
+            message="Searching official Uttarakhand public records",
+        )
         transition_to(AgentState.RETRIEVE, "Executing single authorized hybrid retrieval pass")
         if retrieval_passes >= 1:
             raise TaskSelfExpansionError("State machine attempted second retrieval pass. Max 1 retrieval pass allowed.")
@@ -282,7 +336,26 @@ class AgentStateMachine:
             retriever = HybridRetriever(self.session)
             passages = retriever.retrieve(parsed_query, user_context=user, top_k=top_k)
 
+        cand_count = tool_res.get("total_found", len(passages) if passages else 0)
+        emitter.emit(
+            OperationalEventType.RETRIEVAL_COMPLETED,
+            stage="retrieval",
+            status="completed",
+            message=f"Evaluated repository records ({cand_count} candidates found)",
+            data={
+                "candidate_count": cand_count,
+                "records_considered": cand_count,
+            },
+        )
+
         # ── Stage 4: Evidence / Currency Checks ──────────────────────────────
+        emitter.start_stage("evidence")
+        emitter.emit(
+            OperationalEventType.EVIDENCE_STARTED,
+            stage="evidence",
+            status="running",
+            message="Evaluating evidence packet and material passages",
+        )
         transition_to(AgentState.EVIDENCE_CURRENCY_CHECKS, f"Evaluating evidence packet ({len(passages)} passages)")
         packet_builder = EvidencePacketBuilder(self.session)
         packet = packet_builder.build_packet(
@@ -294,6 +367,41 @@ class AgentStateMachine:
         currency_banners = []
         if packet.currency_banner:
             currency_banners.append(packet.currency_banner)
+
+        if packet.is_empty:
+            emitter.emit(
+                OperationalEventType.EVIDENCE_INSUFFICIENT,
+                stage="evidence",
+                status="warning",
+                message="No approved repository evidence found for query",
+                data={"selected_count": 0},
+            )
+        else:
+            emitter.emit(
+                OperationalEventType.EVIDENCE_COMPLETED,
+                stage="evidence",
+                status="completed",
+                message=f"{len(packet.passages)} evidence passages selected",
+                data={"selected_count": len(packet.passages)},
+            )
+
+        emitter.start_stage("currency")
+        if packet.currency_banner:
+            emitter.emit(
+                OperationalEventType.CURRENCY_WARNING,
+                stage="currency",
+                status="warning",
+                message="Document has superseding amendments or currency notices",
+                data={"banner_count": len(currency_banners)},
+            )
+        else:
+            emitter.emit(
+                OperationalEventType.CURRENCY_CHECKED,
+                stage="currency",
+                status="completed",
+                message="Document currency verified against official gazette",
+                data={"banner_count": 0},
+            )
 
         # ── Stage 5: Generate Cited Answer or Abstain (Max 1 Answer Pass) ────
         transition_to(AgentState.GENERATE_OR_ABSTAIN, "Generating cited response or abstaining under model controls")
@@ -308,6 +416,13 @@ class AgentStateMachine:
         is_research_brief = False
 
         if getattr(parsed_query, "is_greeting", False):
+            emitter.start_stage("generation")
+            emitter.emit(
+                OperationalEventType.GENERATION_STARTED,
+                stage="generation",
+                status="running",
+                message="Generating authorized greeting response",
+            )
             if parsed_query.detected_language == "hi":
                 answer = (
                     "नमस्ते! मैं अदम (ADAM) हूँ — उत्तराखण्ड शासन का आधिकारिक सार्वजनिक अभिलेख एवं प्रशासनिक सहायक।\n\n"
@@ -325,23 +440,89 @@ class AgentStateMachine:
             citations = []
             prompt_tokens = len(query.split()) * 2
             completion_tokens = len(answer.split()) * 2
+            emitter.emit(
+                OperationalEventType.GENERATION_COMPLETED,
+                stage="generation",
+                status="completed",
+                message="Greeting response generated",
+            )
         elif is_refusal:
+            emitter.start_stage("generation")
+            emitter.emit(
+                OperationalEventType.GENERATION_STARTED,
+                stage="generation",
+                status="running",
+                message="Preparing administrative jurisdiction boundary response",
+            )
             answer = self.NO_EVIDENCE_REFUSAL
             if parsed_query.is_out_of_jurisdiction:
                 answer += " The query pertains to an external jurisdiction outside Uttarakhand Public Records."
             citations = []
             prompt_tokens = len(query.split()) * 2
             completion_tokens = len(answer.split()) * 2
+            emitter.emit(
+                OperationalEventType.GENERATION_COMPLETED,
+                stage="generation",
+                status="completed",
+                message="Administrative boundary response prepared",
+            )
         elif parsed_query.is_high_risk:
+            emitter.start_stage("generation")
+            emitter.emit(
+                OperationalEventType.GENERATION_STARTED,
+                stage="generation",
+                status="running",
+                message="Structuring high-risk research brief",
+            )
             citations = CitationBuilder.build_citations_from_packet(packet) if not packet.is_empty else []
             answer = self._format_research_brief(packet, citations, currency_banners)
             is_research_brief = True
             prompt_tokens = len(query.split()) * 3
             completion_tokens = len(answer.split()) * 2
+            emitter.emit(
+                OperationalEventType.GENERATION_COMPLETED,
+                stage="generation",
+                status="completed",
+                message="High-risk research brief structured",
+            )
         elif packet.is_empty:
             with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
-                runtime = self._custom_runtime or self.lifecycle.load_model(
-                    self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
+                emitter.start_stage("model")
+                emitter.emit(
+                    OperationalEventType.MODEL_LOADING,
+                    stage="model",
+                    status="running",
+                    message=f"Activating model runtime ({self.model_id})",
+                    data={"model_name": self.model_id},
+                )
+                try:
+                    runtime = self._custom_runtime or self.lifecycle.load_model(
+                        self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
+                    )
+                    emitter.emit(
+                        OperationalEventType.MODEL_READY,
+                        stage="model",
+                        status="completed",
+                        message="Model runtime ready",
+                        data={"model_name": self.model_id},
+                    )
+                except Exception as m_err:
+                    emitter.emit(
+                        OperationalEventType.MODEL_FAILED,
+                        stage="model",
+                        status="failed",
+                        message=f"Model activation failed: {str(m_err)}",
+                        data={"model_name": self.model_id},
+                    )
+                    raise
+
+                emitter.start_stage("generation")
+                emitter.emit(
+                    OperationalEventType.GENERATION_STARTED,
+                    stage="generation",
+                    status="running",
+                    message="Generating conversational guidance",
+                    data={"model_name": self.model_id},
                 )
                 model_mention = "powered by Google Gemini 3.6 Flash" if "gemini" in (self.model_id or "").lower() else f"running on {self.model_id}"
                 gen_result = runtime.generate(
@@ -359,13 +540,54 @@ class AgentStateMachine:
                 answer = gen_result.answer
                 prompt_tokens = gen_result.tokens_prompt
                 completion_tokens = gen_result.tokens_completion
+                emitter.emit(
+                    OperationalEventType.GENERATION_COMPLETED,
+                    stage="generation",
+                    status="completed",
+                    message="Conversational response generated",
+                    data={"model_name": self.model_id},
+                )
             citations = []
         else:
             citations = CitationBuilder.build_citations_from_packet(packet)
             # Enforce single heavy worker mutual exclusion on inference
             with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
-                runtime = self._custom_runtime or self.lifecycle.load_model(
-                    self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
+                emitter.start_stage("model")
+                emitter.emit(
+                    OperationalEventType.MODEL_LOADING,
+                    stage="model",
+                    status="running",
+                    message=f"Activating model runtime ({self.model_id})",
+                    data={"model_name": self.model_id},
+                )
+                try:
+                    runtime = self._custom_runtime or self.lifecycle.load_model(
+                        self.model_id, allow_hot_swap=True, backend=self.backend, api_key=self.api_key
+                    )
+                    emitter.emit(
+                        OperationalEventType.MODEL_READY,
+                        stage="model",
+                        status="completed",
+                        message="Model runtime ready",
+                        data={"model_name": self.model_id},
+                    )
+                except Exception as m_err:
+                    emitter.emit(
+                        OperationalEventType.MODEL_FAILED,
+                        stage="model",
+                        status="failed",
+                        message=f"Model activation failed: {str(m_err)}",
+                        data={"model_name": self.model_id},
+                    )
+                    raise
+
+                emitter.start_stage("generation")
+                emitter.emit(
+                    OperationalEventType.GENERATION_STARTED,
+                    stage="generation",
+                    status="running",
+                    message="Synthesizing grounded response with citations",
+                    data={"model_name": self.model_id},
                 )
                 
                 # Format grounded prompt strictly including evidence packet
@@ -392,6 +614,14 @@ class AgentStateMachine:
 
                 if packet.currency_banner:
                     answer += f"\n\n*Currency Status: {packet.currency_banner}*"
+
+                emitter.emit(
+                    OperationalEventType.GENERATION_COMPLETED,
+                    stage="generation",
+                    status="completed",
+                    message="Grounded response synthesis complete",
+                    data={"model_name": self.model_id},
+                )
 
         # ── Stage 6: Validate Citations ─────────────────────────────────────
         transition_to(AgentState.VALIDATE_CITATIONS, "Validating material claim citations against evidence packet")
@@ -504,6 +734,35 @@ class AgentStateMachine:
             is_classified_or_pii=parsed_query.is_high_risk,
         )
         updated_summary = self.summarizer.update_summary(session_id=session_id, requesting_user_id=user.user_id)
+
+        emitter.start_stage("grounding")
+        if is_refusal and not getattr(parsed_query, "is_greeting", False):
+            emitter.emit(
+                OperationalEventType.ANSWER_ABSTAINED,
+                stage="grounding",
+                status="warning",
+                message="Abstained from answering due to lack of verified repository records",
+                data={"citation_count": 0},
+            )
+        else:
+            emitter.emit(
+                OperationalEventType.ANSWER_GROUNDED,
+                stage="grounding",
+                status="completed",
+                message=f"Grounded response in {len(citations)} official sources",
+                data={"citation_count": len(citations)},
+            )
+
+        emitter.emit(
+            OperationalEventType.EXECUTION_COMPLETED,
+            stage="execution",
+            status="completed",
+            message="Pipeline execution completed successfully",
+            data={
+                "citation_count": len(citations),
+                "duration_ms": total_latency_ms,
+            },
+        )
 
         return AgentResponse(
             session_id=session_id,

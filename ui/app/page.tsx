@@ -289,6 +289,8 @@ export default function HomePage() {
                 modelId={selectedModel?.id}
                 departments={departments}
                 onOpenUpload={() => setActiveNavTab('docs')}
+                onOpenApiKeyModal={() => setApiKeyModalOpen(true)}
+                onOpenModelSelector={() => setModelDropdownOpen(true)}
               />
             )}
 

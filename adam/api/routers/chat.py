@@ -3,8 +3,9 @@
 import asyncio
 import json
 import re
+import uuid
 from typing import AsyncGenerator, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,9 +13,9 @@ from sqlalchemy.orm import Session
 from adam.agent.state_machine import AgentStateMachine
 from adam.api.deps import get_db, get_user_context
 from adam.model.registry import ModelRegistry
+from adam.observability.events import OperationalEvent
+from adam.observability.serializer import PublicEventSerializer
 from adam.rag.models import UserContext
-
-from fastapi import APIRouter, Depends, Header
 
 router = APIRouter()
 
@@ -46,6 +47,15 @@ async def chat_endpoint(
     effective_gemini_key = x_gemini_api_key or req.api_key
 
     async def generate() -> AsyncGenerator[str, None]:
+        event_queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        trace_id = req.session_id or f"tr_{uuid.uuid4().hex[:12]}"
+
+        def on_event(event: OperationalEvent) -> None:
+            serialized = PublicEventSerializer.serialize(event)
+            if serialized:
+                loop.call_soon_threadsafe(event_queue.put_nowait, serialized)
+
         try:
             if req.model_id and not ModelRegistry(db).get(req.model_id):
                 raise ValueError(f"Unknown model artifact '{req.model_id}'.")
@@ -56,17 +66,37 @@ async def chat_endpoint(
                 api_key=effective_gemini_key,
             )
 
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: agent.run(
-                    query=req.query,
-                    user_context=user_ctx,
-                    session_id=req.session_id,
-                ),
-            )
+            async def run_agent():
+                return await loop.run_in_executor(
+                    None,
+                    lambda: agent.run(
+                        query=req.query,
+                        user_context=user_ctx,
+                        session_id=req.session_id,
+                        on_event=on_event,
+                        trace_id=trace_id,
+                    ),
+                )
+
+            run_task = asyncio.create_task(run_agent())
+
+            # Stream operational status events in real time as the state machine transitions
+            while not run_task.done():
+                try:
+                    event_payload = await asyncio.wait_for(event_queue.get(), timeout=0.03)
+                    yield f"event: status\ndata: {json.dumps(event_payload)}\n\n"
+                except asyncio.TimeoutError:
+                    continue
+
+            # Drain any remaining queued operational events
+            while not event_queue.empty():
+                event_payload = event_queue.get_nowait()
+                yield f"event: status\ndata: {json.dumps(event_payload)}\n\n"
+
+            response = await run_task
 
             # 1. Start Event
-            yield f"event: start\ndata: {json.dumps({'session_id': response.session_id, 'model_id': response.model_id, 'query': req.query})}\n\n"
+            yield f"event: start\ndata: {json.dumps({'session_id': response.session_id, 'model_id': response.model_id, 'query': req.query, 'trace_id': trace_id})}\n\n"
 
             # 2. Simulated Token Streaming
             # Keep each word's surrounding whitespace verbatim: splitting on
@@ -93,7 +123,59 @@ async def chat_endpoint(
             yield f"event: done\ndata: {json.dumps({'latency_ms': response.latency_ms, 'validation_passed': response.validation_passed, 'is_no_answer': response.is_no_answer, 'is_high_risk': response.is_high_risk})}\n\n"
 
         except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+            while not event_queue.empty():
+                try:
+                    event_payload = event_queue.get_nowait()
+                    yield f"event: status\ndata: {json.dumps(event_payload)}\n\n"
+                except Exception:
+                    break
+            raw_err = str(e)
+            if effective_gemini_key and effective_gemini_key in raw_err:
+                raw_err = raw_err.replace(effective_gemini_key, "[REDACTED_KEY]")
+
+            lower_err = raw_err.lower()
+            category = "general"
+            suggested_action = "retry"
+            title = "AI Model Error"
+            cmd_hint = None
+
+            if "cannot connect to local ollama" in lower_err or "ollama server is offline" in lower_err or "connection refused" in lower_err:
+                category = "ollama_offline"
+                title = "Local Ollama Service Offline"
+                suggested_action = "start_ollama"
+                cmd_hint = "ollama serve"
+            elif "not downloaded in local ollama" in lower_err or "not downloaded in ollama" in lower_err or "not pulled" in lower_err:
+                category = "model_not_pulled"
+                title = "Local Model Not Downloaded"
+                suggested_action = "pull_model"
+                m = re.search(r"['\"](.*?)['\"]", raw_err)
+                tag = m.group(1) if m else "qwen2.5:3b"
+                cmd_hint = f"ollama pull {tag}"
+            elif "gemini api key is not configured" in lower_err or "api key cannot be empty" in lower_err:
+                category = "gemini_key_missing"
+                title = "Gemini API Key Required"
+                suggested_action = "configure_gemini"
+            elif "gemini api returned status 400" in lower_err or "gemini api returned status 403" in lower_err or "invalid api key" in lower_err or "api_key_invalid" in lower_err:
+                category = "gemini_api_error"
+                title = "Invalid Gemini API Key"
+                suggested_action = "configure_gemini"
+            elif "gemini api returned status 429" in lower_err or "resource_exhausted" in lower_err or "rate limit" in lower_err:
+                category = "rate_limit"
+                title = "API Rate Limit Exceeded"
+                suggested_action = "retry"
+            elif "gemini api returned status 404" in lower_err:
+                category = "gemini_api_error"
+                title = "Gemini Model Unavailable"
+                suggested_action = "configure_gemini"
+
+            error_payload = {
+                "message": raw_err,
+                "title": title,
+                "category": category,
+                "suggested_action": suggested_action,
+                "command_hint": cmd_hint,
+            }
+            yield f"event: error\ndata: {json.dumps(error_payload)}\n\n"
 
     return StreamingResponse(
         generate(),

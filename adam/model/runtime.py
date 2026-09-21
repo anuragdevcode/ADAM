@@ -9,6 +9,7 @@ Per Phase 04 specification:
 import math
 import os
 import re
+import sys
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -483,6 +484,17 @@ class OllamaModelRuntime(BaseModelRuntime):
             self.is_loaded = False
 
 
+def is_test_environment(backend: Optional[str] = None, env_backend: Optional[str] = None) -> bool:
+    """Check whether execution is occurring within automated tests or deterministic mode."""
+    if os.getenv("ADAM_TEST_MODE") == "1":
+        return True
+    if backend == "deterministic" or (env_backend and env_backend.lower() == "deterministic"):
+        return True
+    if "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules:
+        return True
+    return False
+
+
 class SingleModelLifecycleManager:
     """Enforces single-model concurrency: strictly at most one LLM loaded in memory.
 
@@ -537,13 +549,15 @@ class SingleModelLifecycleManager:
             # Resolve backend: explicit argument -> env var -> installed Ollama
             # artifact -> declared artifact runtime -> deterministic test fallback.
             env_backend = os.getenv("ADAM_MODEL_BACKEND")
+            is_test_mode = is_test_environment(backend=backend, env_backend=env_backend)
+
             if backend:
                 resolved_backend = backend.lower()
             elif env_backend:
                 resolved_backend = env_backend.lower()
             elif getattr(artifact, "serving_runtime", "") == "gemini":
                 resolved_backend = "gemini"
-            elif OllamaModelRuntime(artifact).is_model_present():
+            elif artifact.serving_runtime and artifact.serving_runtime.lower() in ("ollama", "llamacpp"):
                 resolved_backend = "ollama"
             elif artifact.serving_runtime:
                 resolved_backend = artifact.serving_runtime.lower()
@@ -580,26 +594,51 @@ class SingleModelLifecycleManager:
                 self._active_runtime = runtime_override
             elif resolved_backend == "gemini":
                 from adam.model.gemini import GeminiModelRuntime
-                self._active_runtime = GeminiModelRuntime(artifact, api_key=api_key)
+                gemini_rt = GeminiModelRuntime(artifact, api_key=api_key)
+                if not gemini_rt.is_available():
+                    if is_test_mode:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"Gemini API key not configured. Falling back to DeterministicModelRuntime in test mode for {model_id}."
+                        )
+                        self._active_runtime = DeterministicModelRuntime(artifact)
+                    else:
+                        raise RuntimeError(
+                            "Google Gemini API key is not configured. "
+                            "Please enter your Gemini API key in the UI model dropdown or set GEMINI_API_KEY in your environment."
+                        )
+                else:
+                    self._active_runtime = gemini_rt
             elif resolved_backend == "ollama":
                 ollama_rt = OllamaModelRuntime(artifact)
                 if not ollama_rt.is_available():
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        f"Ollama server not reachable at {ollama_rt.host}. Falling back to DeterministicModelRuntime for {model_id}."
-                    )
-                    self._active_runtime = DeterministicModelRuntime(artifact)
+                    if is_test_mode:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"Ollama server not reachable at {ollama_rt.host}. Falling back to DeterministicModelRuntime in test mode for {model_id}."
+                        )
+                        self._active_runtime = DeterministicModelRuntime(artifact)
+                    else:
+                        raise RuntimeError(
+                            f"Cannot connect to local Ollama service at {ollama_rt.host}. "
+                            "The Ollama server is offline. Please start Ollama ('ollama serve') in your terminal, "
+                            "or switch to Google Gemini in the top-right model selector."
+                        )
                 elif not ollama_rt.is_model_present():
-                    # The server is up but this exact tag was never pulled. Degrade here
-                    # rather than letting generate() fail with a 404 mid-answer. The tag is
-                    # never swapped for a different-size model that happens to be installed.
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        f"Ollama model '{ollama_rt.model_tag}' is not pulled on {ollama_rt.host} "
-                        f"(run: ollama pull {ollama_rt.model_tag}). "
-                        f"Falling back to DeterministicModelRuntime for {model_id}."
-                    )
-                    self._active_runtime = DeterministicModelRuntime(artifact)
+                    if is_test_mode:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"Ollama model '{ollama_rt.model_tag}' is not pulled on {ollama_rt.host} "
+                            f"(run: ollama pull {ollama_rt.model_tag}). "
+                            f"Falling back to DeterministicModelRuntime in test mode for {model_id}."
+                        )
+                        self._active_runtime = DeterministicModelRuntime(artifact)
+                    else:
+                        raise RuntimeError(
+                            f"Model '{ollama_rt.model_tag}' is not downloaded in local Ollama. "
+                            f"Run 'ollama pull {ollama_rt.model_tag}' in your terminal, "
+                            "or switch to Google Gemini in the top-right model selector."
+                        )
                 else:
                     self._active_runtime = ollama_rt
             else:

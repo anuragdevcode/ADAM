@@ -2,9 +2,11 @@ import type {
   AuditRecord,
   Citation,
   ChatTurn,
+  ChatErrorDetails,
   DocumentDetail,
   DocumentSummary,
   ModelInfo,
+  OperationalStatusEvent,
   PrecedentItem,
   ReviewPageItem,
   SessionInfo,
@@ -88,18 +90,35 @@ export async function streamChat(
       signal,
     });
   } catch (err) {
-    callbacks.onError?.(`Network error: ${err}`);
+    callbacks.onError?.({
+      title: 'Connection Failure',
+      message: `Unable to connect to the ADAM service (${err}). Please verify the backend server is running.`,
+      category: 'network',
+      suggestedAction: 'retry',
+      raw: String(err),
+    });
     return;
   }
 
   if (!response.ok) {
-    callbacks.onError?.(`Server error: ${response.status}`);
+    callbacks.onError?.({
+      title: 'Server Error',
+      message: `The server encountered an error while starting the chat session (HTTP ${response.status}).`,
+      category: 'general',
+      suggestedAction: 'retry',
+      raw: `HTTP ${response.status}`,
+    });
     return;
   }
 
   const reader = response.body?.getReader();
   if (!reader) {
-    callbacks.onError?.('No response body');
+    callbacks.onError?.({
+      title: 'Connection Stream Closed',
+      message: 'The server did not provide a readable event stream.',
+      category: 'general',
+      suggestedAction: 'retry',
+    });
     return;
   }
 
@@ -128,6 +147,9 @@ export async function streamChat(
         try {
           const data = JSON.parse(rawData);
           switch (currentEvent) {
+            case 'status':
+              callbacks.onStatus?.(data as OperationalStatusEvent);
+              break;
             case 'start':
               callbacks.onStart?.(data.session_id, data.model_id);
               break;
@@ -147,7 +169,19 @@ export async function streamChat(
               callbacks.onDone?.(data);
               break;
             case 'error':
-              callbacks.onError?.(data.message);
+              if (data && typeof data === 'object') {
+                const errDetails: ChatErrorDetails = {
+                  title: data.title || 'AI Model Execution Error',
+                  message: data.message || 'An unexpected error occurred during inference.',
+                  category: data.category || 'general',
+                  suggestedAction: data.suggested_action || 'retry',
+                  commandHint: data.command_hint || null,
+                  raw: data.message || '',
+                };
+                callbacks.onError?.(errDetails);
+              } else {
+                callbacks.onError?.(String(data));
+              }
               break;
           }
         } catch {

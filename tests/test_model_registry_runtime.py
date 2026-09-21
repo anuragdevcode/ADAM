@@ -253,3 +253,32 @@ def test_lifecycle_backend_switching_and_serving_runtime_resolution(monkeypatch)
     assert isinstance(rt_ollama2, OllamaModelRuntime)
 
     lifecycle.unload_model()
+
+
+def test_production_load_model_raises_when_ollama_offline(monkeypatch):
+    """In production mode (not test mode), Ollama failure raises clear RuntimeError rather than silent fallback."""
+    import os
+    import sys
+    from adam.model.registry import QWEN2_5_3B_INSTRUCT, GEMINI_3_6_FLASH
+    from adam.model.runtime import OllamaModelRuntime
+
+    registry = ModelRegistry()
+    lifecycle = SingleModelLifecycleManager(registry)
+    lifecycle.unload_model()
+
+    # Simulate production mode where is_test_environment is False
+    monkeypatch.setattr("adam.model.runtime.is_test_environment", lambda **kw: False)
+    monkeypatch.setattr(OllamaModelRuntime, "is_available", lambda self: False)
+
+    # In production with Ollama offline, load_model must raise RuntimeError with guidance
+    with pytest.raises(RuntimeError) as exc_info:
+        lifecycle.load_model(QWEN2_5_3B_INSTRUCT.id, allow_hot_swap=True)
+    assert "Cannot connect to local Ollama service" in str(exc_info.value)
+    assert "ollama serve" in str(exc_info.value)
+
+    # In production without Gemini API key, load_model must raise RuntimeError with guidance
+    with pytest.raises(RuntimeError) as exc_info_gemini:
+        lifecycle.load_model(GEMINI_3_6_FLASH.id, allow_hot_swap=True)
+    assert "Google Gemini API key is not configured" in str(exc_info_gemini.value)
+
+    lifecycle.unload_model()

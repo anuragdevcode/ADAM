@@ -18,17 +18,29 @@ ADAM is a platform for turning approved Uttarakhand public records into a connec
 
 ### Data layer
 
-- **Database:** PostgreSQL 16 via the `pgvector/pgvector:pg16` image — one database serves both relational records and vector search, no separate vector store to operate
-- **ORM/driver:** SQLAlchemy 2.0 + psycopg3 (binary)
-- **Retrieval:** hybrid search combining PostgreSQL full-text/BM25 with pgvector similarity, filtered by department and clearance-level ACLs *before* ranking; an optional cross-encoder reranker sits on top of that when benchmarks justify it
-- **Original document storage:** a local filesystem backend by default (`STORAGE_DIR`), built to swap to an S3-compatible backend for production without changing calling code
+- **Database Environments (Explicit Canonical Roles):**
+  - **Native Local Development & Tests (Canonical: SQLite):** When running outside Docker (`adam serve`, CLI tools, pytest), ADAM defaults to local SQLite (`sqlite:///{BASE_DIR}/adam.db` or in-memory `sqlite:///:memory:` for pytest). This provides zero external daemon dependencies, fast startup, automated table creation, and missing-column schema migrations.
+  - **Docker Compose, Staging & Production (Canonical: PostgreSQL 16 + pgvector):** In containerized multi-user environments, ADAM runs on `pgvector/pgvector:pg16` (`postgresql+psycopg://adam:change-me@postgres:5432/adam` configured via `DATABASE_URL`). PostgreSQL serves relational records, ACID transactions across concurrent workers, and vector similarity search without requiring an external vector database.
+- **ORM/driver:** SQLAlchemy 2.0 with `sqlite3` for local dev/testing and `psycopg3` (binary) for PostgreSQL.
+- **Retrieval:** hybrid search combining full-text/BM25 with pgvector similarity (or keyword/lexical ranking under SQLite), filtered by department and clearance-level ACLs *before* ranking; an optional cross-encoder reranker sits on top of that when benchmarks justify it.
+- **Original document storage:** a local filesystem backend by default (`STORAGE_DIR`), built to swap to an S3-compatible backend for production without changing calling code.
 
 ### Model & agent layer
 
 - **Local inference:** Ollama, via an `OllamaModelRuntime` — `qwen2.5:3b` is the default pulled model, with `qwen3:4b` (Apache-2.0) as the primary target and `qwen3:1.7b` kept as a low-memory fallback
 - **Model governance:** a `ModelRegistry` tracks approved model artifacts (checksums, licenses, promotion gates); a `SingleModelLifecycleManager` enforces exactly one active model instance at a time — no silently running multiple LLMs concurrently
 - **Graceful degradation:** a deterministic (non-LLM) runtime path takes over when no Ollama model is reachable, so the system degrades instead of failing outright
-- **Agent orchestration:** a bounded, seven-stage state machine per query, with abstention on unanswerable questions, temperature/token bounds, and an audited execution trail; tools available to the agent are explicitly allow-listed, and unregistered tools are rejected
+- **Agent orchestration (Canonical 7-Stage State Machine):**
+  A bounded state machine governed by `AgentState` executes strictly once per query:
+  1. `AUTHENTICATE`: Validates user identity and clearance level ceiling (`PUBLIC`, `INTERNAL`, `RESTRICTED`, `CONFIDENTIAL`).
+  2. `CLASSIFY_REQUEST`: Extracts administrative filters (department, GO number, doc type) and evaluates jurisdiction.
+  3. `RETRIEVE`: Executes exactly one authorized hybrid retrieval pass across repository records.
+  4. `EVIDENCE_CURRENCY_CHECKS`: Assembles evidence packet and checks statutory currency against superseding amendments.
+  5. `GENERATE_OR_ABSTAIN`: Synthesizes cited response or abstains if insufficient records exist (enforcing temperature 0–0.2).
+  6. `VALIDATE_CITATIONS`: Audits and verifies all claim citations against the evidence packet.
+  7. `AUDIT`: Writes an immutable, redacted audit record to the database.
+  - **Terminal States:** `COMPLETED` (successful response), `ABSTAINED` (governed refusal/abstention), or `FAILED` (pipeline error/clearance denial).
+  - **Whitelisted Read-Only Tools (`AgentToolName`):** `search`, `open_cited_source`, and `list_authorised_collections`. No arbitrary web browsing, emailing, or database write tools are available to the model.
 - **Hosted API models:** supported as an alternative or addition to local Ollama models, for deployments that prefer or require it
 
 ### Document processing & OCR
@@ -200,6 +212,8 @@ Put the keys in `.env` (never in tracked files) and restart the API; the compose
 
 Requires Python 3.10+ and Node.js 20+.
 
+> **Database Note:** Native development uses local SQLite (`adam.db`) by default with zero setup. To connect to an external PostgreSQL database instead, export `DATABASE_URL=postgresql+psycopg://...` in your shell or `.env`.
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -221,6 +235,79 @@ Run checks:
 python3 -m pytest -q
 cd ui && npm run build
 ```
+
+## Backend ↔ Frontend Operational Transparency
+
+ADAM incorporates a minimal, security-hardened operational transparency layer providing real-time visibility into the bounded administrative reasoning pipeline without leaking sensitive backend internals.
+
+### Architectural Flow
+
+```text
+[Client / UI] ──(POST /api/chat)──> [FastAPI Router] (assigns trace_id)
+                                          │
+                                          ├── Spawns AgentStateMachine in worker thread
+                                          ▼
+[Pipeline Stages] ────> [OperationalEventEmitter] (monotonic sequencing & stage durations)
+  1. security.started / completed / denied
+  2. query.parsed (safe intent & language)
+  3. retrieval.started / completed (candidate counts)
+  4. evidence.started / completed / insufficient
+  5. currency.checked / warning
+  6. model.loading / ready / failed
+  7. generation.started / completed / answer.grounded / abstained
+  8. execution.completed / failed
+                                          │
+                                          ▼
+[PublicEventSerializer] ──(Zero-leakage boundary enforcement & whitelisting)
+                                          │
+                                          ▼
+[SSE Chat Stream] ────(event: status)──> [Next.js ExecutionStatus Component]
+                                          ├── Live animated progress indicators
+                                          ├── Collapsed badge: "✓ Grounded in N official sources"
+                                          └── Expandable governance audit timeline
+```
+
+### Event Taxonomy
+
+| Event Type | Stage | Status | Description | Public Data Whitelist |
+| :--- | :--- | :--- | :--- | :--- |
+| `security.started` | `security` | `running` | Identity & clearance verification started | None |
+| `security.completed` | `security` | `completed` | Security check passed | None |
+| `security.denied` | `security` | `failed` | Clearance authorization rejected | None |
+| `query.parsed` | `query` | `completed` | Request intent and jurisdiction classified | `query_language`, `is_high_risk`, `is_out_of_jurisdiction` |
+| `retrieval.started` | `retrieval` | `running` | Hybrid search across public records initiated | None |
+| `retrieval.completed` | `retrieval` | `completed` | Record candidates evaluated | `candidate_count`, `records_considered` |
+| `evidence.started` | `evidence` | `running` | Material passage extraction and scoring | None |
+| `evidence.completed` | `evidence` | `completed` | Qualifying evidentiary passages selected | `selected_count` |
+| `evidence.insufficient` | `evidence` | `warning` | No qualifying records in repository | `selected_count: 0` |
+| `currency.checked` | `currency` | `completed` | Statutory currency verified | `banner_count: 0` |
+| `currency.warning` | `currency` | `warning` | Superseding amendments or notices found | `banner_count` |
+| `model.loading` | `model` | `running` | Model runtime activation | `model_name` |
+| `model.ready` | `model` | `completed` | Model inference engine ready | `model_name` |
+| `model.failed` | `model` | `failed` | Model runtime activation error | `model_name` |
+| `generation.started` | `generation` | `running` | Governed answer synthesis started | `model_name` |
+| `generation.completed`| `generation` | `completed` | Answer synthesis finished | `model_name` |
+| `answer.grounded` | `grounding` | `completed` | Answer verified with official citations | `citation_count` |
+| `answer.abstained` | `grounding` | `warning` | Pipeline abstained due to lack of evidence | `citation_count: 0` |
+| `execution.completed`| `execution` | `completed` | Overall execution finished | `citation_count`, `duration_ms` |
+| `execution.failed` | `execution` | `failed` | Execution halted unexpectedly | None |
+
+### Security & Sanitization Boundary
+
+All operational events emitted to the UI boundary pass through `PublicEventSerializer`:
+1. **Attribute Whitelist**: Only approved numerical counts and non-sensitive metadata (`candidate_count`, `selected_count`, `duration_ms`, `banner_count`, `citation_count`, `query_language`, `is_out_of_jurisdiction`, `is_high_risk`, `model_name`) are permitted in public payloads.
+2. **Forbidden Internals**: Keys or values containing SQL queries, file paths, API keys, bearer tokens, system prompts, tracebacks, or clearance mechanics are automatically stripped and purged.
+3. **Pattern Redaction**: Any file paths or potential key strings within human-readable status messages are masked using regex sanitizers (`[path]`, `[redacted]`).
+
+### OpenTelemetry Alignment
+
+Each internal `OperationalEvent` tracks:
+- `trace_id` and `span_id`
+- `parent_span_id`
+- Monotonic `sequence`
+- Timestamp and stage duration in milliseconds (`duration_ms`)
+
+This architecture allows plugging an external OpenTelemetry or Langfuse exporter without altering core agent logic.
 
 ## Troubleshooting
 
