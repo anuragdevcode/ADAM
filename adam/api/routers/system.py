@@ -200,3 +200,321 @@ def get_system_rag_benchmark(
     res["reranker_ablation"] = CANONICAL_RAG_BENCHMARK["reranker_ablation"]
     return res
 
+
+# ── Dynamic Discovery Endpoints ────────────────────────────────────────────
+# These are additive. All existing endpoints above are unchanged.
+
+import threading as _threading
+import time as _time
+from pydantic import BaseModel as _BaseModel
+
+from adam.model.discovery import run_local_discovery, DiscoveredModel
+from adam.model.validation import OllamaValidator
+from adam.model.attestation import ModelAttestor, ATTESTATION_SUITE_VERSION, get_cached_attestation
+from adam.model.providers import (
+    REMOTE_PROVIDER_REGISTRY,
+    UnsafeEndpointError,
+    UnsupportedProtocolError,
+)
+
+# Shared dynamic registry (in-memory for the process lifetime)
+_DYNAMIC_REGISTRY: Dict[str, Dict[str, Any]] = {}
+_DISCOVERY_LOCK = _threading.Lock()
+
+
+def _build_dynamic_model_info(discovered: DiscoveredModel, attestation_status: Optional[str] = None, capabilities: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Build a ModelInfo-compatible dict from a DiscoveredModel."""
+    return {
+        "id": discovered.model_id,
+        "name": discovered.display_name,
+        "revision": "dynamic",
+        "quantization": "dynamic",
+        "file_size_mb": round(discovered.size_bytes / (1024 * 1024), 1) if discovered.size_bytes else 0,
+        "context_window": discovered.context_length or 4096,
+        "languages": ["en"],
+        "is_primary": False,
+        "is_fallback": False,
+        "is_comparator": False,
+        "license_id": "unknown",
+        "license_status": "APPROVED",
+        "requires_legal_review": False,
+        "is_supported": True,
+        "status": "REGISTERED",
+        "serving_runtime": discovered.runtime,
+        "is_installed": True,
+        "unavailable_reason": None,
+        "is_cloud": False,
+        "air_gapped_restricted": False,
+        # Dynamic discovery fields
+        "source": "discovered",
+        "attestation_status": attestation_status or "checking",
+        "attestation_version": ATTESTATION_SUITE_VERSION,
+        "capabilities": capabilities or {},
+        "display_group": "LOCAL",
+        "provider_display": discovered.provider.title(),
+    }
+
+
+@router.post("/system/models/discover")
+def trigger_model_discovery(
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Scan local runtimes (Ollama) for installed models and register new discoveries.
+
+    Returns immediately with the discovered model list.  Technical validation
+    and behavioural attestation run in a background thread.
+
+    Response schema is a superset of the existing GET /api/system/models response
+    — all existing fields are present, new fields are additive.
+    """
+    with _DISCOVERY_LOCK:
+        discovered = run_local_discovery()
+
+    # Build a canonical ModelInfo response for each discovered model.
+    # Models already in the canonical registry are excluded here (they come
+    # through the existing GET /api/system/models path).
+    from adam.model.registry import CANONICAL_MODELS, ModelRegistry
+    canonical_ids = set(CANONICAL_MODELS.keys())
+
+    # Also map common Ollama tags to canonical IDs
+    canonical_ollama_tags = {
+        "qwen3:4b", "qwen3:1.7b", "qwen2.5:3b", "gemma3:4b", "llama3.2:3b",
+    }
+
+    result_models = []
+    new_discoveries: list = []
+    for dm in discovered:
+        if dm.model_id in canonical_ids or dm.model_id in canonical_ollama_tags:
+            # Skip — canonical path handles these
+            continue
+        info = _build_dynamic_model_info(dm, attestation_status="checking")
+        _DYNAMIC_REGISTRY[dm.model_id] = {"discovered": dm.to_dict(), "info": info}
+        result_models.append(info)
+        new_discoveries.append(dm)
+
+    # Trigger async validation + attestation in background (non-blocking)
+    if new_discoveries:
+        _threading.Thread(
+            target=_run_background_attestation,
+            args=(new_discoveries,),
+            daemon=True,
+        ).start()
+
+    return {
+        "discovered_count": len(discovered),
+        "new_models": result_models,
+        "canonical_skipped": len(discovered) - len(new_discoveries),
+        "message": (
+            f"Discovered {len(new_discoveries)} new model(s). "
+            "Technical validation and attestation running in background."
+        ),
+    }
+
+
+def _run_background_attestation(models: list) -> None:
+    """Background task: validate + attest each newly discovered model."""
+    from adam.model.validation import OllamaValidator
+    from adam.model.attestation import ModelAttestor
+    from adam.model.runtime import DeterministicModelRuntime, ModelArtifact
+    from adam.model.registry import ModelRegistry
+    from adam.vocabularies import LicenseStatus, ModelStatus
+
+    validator = OllamaValidator()
+    attestor = ModelAttestor()
+    registry = ModelRegistry()
+
+    for dm in models:
+        try:
+            # Technical validation
+            technical = validator.validate(dm.model_id)
+            if not technical.core_valid:
+                with _DISCOVERY_LOCK:
+                    entry = _DYNAMIC_REGISTRY.get(dm.model_id, {})
+                    if entry:
+                        entry["info"]["attestation_status"] = "unavailable"
+                continue
+
+            # Register the model as a dynamic artifact so the lifecycle manager can use it
+            registry.register_dynamic(
+                model_id=dm.model_id,
+                display_name=dm.display_name,
+                provider=dm.provider,
+                runtime=dm.runtime,
+                size_bytes=dm.size_bytes,
+                context_window=dm.context_length or 4096,
+            )
+
+            # Behavioural attestation using DeterministicModelRuntime as proxy
+            # (real models get attested via OllamaModelRuntime on next full recheck)
+            art = ModelArtifact(
+                id=dm.model_id, name=dm.display_name, revision="dynamic",
+                quantization="dynamic", model_format="dynamic",
+                checksum_sha256="dynamic", file_size_bytes=dm.size_bytes,
+                license_id="unknown", license_status=LicenseStatus.APPROVED,
+                requires_legal_review=False, context_window=dm.context_length or 4096,
+                languages=["en"], serving_runtime=dm.runtime,
+                prompt_template="{system_prompt}\n\n{user_prompt}",
+            )
+            from adam.model.runtime import OllamaModelRuntime
+            runtime = OllamaModelRuntime(art, model_tag=dm.model_id)
+            attestation = attestor.attest(dm.model_id, dm.provider, runtime, technical)
+
+            # Update the in-memory result
+            with _DISCOVERY_LOCK:
+                entry = _DYNAMIC_REGISTRY.get(dm.model_id, {})
+                if entry:
+                    entry["info"]["attestation_status"] = attestation.status
+                    entry["info"]["capabilities"] = attestation.capabilities
+                    entry["info"]["attestation_version"] = attestation.attestation_version
+
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Background attestation failed for %s: %s", dm.model_id, exc
+            )
+
+
+@router.get("/system/models/dynamic")
+def list_dynamic_models() -> List[Dict[str, Any]]:
+    """Return the current set of dynamically discovered (non-canonical) models
+    with their latest attestation status.
+    """
+    with _DISCOVERY_LOCK:
+        return [entry["info"] for entry in _DYNAMIC_REGISTRY.values()]
+
+
+class _ProviderRegistrationRequest(_BaseModel):
+    name: str
+    endpoint_url: str
+    display_name: Optional[str] = None
+    # NOTE: api_key is handled via X-Provider-Api-Key header to avoid
+    # logging in FastAPI access logs (header values are not auto-logged).
+
+
+@router.post("/system/providers")
+def register_remote_provider(
+    req: _ProviderRegistrationRequest,
+    x_provider_api_key: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """Register a remote API provider.
+
+    Performs SSRF validation, protocol detection, and authentication check
+    before storing the provider.  The API key is NEVER returned in the response.
+
+    Returns sanitised provider metadata and the list of discovered models.
+    """
+    api_key = x_provider_api_key.strip() if x_provider_api_key else None
+    try:
+        config = REMOTE_PROVIDER_REGISTRY.register(
+            name=req.name,
+            endpoint_url=req.endpoint_url,
+            display_name=req.display_name,
+            api_key=api_key,
+        )
+    except UnsafeEndpointError as exc:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "unsafe_endpoint",
+                "message": str(exc),
+                "category": "ssrf_protection",
+            },
+        )
+    except UnsupportedProtocolError as exc:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "unsupported_protocol",
+                "message": (
+                    "The endpoint did not respond to any supported protocol probe "
+                    "(OpenAI-compatible or Gemini-compatible). "
+                    "Verify the URL and try again."
+                ),
+                "category": "protocol_detection",
+            },
+        )
+    except Exception:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "provider_unreachable",
+                "message": "Could not connect to the provided endpoint.",
+                "category": "connectivity",
+            },
+        )
+
+    # Return sanitised metadata — no credentials
+    return {
+        **config.to_dict(),
+        "models": [],   # model discovery from remote APIs in future releases
+    }
+
+
+@router.delete("/system/providers/{provider_id}")
+def remove_remote_provider(provider_id: str) -> Dict[str, Any]:
+    """Remove a registered remote API provider and its associated models."""
+    removed = REMOTE_PROVIDER_REGISTRY.remove(provider_id)
+    if not removed:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail={"error": "provider_not_found"})
+    return {"removed": True, "provider_id": provider_id}
+
+
+@router.post("/system/models/{model_id}/recheck")
+def recheck_model(
+    model_id: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Run a lightweight health check on a specific model and return updated status.
+
+    For local Ollama models: re-runs technical validation (NOT full behavioural
+    attestation).  Attestation is only re-run if the cached result has expired.
+    For canonical models: returns the existing registry entry with live
+    is_installed status.
+    """
+    from adam.model.registry import CANONICAL_MODELS, ModelRegistry
+
+    # Check canonical first
+    if model_id in CANONICAL_MODELS:
+        artifact = CANONICAL_MODELS[model_id]
+        is_installed = OllamaModelRuntime(artifact).is_model_present()
+        cached = get_cached_attestation(model_id, artifact.serving_runtime)
+        return {
+            "id": model_id,
+            "is_installed": is_installed,
+            "attestation_status": cached.status if cached else None,
+            "capabilities": cached.capabilities if cached else {},
+            "source": "canonical",
+        }
+
+    # Dynamic model
+    with _DISCOVERY_LOCK:
+        entry = _DYNAMIC_REGISTRY.get(model_id)
+
+    if entry is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail={"error": "model_not_found"})
+
+    dm_dict = entry.get("discovered", {})
+    tag = dm_dict.get("model_id", model_id)
+    validator = OllamaValidator()
+    technical = validator.validate(tag)
+
+    cached = get_cached_attestation(model_id, "ollama")
+    att_status = cached.status if cached else ("checking" if technical.core_valid else "unavailable")
+
+    with _DISCOVERY_LOCK:
+        entry["info"]["attestation_status"] = att_status
+        entry["info"]["is_installed"] = technical.model_exists
+
+    return {
+        "id": model_id,
+        "is_installed": technical.model_exists,
+        "attestation_status": att_status,
+        "capabilities": cached.capabilities if cached else {},
+        "source": "discovered",
+        "technical": technical.to_dict(),
+    }

@@ -81,6 +81,13 @@ class ModelArtifact:
     is_comparator: bool = False
     status: ModelStatus = ModelStatus.REGISTERED
     sbom: Dict[str, Any] = field(default_factory=dict)
+    # Dynamic discovery fields — default to "canonical" so existing code is unaffected
+    source: str = "canonical"                    # "canonical" | "discovered"
+    attestation_status: Optional[str] = None     # approved | limited | rejected | unavailable | None
+    attestation_version: Optional[str] = None
+    capabilities: Dict[str, Any] = field(default_factory=dict)
+    display_group: str = ""                      # LOCAL | REMOTE | "" for canonical
+    provider_display: str = ""                   # e.g. "Ollama" | "Gemini"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -103,6 +110,12 @@ class ModelArtifact:
             "is_comparator": self.is_comparator,
             "status": str(self.status),
             "sbom": self.sbom,
+            "source": self.source,
+            "attestation_status": self.attestation_status,
+            "attestation_version": self.attestation_version,
+            "capabilities": self.capabilities or {},
+            "display_group": self.display_group,
+            "provider_display": self.provider_display,
         }
 
 
@@ -513,3 +526,104 @@ class ModelRegistry:
             return False
         computed = self.compute_sha256(data)
         return computed.lower() == artifact.checksum_sha256.lower()
+
+    # ── Dynamic Discovery Extension ──────────────────────────────────────────
+
+    def register_dynamic(
+        self,
+        model_id: str,
+        display_name: str,
+        provider: str,
+        runtime: str,
+        size_bytes: int = 0,
+        context_window: int = 4096,
+        languages: Optional[List[str]] = None,
+        attestation_status: Optional[str] = None,
+        attestation_version: Optional[str] = None,
+        capabilities: Optional[Dict[str, Any]] = None,
+        display_group: str = "LOCAL",
+        provider_display: str = "",
+    ) -> ModelArtifact:
+        """Register a dynamically discovered model that is NOT in the canonical set.
+
+        Existing canonical models are never overwritten by this method.
+        The resulting artifact uses ``source="discovered"`` and has a stub
+        checksum/license so it can pass through the existing registry machinery.
+
+        The artifact is NOT persisted to the database — dynamic models live
+        in memory for the session duration and are re-discovered on restart.
+
+        Args:
+            model_id: Provider-native model identifier (e.g. "qwen3:4b").
+            display_name: Normalised, HTML-safe human label.
+            provider: Runtime backend name (e.g. "ollama").
+            runtime: Serving runtime string (e.g. "ollama").
+            size_bytes: Model weight size in bytes (0 if unknown).
+            context_window: Context window size (default 4096).
+            languages: List of BCP-47 language codes (default ["en"]).
+            attestation_status: "approved" | "limited" | "rejected" | "unavailable" | None.
+            attestation_version: Attestation suite version string.
+            capabilities: Dict of capability flags (streaming, hindi, etc.).
+            display_group: "LOCAL" | "REMOTE" label for the frontend.
+            provider_display: Human-readable provider label (e.g. "Ollama").
+
+        Returns:
+            The registered ModelArtifact.
+        """
+        # Never overwrite a canonical model
+        if model_id in CANONICAL_MODELS:
+            return CANONICAL_MODELS[model_id]
+
+        # Also skip if it already exists from a previous scan (update instead)
+        existing = self._artifacts.get(model_id)
+        if existing is not None and existing.source == "discovered":
+            # Update attestation info in-place
+            existing.attestation_status = attestation_status
+            existing.attestation_version = attestation_version
+            if capabilities:
+                existing.capabilities = capabilities
+            return existing
+
+        artifact = ModelArtifact(
+            id=model_id,
+            name=display_name,
+            revision="dynamic",
+            quantization="dynamic",
+            model_format="dynamic",
+            checksum_sha256="dynamic-not-pinned",
+            file_size_bytes=size_bytes,
+            license_id="unknown",
+            license_status=LicenseStatus.APPROVED,   # installation implies license acceptance
+            requires_legal_review=False,
+            context_window=context_window,
+            languages=languages or ["en"],
+            serving_runtime=runtime,
+            prompt_template="{system_prompt}\n\n{user_prompt}",  # generic fallback
+            is_primary=False,
+            is_fallback=False,
+            is_comparator=False,
+            status=ModelStatus.REGISTERED,
+            sbom={},
+            source="discovered",
+            attestation_status=attestation_status,
+            attestation_version=attestation_version,
+            capabilities=capabilities or {},
+            display_group=display_group,
+            provider_display=provider_display or provider.title(),
+        )
+        self._artifacts[model_id] = artifact
+        return artifact
+
+    def list_dynamic(self) -> List[ModelArtifact]:
+        """Return only dynamically discovered (non-canonical) artifacts."""
+        return [a for a in self._artifacts.values() if a.source == "discovered"]
+
+    def remove_dynamic(self, model_id: str) -> bool:
+        """Remove a dynamically registered model. Never removes canonical models."""
+        if model_id in CANONICAL_MODELS:
+            return False
+        artifact = self._artifacts.get(model_id)
+        if artifact is not None and artifact.source == "discovered":
+            del self._artifacts[model_id]
+            return True
+        return False

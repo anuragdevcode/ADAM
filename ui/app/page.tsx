@@ -11,9 +11,10 @@ import SourcesView from '@/components/SourcesView';
 import ReviewView from '@/components/ReviewView';
 import SettingsModal from '@/components/SettingsModal';
 import ApiKeyModal from '@/components/ApiKeyModal';
-import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud } from 'lucide-react';
+import AddProviderModal from '@/components/AddProviderModal';
+import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud, Globe } from 'lucide-react';
 import type { DepartmentItem, ModelInfo } from '@/lib/types';
-import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey } from '@/lib/api';
+import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey, triggerModelDiscovery } from '@/lib/api';
 
 const DEFAULT_OFFICER_ID = 'officer_dev_001';
 
@@ -39,6 +40,7 @@ export default function HomePage() {
   // Gemini API Key & Cloud Models
   const [geminiApiKey, setGeminiApiKey] = useState<string | null>(null);
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
+  const [addProviderModalOpen, setAddProviderModalOpen] = useState(false);
 
   const isAirGapped = clearanceLevel === 'RESTRICTED' || clearanceLevel === 'CONFIDENTIAL';
 
@@ -167,74 +169,112 @@ export default function HomePage() {
                   <div className="px-3 py-1 text-[10px] uppercase tracking-wider font-semibold text-gray-400">
                     Model inventory
                   </div>
-                  {models.map((model) => {
-                    const isCloudRestricted = isAirGapped && model.is_cloud;
-                    const isSelectable = Boolean(
-                      model.is_installed &&
-                      !model.requires_legal_review &&
-                      model.is_supported !== false &&
-                      !isCloudRestricted,
-                    );
-                    return (
-                      <button
-                        key={model.id}
-                        type="button"
-                        disabled={!isSelectable}
-                        onClick={() => {
-                          if (!isSelectable) return;
-                          setSelectedModel(model);
-                          if (typeof window !== 'undefined') {
-                            localStorage.setItem('adam_selected_model_id', model.id);
-                          }
-                          setModelDropdownOpen(false);
-                        }}
-                        title={
-                          isCloudRestricted
-                            ? `Cloud models are disabled for ${clearanceLevel} clearance under air-gapped data sovereignty policy`
-                            : isSelectable
-                            ? `Use ${model.name}`
-                            : model.unavailable_reason || 'Not supported / pending review'
-                        }
-                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
-                          isSelectable
-                            ? 'hover:bg-purple-50 text-gray-700 cursor-pointer'
-                            : 'opacity-40 cursor-not-allowed bg-gray-50/80 text-gray-400 select-none'
-                        }`}
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="flex items-center gap-1.5">
-                            <p className="font-medium truncate">{model.name}</p>
-                            {isCloudRestricted ? (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 font-semibold uppercase">
-                                <ShieldAlert className="w-2.5 h-2.5" /> Air-Gapped: Cloud Blocked
-                              </span>
-                            ) : model.is_cloud ? (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold uppercase">
-                                <Cloud className="w-2.5 h-2.5" /> Cloud
-                              </span>
-                            ) : null}
-                            {model.requires_legal_review ? (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold uppercase">
-                                <Lock className="w-2.5 h-2.5" /> Frozen • Legal Review
-                              </span>
-                            ) : !model.is_installed && !isCloudRestricted ? (
-                              <span className="text-[9px] uppercase text-gray-400">
-                                {model.is_cloud ? 'Key required' : 'Not installed'}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            {isCloudRestricted
-                              ? `Cloud disabled under Air-Gapped Data Sovereignty Policy (${clearanceLevel})`
-                              : isSelectable
-                              ? (model.is_cloud ? 'Google Gemini Cloud • Active' : `${model.quantization} • ready locally`)
-                              : model.unavailable_reason}
-                          </p>
+                  {/* Render models grouped by display_group (LOCAL / REMOTE) */}
+                  {(() => {
+                    let lastGroup: string | null = null;
+                    return models.map((model) => {
+                      const isCloudRestricted = isAirGapped && model.is_cloud;
+                      const isSelectable = Boolean(
+                        model.is_installed &&
+                        !model.requires_legal_review &&
+                        model.is_supported !== false &&
+                        !isCloudRestricted,
+                      );
+                      const currentGroup = model.display_group || (model.is_cloud ? 'REMOTE' : 'LOCAL');
+                      const showGroupHeader = currentGroup !== lastGroup;
+                      lastGroup = currentGroup;
+
+                      // Attestation badge helper
+                      const attestationBadge = model.attestation_status ? (
+                        model.attestation_status === 'approved' ? (
+                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+                            ✓ Ready
+                          </span>
+                        ) : model.attestation_status === 'limited' ? (
+                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold">
+                            ⚠ Limited
+                          </span>
+                        ) : model.attestation_status === 'checking' ? (
+                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 font-semibold">
+                            ⟳ Checking
+                          </span>
+                        ) : model.attestation_status === 'unavailable' ? (
+                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 font-semibold">
+                            ✗ Unavailable
+                          </span>
+                        ) : null
+                      ) : null;
+
+                      return (
+                        <div key={model.id}>
+                          {showGroupHeader && (
+                            <div className="px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-gray-400">
+                              {currentGroup === 'LOCAL' ? '⬛ Local' : '🌐 Remote'}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            disabled={!isSelectable}
+                            onClick={() => {
+                              if (!isSelectable) return;
+                              setSelectedModel(model);
+                              if (typeof window !== 'undefined') {
+                                localStorage.setItem('adam_selected_model_id', model.id);
+                              }
+                              setModelDropdownOpen(false);
+                            }}
+                            title={
+                              isCloudRestricted
+                                ? `Cloud models are disabled for ${clearanceLevel} clearance under air-gapped data sovereignty policy`
+                                : isSelectable
+                                ? `Use ${model.name}`
+                                : model.unavailable_reason || 'Not supported / pending review'
+                            }
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
+                              isSelectable
+                                ? 'hover:bg-purple-50 text-gray-700 cursor-pointer'
+                                : 'opacity-40 cursor-not-allowed bg-gray-50/80 text-gray-400 select-none'
+                            }`}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-medium truncate">{model.name}</p>
+                                {isCloudRestricted ? (
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 font-semibold uppercase">
+                                    <ShieldAlert className="w-2.5 h-2.5" /> Air-Gapped: Cloud Blocked
+                                  </span>
+                                ) : model.is_cloud ? (
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold uppercase">
+                                    <Cloud className="w-2.5 h-2.5" /> Cloud
+                                  </span>
+                                ) : null}
+                                {model.requires_legal_review ? (
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold uppercase">
+                                    <Lock className="w-2.5 h-2.5" /> Frozen • Legal Review
+                                  </span>
+                                ) : !model.is_installed && !isCloudRestricted ? (
+                                  <span className="text-[9px] uppercase text-gray-400">
+                                    {model.is_cloud ? 'Key required' : 'Not installed'}
+                                  </span>
+                                ) : null}
+                                {attestationBadge}
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-0.5">
+                                {isCloudRestricted
+                                  ? `Cloud disabled under Air-Gapped Data Sovereignty Policy (${clearanceLevel})`
+                                  : isSelectable
+                                  ? (model.provider_display
+                                      ? `${model.provider_display} • ${model.is_cloud ? 'Active' : model.quantization}`
+                                      : model.is_cloud ? 'Google Gemini Cloud • Active' : `${model.quantization} • ready locally`)
+                                  : model.unavailable_reason}
+                              </p>
+                            </div>
+                            {selectedModel?.id === model.id && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
+                          </button>
                         </div>
-                        {selectedModel?.id === model.id && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
-                      </button>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
 
                   <div className="my-1.5 border-t border-[#eaecf0]" />
 
@@ -262,6 +302,37 @@ export default function HomePage() {
                         Voice & Models
                       </span>
                     )}
+                  </button>
+
+                  {/* Refresh Models button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void triggerModelDiscovery().then((result) => {
+                        if (result && result.discovered_count > 0) {
+                          const activeKey = getStoredGeminiApiKey();
+                          void fetchModels(activeKey, clearanceLevel).then(setModels);
+                        }
+                      });
+                      setModelDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-50 text-gray-600 transition-colors"
+                  >
+                    <span className="text-gray-400 text-sm leading-none">⟳</span>
+                    <span className="font-medium">Refresh Models</span>
+                  </button>
+
+                  {/* Add Remote API button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModelDropdownOpen(false);
+                      setAddProviderModalOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-purple-50 text-purple-700 transition-colors"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    <span className="font-semibold">+ Add Remote API</span>
                   </button>
                 </div>
               )}
@@ -395,6 +466,18 @@ export default function HomePage() {
           });
         }}
       />
+
+      {/* Add Remote API Provider Modal */}
+      {addProviderModalOpen && (
+        <AddProviderModal
+          onClose={() => setAddProviderModalOpen(false)}
+          onRegistered={() => {
+            // Refresh the model list after a new provider is registered
+            const activeKey = getStoredGeminiApiKey();
+            void fetchModels(activeKey, clearanceLevel).then(setModels);
+          }}
+        />
+      )}
     </main>
   );
 }

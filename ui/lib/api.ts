@@ -572,4 +572,70 @@ export async function fetchRagBenchmark(live: boolean = false): Promise<RagBench
   }
 }
 
+// ── Dynamic Model Discovery ─────────────────────────────────────────────────
 
+export async function triggerModelDiscovery(): Promise<import('./types').ModelDiscoveryResult | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/models/discover`, { method: 'POST' });
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchDynamicModels(): Promise<ModelInfo[]> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/models/dynamic`);
+    if (!resp.ok) return [];
+    return resp.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function registerProvider(
+  config: import('./types').ProviderRegistrationRequest,
+  apiKey?: string | null,
+): Promise<import('./types').ProviderRegistrationResult | null> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['X-Provider-Api-Key'] = apiKey;
+    const resp = await fetch(`${API_BASE}/system/providers`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(config),
+    });
+    if (!resp.ok) {
+      // Return structured error from backend — credentials are already stripped server-side
+      const errData = await resp.json().catch(() => null);
+      throw new Error(errData?.detail?.message || `Provider registration failed: ${resp.status}`);
+    }
+    return resp.json();
+  } catch (err) {
+    throw err;
+  }
+}
+
+export async function removeProvider(providerId: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/providers/${encodeURIComponent(providerId)}`, {
+      method: 'DELETE',
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function recheckModel(modelId: string): Promise<ModelInfo | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/models/${encodeURIComponent(modelId)}/recheck`, {
+      method: 'POST',
+    });
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}

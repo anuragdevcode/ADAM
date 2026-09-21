@@ -177,6 +177,41 @@ export interface ModelInfo {
   unavailable_reason?: string | null;
   is_cloud?: boolean;
   air_gapped_restricted?: boolean;
+  source?: 'canonical' | 'discovered';
+  attestation_status?: 'approved' | 'limited' | 'checking' | 'unavailable' | null;
+  attestation_version?: string | null;
+  capabilities?: {
+    streaming?: boolean;
+    structured_output?: boolean;
+    hindi?: boolean;
+    english?: boolean;
+    citation_format?: boolean;
+    instruction_following?: boolean;
+    tool_calling?: boolean;
+  } | null;
+  display_group?: 'LOCAL' | 'REMOTE';
+  provider_display?: string;
+}
+
+export interface ProviderRegistrationRequest {
+  name: string;
+  endpoint_url: string;
+  display_name?: string;
+}
+
+export interface ProviderRegistrationResult {
+  provider_id: string;
+  display_name: string;
+  protocol: string;
+  status: string;
+  models: ModelInfo[];
+}
+
+export interface ModelDiscoveryResult {
+  discovered_count: number;
+  new_models: ModelInfo[];
+  canonical_skipped: number;
+  message: string;
 }
 
 // ── Controlled Vocabularies ────────────────────────────────────────────────
