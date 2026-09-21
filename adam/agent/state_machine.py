@@ -201,11 +201,24 @@ class AgentStateMachine:
         on_event: Optional[Callable[[OperationalEvent], None]] = None,
         trace_id: Optional[str] = None,
         token_callback: Optional[Callable[[str], None]] = None,
+        settings_bundle=None,
     ) -> AgentResponse:
         """Execute full bounded 7-stage state machine."""
         start_time = time.perf_counter()
         user = user_context or UserContext()
         emitter = OperationalEventEmitter(on_event=on_event, trace_id=trace_id)
+
+        # Apply AdvancedSettingsBundle overrides (if provided by the chat API)
+        _retrieval_settings = None
+        if settings_bundle is not None:
+            rs = getattr(settings_bundle, "retrieval", None)
+            gs = getattr(settings_bundle, "generation", None)
+            if rs is not None:
+                top_k = getattr(rs, "top_k", top_k)
+                _retrieval_settings = rs
+            if gs is not None:
+                temperature = getattr(gs, "temperature_rag", temperature)
+                max_tokens = getattr(gs, "max_tokens_rag", max_tokens)
 
         # Enforce Phase 04 temperature constraints [0.0, 0.2]
         if temperature < 0.0 or temperature > 0.2:
@@ -479,7 +492,7 @@ class AgentStateMachine:
             # Reuse passages from the search tool call to avoid redundant database roundtrip
             passages = tool_res.get("raw_passages")
             if passages is None:
-                retriever = HybridRetriever(self.session)
+                retriever = HybridRetriever(self.session, retrieval_settings=_retrieval_settings)
                 passages = retriever.retrieve(parsed_query, user_context=user, top_k=top_k)
 
             cand_count = tool_res.get("total_found", len(passages) if passages else 0)
@@ -526,7 +539,7 @@ class AgentStateMachine:
                 data={"banner_count": 0},
             )
         else:
-            packet_builder = EvidencePacketBuilder(self.session)
+            packet_builder = EvidencePacketBuilder(self.session, retrieval_settings=_retrieval_settings)
             packet = packet_builder.build_packet(
                 query=parsed_query,
                 retrieved_passages=passages,

@@ -375,11 +375,22 @@ class CompactCrossEncoderReranker:
 class HybridRetriever:
     """End-to-end hybrid retrieval engine integrating ACL, BM25, and vector search."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, retrieval_settings=None):
         self.session = session
         self.bm25 = BM25Ranker()
         self.vectorizer = MultilingualSemanticVectorizer()
         self.reranker = CompactCrossEncoderReranker()
+        # Apply RetrievalSettings overrides if provided
+        if retrieval_settings is not None:
+            self._bm25_weight = float(getattr(retrieval_settings, "bm25_weight", 0.65))
+            self._vec_weight = 1.0 - self._bm25_weight
+            self._vector_min_similarity = float(getattr(retrieval_settings, "vector_min_similarity", 0.55))
+            self._enable_rerank = bool(getattr(retrieval_settings, "enable_rerank", True))
+        else:
+            self._bm25_weight = 0.65
+            self._vec_weight = 0.35
+            self._vector_min_similarity = 0.55
+            self._enable_rerank = True
 
     def retrieve(
         self,
@@ -543,7 +554,7 @@ class HybridRetriever:
                 if len(matched_specifiers) == 0:
                     continue
 
-            if substantive_q_terms and not has_go_match and len(matched_substantive) == 0 and vec_val < 0.55:
+            if substantive_q_terms and not has_go_match and len(matched_substantive) == 0 and vec_val < self._vector_min_similarity:
                 continue
 
             scored_candidates.append({
@@ -567,7 +578,7 @@ class HybridRetriever:
             bm25_norm = item["bm25_score"] / max_bm25
             vec_score = item["vector_score"]
             sub_bonus = min(item["matched_substantive_count"] * 0.02, 0.10)
-            item["hybrid_score"] = min(1.0, 0.65 * bm25_norm + 0.35 * vec_score + sub_bonus)
+            item["hybrid_score"] = min(1.0, self._bm25_weight * bm25_norm + self._vec_weight * vec_score + sub_bonus)
 
         scored_candidates.sort(key=lambda x: x["hybrid_score"], reverse=True)
         max_hybrid = scored_candidates[0]["hybrid_score"] if scored_candidates else 1.0
@@ -605,7 +616,8 @@ class HybridRetriever:
             )
             passages.append(passage)
 
-        if enable_rerank and passages:
+        effective_rerank = enable_rerank and self._enable_rerank
+        if effective_rerank and passages:
             passages = self.reranker.rerank(query_text, passages, top_k=top_k)
         else:
             passages = passages[:top_k]

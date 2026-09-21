@@ -25,6 +25,8 @@ import type {
   VoiceStatus,
   SystemSnapshot,
   LastExecutionSnapshot,
+  AdvancedSettingsBundle,
+  AdvancedSettingsResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -57,9 +59,28 @@ export function clearStoredGeminiApiKey(): void {
   } catch {}
 }
 
+const ADVANCED_SETTINGS_STORAGE_KEY = 'adam_advanced_settings';
+
+export function getStoredAdvancedSettings(): AdvancedSettingsBundle | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(ADVANCED_SETTINGS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredAdvancedSettings(bundle: AdvancedSettingsBundle): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ADVANCED_SETTINGS_STORAGE_KEY, JSON.stringify(bundle));
+  } catch {}
+}
+
 /**
  * Stream a chat query using SSE (Server-Sent Events) via fetch.
- * Passes model_id, department_id, and optional geminiApiKey for backend scoping.
+ * Passes model_id, department_id, optional geminiApiKey, and advanced settings for backend scoping.
  */
 export async function streamChat(
   query: string,
@@ -71,12 +92,31 @@ export async function streamChat(
     departmentId?: string | null;
     modelId?: string | null;
     geminiApiKey?: string | null;
+    advancedSettings?: AdvancedSettingsBundle | null;
   } = {},
   callbacks: StreamCallbacks = {},
   signal?: AbortSignal,
 ): Promise<void> {
   let response: Response;
   const geminiKey = options.geminiApiKey || getStoredGeminiApiKey();
+  const activeSettings = options.advancedSettings || getStoredAdvancedSettings();
+
+  const settingsHeaders: Record<string, string> = {};
+  if (activeSettings) {
+    if (activeSettings.preset) {
+      settingsHeaders['X-ADAM-Settings-Preset'] = activeSettings.preset;
+    }
+    if (activeSettings.retrieval?.top_k != null) {
+      settingsHeaders['X-ADAM-Top-K'] = String(activeSettings.retrieval.top_k);
+    }
+    if (activeSettings.generation?.max_tokens_rag != null) {
+      settingsHeaders['X-ADAM-Max-Tokens'] = String(activeSettings.generation.max_tokens_rag);
+    }
+    if (activeSettings.generation?.temperature_rag != null) {
+      settingsHeaders['X-ADAM-Temperature'] = String(activeSettings.generation.temperature_rag);
+    }
+  }
+
   try {
     response = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
@@ -87,6 +127,7 @@ export async function streamChat(
         'X-Clearance-Level': options.clearanceLevel || 'PUBLIC',
         ...(options.departmentId ? { 'X-Department-Id': options.departmentId } : {}),
         ...(geminiKey ? { 'X-Gemini-Api-Key': geminiKey } : {}),
+        ...settingsHeaders,
       },
       body: JSON.stringify({
         query,
@@ -848,6 +889,67 @@ export async function fetchLastExecutionDiagnostics(
     const data = await resp.json();
     if (!data.found) return null;
     return data as LastExecutionSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+// ── Advanced Settings API ──────────────────────────────────────────────────────
+
+export async function fetchAdvancedSettings(userId: string): Promise<AdvancedSettingsResponse | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/advanced-settings`, {
+      headers: { 'X-User-Id': userId || 'anonymous' },
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as AdvancedSettingsResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveAdvancedSettings(
+  userId: string,
+  bundle: AdvancedSettingsBundle,
+  optIn: boolean = true,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/advanced-settings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': userId || 'anonymous',
+      },
+      body: JSON.stringify({
+        preset: bundle.preset,
+        generation: bundle.generation,
+        retrieval: bundle.retrieval,
+        performance: bundle.performance,
+        voice: bundle.voice,
+        opt_in: optIn,
+      }),
+    });
+    if (resp.ok) {
+      setStoredAdvancedSettings(bundle);
+    }
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function resetAdvancedSettings(userId: string): Promise<AdvancedSettingsBundle | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/system/advanced-settings`, {
+      method: 'DELETE',
+      headers: { 'X-User-Id': userId || 'anonymous' },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data.settings) {
+      setStoredAdvancedSettings(data.settings);
+    }
+    return data.settings as AdvancedSettingsBundle;
   } catch {
     return null;
   }

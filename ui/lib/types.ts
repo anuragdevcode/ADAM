@@ -570,3 +570,68 @@ export interface SystemSnapshot {
   last_execution: LastExecutionSnapshot | null;
 }
 
+// ── Advanced Settings Types ────────────────────────────────────────────────────
+
+export type AdvancedSettingsPreset = 'PRECISE' | 'BALANCED' | 'THOROUGH' | 'CUSTOM';
+
+export interface GenerationSettings {
+  temperature_rag: number;
+  temperature_conversational: number;
+  max_tokens_rag: number;
+  max_tokens_conversational: number;
+  top_p: number;
+  top_k_sampling: number;
+  min_p: number;
+  context_size: number;
+  max_rag_prompt_passages: number;
+  thinking_enabled: boolean;
+  thinking_budget: number;
+}
+
+export interface RetrievalSettings {
+  top_k: number;
+  enable_rerank: boolean;
+  bm25_weight: number;
+  vector_min_similarity: number;
+  min_score_threshold: number;
+  min_passages: number;
+  max_passages: number;
+}
+
+export interface PerformanceSettings {
+  environment_profile: 'MACBOOK_AIR_8GB' | 'DEV_SERVER' | 'GOV_PRODUCTION';
+  cache_ttl_seconds: number;
+  cache_max_entries: number;
+}
+
+export interface VoiceSettings {
+  default_voice_language: 'hi' | 'en' | 'hi-en';
+  tts_enabled_default: boolean;
+}
+
+export interface AdvancedSettingsBundle {
+  preset: AdvancedSettingsPreset;
+  generation: GenerationSettings;
+  retrieval: RetrievalSettings;
+  performance: PerformanceSettings;
+  voice: VoiceSettings;
+}
+
+export interface SettingFieldMetadata {
+  label: string;
+  description: string;
+  type: 'float' | 'int' | 'bool' | 'enum';
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: Array<{ value: string; label: string }>;
+  impact: 'accuracy' | 'speed' | 'memory';
+  default: number | boolean | string;
+}
+
+export interface AdvancedSettingsResponse {
+  current: AdvancedSettingsBundle;
+  defaults: AdvancedSettingsBundle;
+  presets: Record<AdvancedSettingsPreset, AdvancedSettingsBundle>;
+  metadata: Record<string, SettingFieldMetadata>;
+}

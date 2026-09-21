@@ -33,8 +33,17 @@ class EvidencePacketBuilder:
     MAX_PASSAGES: int = 8
     MIN_SCORE_THRESHOLD: float = 0.05  # Filter out irrelevant noise
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, retrieval_settings=None):
         self.session = session
+        # Apply RetrievalSettings overrides if provided (from AdvancedSettingsBundle)
+        if retrieval_settings is not None:
+            self._min_passages = getattr(retrieval_settings, "min_passages", self.MIN_PASSAGES)
+            self._max_passages = getattr(retrieval_settings, "max_passages", self.MAX_PASSAGES)
+            self._min_score_threshold = getattr(retrieval_settings, "min_score_threshold", self.MIN_SCORE_THRESHOLD)
+        else:
+            self._min_passages = self.MIN_PASSAGES
+            self._max_passages = self.MAX_PASSAGES
+            self._min_score_threshold = self.MIN_SCORE_THRESHOLD
 
     def build_packet(
         self,
@@ -50,15 +59,15 @@ class EvidencePacketBuilder:
         top_score = retrieved_passages[0].score if retrieved_passages else 0.0
         filtered = [
             p for p in retrieved_passages
-            if p.score >= max(self.MIN_SCORE_THRESHOLD, top_score * 0.40)
+            if p.score >= max(self._min_score_threshold, top_score * 0.40)
             or (query.go_number and p.go_number and query.go_number.lower() in p.go_number.lower())
         ]
 
         if not filtered:
             return EvidencePacket(query=query, passages=[])
 
-        # 2. Select initial top passages (bounded by MAX_PASSAGES)
-        selected_passages: List[EvidencePassage] = filtered[: self.MAX_PASSAGES]
+        # 2. Select initial top passages (bounded by _max_passages)
+        selected_passages: List[EvidencePassage] = filtered[: self._max_passages]
         seen_chunk_ids: Set[str] = {p.chunk_id for p in selected_passages}
         seen_doc_ids: Set[str] = {p.document_id for p in selected_passages}
 

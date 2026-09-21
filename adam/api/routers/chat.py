@@ -38,6 +38,10 @@ async def chat_endpoint(
     db: Session = Depends(get_db),
     user_ctx: UserContext = Depends(get_user_context),
     x_gemini_api_key: Optional[str] = Header(None),
+    x_adam_settings_preset: Optional[str] = Header(None),
+    x_adam_top_k: Optional[str] = Header(None),
+    x_adam_max_tokens: Optional[str] = Header(None),
+    x_adam_temperature: Optional[str] = Header(None),
 ):
     """Stream response tokens and citations using Server-Sent Events (SSE)."""
     # Scope department if explicitly requested in payload
@@ -45,6 +49,43 @@ async def chat_endpoint(
         user_ctx.department_id = req.department_id
 
     effective_gemini_key = x_gemini_api_key or req.api_key
+
+    # Build AdvancedSettingsBundle from optional headers
+    _settings_bundle = None
+    try:
+        from adam.settings.advanced_settings import (
+            AdvancedSettingsManager, AdvancedSettingsBundle,
+            PRESET_BUNDLES, AdvancedSettingsPreset, DEFAULT_BUNDLE,
+        )
+        user_id = getattr(user_ctx, "user_id", "anonymous") or "anonymous"
+        # Start from DB-persisted settings (or defaults)
+        manager = AdvancedSettingsManager(db, user_id=user_id)
+        _settings_bundle = manager.load()
+
+        # Apply per-request header overrides
+        if x_adam_settings_preset:
+            try:
+                preset = AdvancedSettingsPreset(x_adam_settings_preset.upper())
+                _settings_bundle = AdvancedSettingsBundle.from_dict(PRESET_BUNDLES[preset].to_dict())
+            except (ValueError, KeyError):
+                pass
+        if x_adam_top_k:
+            try:
+                _settings_bundle.retrieval.top_k = max(3, min(20, int(x_adam_top_k)))
+            except (ValueError, TypeError):
+                pass
+        if x_adam_max_tokens:
+            try:
+                _settings_bundle.generation.max_tokens_rag = max(256, min(4096, int(x_adam_max_tokens)))
+            except (ValueError, TypeError):
+                pass
+        if x_adam_temperature:
+            try:
+                _settings_bundle.generation.temperature_rag = max(0.0, min(0.2, float(x_adam_temperature)))
+            except (ValueError, TypeError):
+                pass
+    except Exception:
+        _settings_bundle = None  # Fall back to defaults on any error
 
     async def generate() -> AsyncGenerator[str, None]:
         session_id = req.session_id
@@ -109,6 +150,8 @@ async def chat_endpoint(
                         sig = inspect.signature(target_func)
                         if "token_callback" in sig.parameters:
                             run_kwargs["token_callback"] = token_callback
+                        if "settings_bundle" in sig.parameters and _settings_bundle is not None:
+                            run_kwargs["settings_bundle"] = _settings_bundle
                     except Exception:
                         pass
                     return agent.run(**run_kwargs)

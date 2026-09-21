@@ -13,7 +13,8 @@ import SettingsModal from '@/components/SettingsModal';
 import ApiKeyModal from '@/components/ApiKeyModal';
 import AddProviderModal from '@/components/AddProviderModal';
 import SystemIntrospectionModal from '@/components/SystemIntrospectionModal';
-import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud, Globe, Activity } from 'lucide-react';
+import AdvancedSettingsModal from '@/components/AdvancedSettingsModal';
+import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud, Globe, Activity, SlidersHorizontal } from 'lucide-react';
 import type { DepartmentItem, ModelInfo } from '@/lib/types';
 import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey, triggerModelDiscovery } from '@/lib/api';
 
@@ -25,6 +26,7 @@ export default function HomePage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [introspectionOpen, setIntrospectionOpen] = useState(false);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
 
   // Officer Identity & Clearance State
   const [officerUserId, setOfficerUserId] = useState(DEFAULT_OFFICER_ID);
@@ -386,6 +388,17 @@ export default function HomePage() {
                 <span className="hidden sm:inline">Self-Model</span>
               </button>
 
+              {/* Advanced Settings Button */}
+              <button
+                type="button"
+                onClick={() => setAdvancedSettingsOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:bg-purple-50 text-xs font-semibold text-gray-700 hover:text-purple-700 transition-all"
+                title="Open Advanced Settings & Profile Tuner"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />
+                <span className="hidden sm:inline">Advanced</span>
+              </button>
+
               {/* + New Thread Button */}
               <button
                 type="button"
@@ -499,6 +512,13 @@ export default function HomePage() {
         sessionId={activeSessionId}
         userId={officerUserId}
         clearanceLevel={clearanceLevel}
+      />
+
+      {/* Advanced Settings & Profile Tuner Modal */}
+      <AdvancedSettingsModal
+        isOpen={advancedSettingsOpen}
+        onClose={() => setAdvancedSettingsOpen(false)}
+        userId={officerUserId}
       />
     </main>
   );

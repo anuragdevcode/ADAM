@@ -589,3 +589,87 @@ def get_last_execution_diagnostics(
         "timestamp": audit_snap.timestamp,
     }
     return SecretRedactor.sanitize_data(res)
+
+
+# ── Advanced Settings Endpoints ────────────────────────────────────────────────
+
+@router.get("/system/advanced-settings")
+def get_advanced_settings(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+) -> Dict[str, Any]:
+    """Return current advanced settings for the user, all preset bundles, default values, and metadata."""
+    from adam.settings.advanced_settings import (
+        AdvancedSettingsManager,
+        PRESET_BUNDLES,
+        SETTINGS_METADATA,
+        DEFAULT_BUNDLE,
+        AdvancedSettingsPreset,
+    )
+
+    user_id = x_user_id or "anonymous"
+    manager = AdvancedSettingsManager(db, user_id=user_id)
+    current = manager.load()
+
+    presets_out = {}
+    for preset_enum, bundle in PRESET_BUNDLES.items():
+        presets_out[preset_enum.value] = bundle.to_dict()
+
+    return {
+        "current": current.to_dict(),
+        "defaults": DEFAULT_BUNDLE.to_dict(),
+        "presets": presets_out,
+        "metadata": SETTINGS_METADATA,
+    }
+
+
+class AdvancedSettingsRequest(BaseModel):
+    preset: str = "BALANCED"
+    generation: Dict[str, Any] = {}
+    retrieval: Dict[str, Any] = {}
+    performance: Dict[str, Any] = {}
+    voice: Dict[str, Any] = {}
+    opt_in: bool = True
+
+
+@router.post("/system/advanced-settings")
+def save_advanced_settings(
+    req: AdvancedSettingsRequest,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+) -> Dict[str, Any]:
+    """Validate and persist advanced settings for the user."""
+    from adam.settings.advanced_settings import AdvancedSettingsManager, AdvancedSettingsBundle
+
+    user_id = x_user_id or "anonymous"
+    bundle = AdvancedSettingsBundle.from_dict({
+        "preset": req.preset,
+        "generation": req.generation,
+        "retrieval": req.retrieval,
+        "performance": req.performance,
+        "voice": req.voice,
+    })
+
+    errors = bundle.validate()
+    if errors:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail={"errors": errors})
+
+    manager = AdvancedSettingsManager(db, user_id=user_id)
+    manager.save(bundle, opt_in=req.opt_in)
+
+    return {"saved": True, "settings": bundle.to_dict()}
+
+
+@router.delete("/system/advanced-settings")
+def reset_advanced_settings(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+) -> Dict[str, Any]:
+    """Reset advanced settings to BALANCED defaults."""
+    from adam.settings.advanced_settings import AdvancedSettingsManager
+
+    user_id = x_user_id or "anonymous"
+    manager = AdvancedSettingsManager(db, user_id=user_id)
+    default = manager.reset()
+    return {"reset": True, "settings": default.to_dict()}
