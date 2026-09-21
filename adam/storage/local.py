@@ -33,13 +33,20 @@ class LocalStorageBackend(StorageBackend):
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
 
     def _resolve_path(self, key: str) -> Path:
-        # Sanitize key and partition by prefix to prevent directory bloat
-        clean_key = key.replace("..", "").lstrip("/\\")
+        clean_key = key.lstrip("/\\")
         # If key is sha256 or starts with hex hash, partition by first 2 chars
         if len(clean_key) >= 4 and all(c in "0123456789abcdefABCDEF-_" for c in clean_key[:4]):
             prefix = clean_key[:2]
-            return self.objects_dir / prefix / clean_key
-        return self.objects_dir / clean_key
+            candidate = self.objects_dir / prefix / clean_key
+        else:
+            candidate = self.objects_dir / clean_key
+
+        # Strict path traversal check: resolved path must be within objects_dir
+        resolved = candidate.resolve()
+        objects_root = self.objects_dir.resolve()
+        if not resolved.is_relative_to(objects_root):
+            raise StorageError(f"Access denied: path traversal attempt detected in key '{key}'")
+        return candidate
 
     def store(
         self,

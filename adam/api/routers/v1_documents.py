@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from adam.api.deps import get_db, get_user_context
+from adam.api.services.acl_service import AclService
 from adam.db.models import Document, DocumentVersion, DocumentPage, AccessGrant
 from adam.rag.models import UserContext
 from adam.storage.base import get_storage_backend
@@ -17,48 +18,7 @@ router = APIRouter(prefix="/v1", tags=["v1-documents"])
 
 def can_access_document(user_ctx: UserContext, doc: Document, db: Session) -> bool:
     """Evaluate whether the given user context is authorized to view the document."""
-    if user_ctx.is_admin():
-        return True
-
-    # PUBLIC is always visible
-    if doc.classification == Classification.PUBLIC.value:
-        return True
-
-    # Check clearance hierarchy
-    hierarchy = {
-        Classification.PUBLIC.value: [Classification.PUBLIC.value],
-        Classification.INTERNAL.value: [Classification.PUBLIC.value, Classification.INTERNAL.value],
-        Classification.RESTRICTED.value: [Classification.PUBLIC.value, Classification.INTERNAL.value, Classification.RESTRICTED.value],
-        Classification.CONFIDENTIAL.value: [
-            Classification.PUBLIC.value,
-            Classification.INTERNAL.value,
-            Classification.RESTRICTED.value,
-            Classification.CONFIDENTIAL.value,
-        ],
-    }
-    allowed_classifications = hierarchy.get(user_ctx.clearance_level, [Classification.PUBLIC.value])
-    if doc.classification not in allowed_classifications:
-        # Check if an explicit AccessGrant exists
-        now = datetime.now(timezone.utc)
-        subjects = [user_ctx.user_id] + list(user_ctx.roles or [])
-        grant = (
-            db.query(AccessGrant)
-            .filter(
-                AccessGrant.subject_id.in_(subjects),
-                AccessGrant.document_id == doc.id,
-                AccessGrant.action.in_([AccessAction.READ.value, AccessAction.ADMIN.value, "READ", "ADMIN"]),
-                (AccessGrant.expires_at.is_(None) | (AccessGrant.expires_at > now)),
-            )
-            .first()
-        )
-        if not grant:
-            return False
-
-    # Check department boundary for non-public documents
-    if user_ctx.department_id and doc.department_id and doc.department_id != user_ctx.department_id:
-        return False
-
-    return True
+    return AclService.can_access_document(user_ctx, doc, db)
 
 
 @router.get("/documents/{doc_id}/versions/{version_id}/pages/{page_num}")

@@ -77,7 +77,8 @@ async def v1_chat(
 
     # Run execution synchronously in threadpool to avoid blocking event loop
     try:
-        resp = await asyncio.get_event_loop().run_in_executor(
+        loop = asyncio.get_running_loop()
+        resp = await loop.run_in_executor(
             None,
             lambda: agent.run(
                 query=req.message,

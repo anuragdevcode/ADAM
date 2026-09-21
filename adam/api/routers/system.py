@@ -43,6 +43,7 @@ import os
 import httpx
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Header
+from adam.agent.redaction import SecretRedactor
 
 
 class ValidateKeyRequest(BaseModel):
@@ -56,10 +57,10 @@ def validate_gemini_key(req: ValidateKeyRequest) -> Dict[str, Any]:
     if not key:
         return {"valid": False, "message": "API key cannot be empty."}
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    url = "https://generativelanguage.googleapis.com/v1beta/models"
     try:
         with httpx.Client(timeout=10.0) as client:
-            resp = client.get(url)
+            resp = client.get(url, headers={"x-goog-api-key": key})
             if resp.status_code == 200:
                 return {
                     "valid": True,
@@ -77,9 +78,10 @@ def validate_gemini_key(req: ValidateKeyRequest) -> Dict[str, Any]:
                     "message": f"Google API returned error status {resp.status_code}.",
                 }
     except Exception as e:
+        sanitized_msg = SecretRedactor.sanitize_text(f"Connection to Google API failed: {str(e)}").replace(key, "[REDACTED_API_KEY]")
         return {
             "valid": False,
-            "message": f"Connection to Google API failed: {str(e)}",
+            "message": sanitized_msg,
         }
 
 

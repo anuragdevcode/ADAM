@@ -102,3 +102,19 @@ class BaseConnector(ABC):
         """Fetch immutable original bytes and HTTP headers for a discovered item."""
         pass
 
+    def close(self) -> None:
+        """Release any underlying network connections, file descriptors, or client sessions."""
+        http_client = getattr(self, "_http_client", None)
+        if http_client is not None and hasattr(http_client, "close"):
+            try:
+                http_client.close()
+            except Exception:
+                pass
+            self._http_client = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+

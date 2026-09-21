@@ -7,6 +7,7 @@ pagination (watermark_timestamp, unique_id).
 
 import json
 import logging
+import re
 from datetime import datetime, timezone, date
 from typing import Iterator, Optional, Dict, Any, Tuple
 from sqlalchemy import create_engine, text
@@ -17,6 +18,18 @@ from adam.db.models import Source
 from adam.vocabularies import DocType, AuthorityLevel, Classification
 
 logger = logging.getLogger(__name__)
+
+_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_sql_identifier(name: str, param_name: str = "identifier") -> str:
+    """Ensure SQL identifier matches strict alphanumeric whitelist to prevent SQL injection."""
+    cleaned = (name or "").strip()
+    if not _IDENTIFIER_RE.match(cleaned):
+        raise ValueError(
+            f"Invalid SQL {param_name}: '{name}'. Identifiers must be alphanumeric and start with a letter or underscore."
+        )
+    return cleaned
 
 
 class DatabaseConnector(BaseConnector):
@@ -81,14 +94,14 @@ class DatabaseConnector(BaseConnector):
 
         table_name = cfg.get("table_name")
         custom_query = cfg.get("query")
-        watermark_col = cfg.get("watermark_column", "updated_at")
-        id_col = cfg.get("id_column", "id")
-        title_col = cfg.get("title_column", "title")
-        content_col = cfg.get("content_column", "content")
-        date_col = cfg.get("date_column", "issued_on")
-        go_num_col = cfg.get("go_number_column", "go_number")
-        dept_col = cfg.get("department_column", "department_id")
-        batch_size = int(cfg.get("batch_size", 100))
+        watermark_col = _validate_sql_identifier(cfg.get("watermark_column", "updated_at"), "watermark_column")
+        id_col = _validate_sql_identifier(cfg.get("id_column", "id"), "id_column")
+        title_col = _validate_sql_identifier(cfg.get("title_column", "title"), "title_column")
+        content_col = _validate_sql_identifier(cfg.get("content_column", "content"), "content_column")
+        date_col = _validate_sql_identifier(cfg.get("date_column", "issued_on"), "date_column")
+        go_num_col = _validate_sql_identifier(cfg.get("go_number_column", "go_number"), "go_number_column")
+        dept_col = _validate_sql_identifier(cfg.get("department_column", "department_id"), "department_column")
+        batch_size = max(1, min(10000, int(cfg.get("batch_size", 100))))
 
         cursor_wm = compound_cursor.get("watermark") if compound_cursor else None
         cursor_id = compound_cursor.get("last_id") if compound_cursor else None
@@ -101,6 +114,7 @@ class DatabaseConnector(BaseConnector):
             else:
                 if not table_name:
                     raise ValueError(f"Source '{source.id}' missing required 'table_name' or 'query'.")
+                safe_table_name = _validate_sql_identifier(table_name, "table_name")
 
                 where_clauses = []
                 params = {}
@@ -117,7 +131,7 @@ class DatabaseConnector(BaseConnector):
 
                 where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
                 order_sql = f"ORDER BY {watermark_col} ASC, {id_col} ASC"
-                sql = f"SELECT * FROM {table_name} {where_sql} {order_sql} LIMIT {batch_size}"
+                sql = f"SELECT * FROM {safe_table_name} {where_sql} {order_sql} LIMIT {batch_size}"
 
                 result = conn.execute(text(sql), params)
                 columns = result.keys()
@@ -193,3 +207,18 @@ class DatabaseConnector(BaseConnector):
             http_headers={"content-type": mime_type},
             retrieved_at=datetime.now(timezone.utc),
         )
+
+    def close(self) -> None:
+        """Dispose cached SQLAlchemy engine and connection pool."""
+        if self._engine is not None:
+            try:
+                self._engine.dispose()
+            except Exception:
+                pass
+            self._engine = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()

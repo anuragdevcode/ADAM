@@ -144,17 +144,23 @@ class HeavyWorkerCoordinator:
                 else:
                     break
 
-            # ── 2. Cross-Process OS File Lock (for exclusive profile) ─────
+            # Pre-register task in-process to prevent another thread from grabbing it
+            self._active_tasks[task_id] = task_type
+            self._task_started_times[task_id] = time.time()
+
+        # ── 2. Cross-Process OS File Lock (for exclusive profile) ─────
+        acquired_flock = False
+        try:
             if enforce_exclusive:
                 fd = open(lock_file_path, "a+")
                 flock_start = time.time()
                 while True:
                     try:
                         try_lock_exclusive(fd)
+                        acquired_flock = True
                         break
                     except (BlockingIOError, OSError):
                         if timeout_seconds <= 0.0:
-                            fd.close()
                             raise ResourceContentionError(
                                 f"Cannot execute '{task_type.value}': heavy worker is currently occupied "
                                 "by another OS worker process. Phase 04 specification strictly prohibits "
@@ -162,7 +168,6 @@ class HeavyWorkerCoordinator:
                             )
                         flock_elapsed = time.time() - flock_start
                         if flock_elapsed >= timeout_seconds:
-                            fd.close()
                             raise ResourceContentionError(
                                 f"Timed out waiting for process lock on heavy worker after {timeout_seconds}s."
                             )
@@ -181,30 +186,28 @@ class HeavyWorkerCoordinator:
                 except OSError:
                     pass
 
-            # Register task in-process
-            self._active_tasks[task_id] = task_type
-            self._task_started_times[task_id] = time.time()
-
-        try:
             yield
         finally:
             with self._lock:
                 self._active_tasks.pop(task_id, None)
                 self._task_started_times.pop(task_id, None)
-
-                if enforce_exclusive and fd is not None:
-                    try:
-                        if state_file_path.exists():
-                            state_file_path.unlink()
-                    except OSError:
-                        pass
-                    try:
-                        unlock(fd)
-                        fd.close()
-                    except OSError:
-                        pass
-
                 self._condition.notify_all()
+
+            if enforce_exclusive and fd is not None:
+                try:
+                    if state_file_path.exists():
+                        state_file_path.unlink()
+                except OSError:
+                    pass
+                try:
+                    if acquired_flock:
+                        unlock(fd)
+                except OSError:
+                    pass
+                try:
+                    fd.close()
+                except OSError:
+                    pass
 
     def get_status(self) -> Dict[str, Any]:
         """Return diagnostic status of heavy worker coordinator."""

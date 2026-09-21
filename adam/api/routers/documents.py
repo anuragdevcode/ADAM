@@ -18,6 +18,7 @@ from adam.db.models import (
     PrecedentReference,
     Source,
 )
+from adam.api.services.acl_service import AclService
 from adam.ingest.validator import ContentValidator
 from adam.rag.models import UserContext
 from adam.storage.local import LocalStorageBackend
@@ -35,20 +36,7 @@ router = APIRouter()
 
 def get_allowed_classifications(clearance_level: str, is_admin: bool = False) -> List[str]:
     """Calculate accessible classifications based on clearance hierarchy."""
-    if is_admin:
-        return [c.value for c in Classification]
-    hierarchy = {
-        Classification.PUBLIC.value: [Classification.PUBLIC.value],
-        Classification.INTERNAL.value: [Classification.PUBLIC.value, Classification.INTERNAL.value],
-        Classification.RESTRICTED.value: [Classification.PUBLIC.value, Classification.INTERNAL.value, Classification.RESTRICTED.value],
-        Classification.CONFIDENTIAL.value: [
-            Classification.PUBLIC.value,
-            Classification.INTERNAL.value,
-            Classification.RESTRICTED.value,
-            Classification.CONFIDENTIAL.value,
-        ],
-    }
-    return hierarchy.get(clearance_level, [Classification.PUBLIC.value])
+    return AclService.get_accessible_classifications(clearance_level, is_admin)
 
 
 @router.get("/documents")
@@ -85,21 +73,36 @@ def list_documents(
     total = query.count()
     docs = query.order_by(Document.created_at.desc()).offset(offset).limit(limit).all()
 
+    # Batch fetch latest versions and page counts to avoid N+1 queries
+    doc_ids = [doc.id for doc in docs]
+    latest_ver_by_doc: Dict[str, DocumentVersion] = {}
+    page_count_by_version: Dict[str, int] = {}
+
+    if doc_ids:
+        all_versions = (
+            db.query(DocumentVersion)
+            .filter(DocumentVersion.document_id.in_(doc_ids))
+            .order_by(DocumentVersion.retrieved_at.desc())
+            .all()
+        )
+        for ver in all_versions:
+            if ver.document_id not in latest_ver_by_doc:
+                latest_ver_by_doc[ver.document_id] = ver
+
+        version_ids = [v.id for v in latest_ver_by_doc.values()]
+        if version_ids:
+            page_counts_raw = (
+                db.query(DocumentPage.version_id, func.count(DocumentPage.id))
+                .filter(DocumentPage.version_id.in_(version_ids))
+                .group_by(DocumentPage.version_id)
+                .all()
+            )
+            page_count_by_version = dict(page_counts_raw)
+
     items = []
     for doc in docs:
-        latest_ver = (
-            db.query(DocumentVersion)
-            .filter(DocumentVersion.document_id == doc.id)
-            .order_by(DocumentVersion.retrieved_at.desc())
-            .first()
-        )
-        page_count = (
-            db.query(DocumentPage)
-            .filter(DocumentPage.version_id == latest_ver.id)
-            .count()
-            if latest_ver
-            else 0
-        )
+        latest_ver = latest_ver_by_doc.get(doc.id)
+        page_count = page_count_by_version.get(latest_ver.id, 0) if latest_ver else 0
 
         items.append(
             {
@@ -139,9 +142,8 @@ def get_document_details(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # ACL Verification
-    allowed = get_allowed_classifications(user_ctx.clearance_level, user_ctx.is_admin())
-    if doc.classification not in allowed:
+    # Centralized ACL Verification
+    if not AclService.can_access_document(user_ctx, doc, db):
         raise HTTPException(status_code=403, detail="Clearance level insufficient to view document")
 
     latest_ver = (

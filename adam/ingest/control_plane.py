@@ -62,7 +62,7 @@ class JobController:
         self.job_id = job_id
         self.pause_event = threading.Event()
         self.stop_event = threading.Event()
-        self.listeners: Set[asyncio.Queue] = set()
+        self.listeners: Dict[asyncio.Queue, Optional[asyncio.AbstractEventLoop]] = {}
         self.last_broadcast_time: float = 0.0
         self.lock = threading.Lock()
 
@@ -78,13 +78,18 @@ class JobController:
     def is_stopped(self) -> bool:
         return self.stop_event.is_set()
 
-    def add_listener(self, q: asyncio.Queue) -> None:
+    def add_listener(self, q: asyncio.Queue, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        if loop is None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
         with self.lock:
-            self.listeners.add(q)
+            self.listeners[q] = loop
 
     def remove_listener(self, q: asyncio.Queue) -> None:
         with self.lock:
-            self.listeners.discard(q)
+            self.listeners.pop(q, None)
 
     def broadcast(self, event_data: Dict[str, Any], force: bool = False) -> None:
         now = time.time()
@@ -94,9 +99,12 @@ class JobController:
 
         self.last_broadcast_time = now
         with self.lock:
-            for q in list(self.listeners):
+            for q, loop in list(self.listeners.items()):
                 try:
-                    q.put_nowait(event_data)
+                    if loop and loop.is_running():
+                        loop.call_soon_threadsafe(q.put_nowait, event_data)
+                    else:
+                        q.put_nowait(event_data)
                 except Exception:
                     pass
 

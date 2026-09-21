@@ -104,8 +104,12 @@ export default function SourcesView() {
     loadData();
   }, []);
 
+  // Polling lock and mount state
+  const isPollingRef = useRef(false);
+
   // Poll active jobs if any are currently executing
   useEffect(() => {
+    let isMounted = true;
     const hasActiveJobs = jobs.some((j) =>
       ['QUEUED', 'DISCOVERY', 'PROCESSING', 'DRAINING', 'CANCELLING'].includes(j.status)
     );
@@ -113,14 +117,28 @@ export default function SourcesView() {
     if (!hasActiveJobs) return;
 
     const interval = setInterval(async () => {
-      const updatedJobs = await fetchIngestionJobs();
-      setJobs(updatedJobs);
-      // Also refresh sources to update doc counts & statuses
-      const updatedSources = await fetchSources();
-      setSources(updatedSources);
+      if (isPollingRef.current) return;
+      isPollingRef.current = true;
+      try {
+        const [updatedJobs, updatedSources] = await Promise.all([
+          fetchIngestionJobs(),
+          fetchSources(),
+        ]);
+        if (isMounted) {
+          setJobs(updatedJobs);
+          setSources(updatedSources);
+        }
+      } catch (err) {
+        console.error('Polling error in SourcesView:', err);
+      } finally {
+        isPollingRef.current = false;
+      }
     }, 2500);
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [jobs]);
 
   // Source action handlers

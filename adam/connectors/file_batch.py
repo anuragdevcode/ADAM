@@ -72,6 +72,17 @@ class FileBatchConnector(BaseConnector):
 
         # 2. Local directory scan
         if batch_dir and batch_dir.exists():
+            resolved_batch = batch_dir.resolve()
+            if source.permitted_path_prefixes:
+                allowed = any(
+                    str(resolved_batch).startswith(str(Path(p).resolve())) or p == "/"
+                    for p in source.permitted_path_prefixes
+                )
+                if not allowed:
+                    raise ValueError(
+                        f"Batch directory '{batch_dir}' is outside authorized path prefixes: {source.permitted_path_prefixes}"
+                    )
+
             for path in sorted(batch_dir.glob("**/*")):
                 if path.is_file() and not path.name.startswith("."):
                     ext = path.suffix.lower()

@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, Tuple
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from adam.db.models import IdempotencyRecord
 
@@ -54,6 +55,13 @@ class IdempotencyManager:
             db.delete(record)
             db.commit()
             return None
+
+        # Verify payload consistency (prevent silent corruption on key reuse)
+        if record.request_hash and record.request_hash != req_hash:
+            raise HTTPException(
+                status_code=409,
+                detail="Idempotency key reuse conflict: request payload does not match the original request.",
+            )
 
         # Return cached status code and json payload
         return record.response_status, record.response_json

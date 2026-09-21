@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from adam.agent.redaction import SecretRedactor
 from adam.api.deps import get_db, get_user_context
 from adam.db.models import AgentExecutionAudit
 from adam.rag.models import UserContext
@@ -25,7 +26,7 @@ def list_execution_audits(
         .all()
     )
 
-    return [
+    items = [
         {
             "id": r.id,
             "session_id": r.session_id,
@@ -48,6 +49,7 @@ def list_execution_audits(
         }
         for r in records
     ]
+    return SecretRedactor.sanitize_data(items)
 
 
 @router.get("/audit/metrics")
