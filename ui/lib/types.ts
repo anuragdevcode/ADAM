@@ -307,13 +307,67 @@ export interface SourceItem {
   name: string;
   department_id: string;
   owner_name: string;
+  owner_contact?: string;
+  source_type?: 'WEBSITE' | 'DATABASE' | 'FILE_UPLOAD' | 'CUSTOM' | string;
   permitted_domains: string[];
+  permitted_path_prefixes?: string[];
   base_url: string;
+  config_json?: Record<string, unknown>;
   status: string;
   refresh_cadence: string;
+  rate_limit_per_minute?: number;
   access_classification: string;
   document_count: number;
+  last_run_at?: string | null;
+  last_run_status?: string | null;
+  active_job_id?: string | null;
+  active_job_status?: string | null;
   created_at?: string | null;
+}
+
+export interface IngestionJobItemRecord {
+  id: string;
+  source_id: string;
+  source_name: string;
+  status: 'QUEUED' | 'DISCOVERY' | 'PROCESSING' | 'DRAINING' | 'PAUSED' | 'CANCELLING' | 'CANCELLED' | 'COMPLETED' | 'PARTIAL_SUCCESS' | 'FAILED' | string;
+  job_type: 'FULL' | 'INCREMENTAL' | 'RETRY' | string;
+  current_stage: string;
+  count_found: number;
+  count_ingested: number;
+  count_skipped: number;
+  count_failed: number;
+  progress_pct: number;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface IngestionJobDetail extends IngestionJobItemRecord {
+  checkpoint?: Record<string, unknown>;
+  failures?: Array<{ item_key: string; error: string; timestamp: string }>;
+  metrics?: Record<string, unknown>;
+}
+
+export interface IngestionItemDetail {
+  id: string;
+  item_key: string;
+  title?: string | null;
+  status: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'SKIPPED' | 'FAILED' | string;
+  sha256?: string | null;
+  document_id?: string | null;
+  version_id?: string | null;
+  error_message?: string | null;
+  retry_count: number;
+  duration_ms?: number | null;
+  created_at?: string | null;
+}
+
+export interface PaginatedJobItemsResponse {
+  job_id: string;
+  total: number;
+  page: number;
+  page_size: number;
+  items: IngestionItemDetail[];
 }
 
 // ── Audit & Diagnostics Types ──────────────────────────────────────────────

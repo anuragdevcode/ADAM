@@ -105,6 +105,18 @@ class TransactionalIngestionRunner:
                 self.db.add(version)
                 self.db.flush()
 
+                # Record IngestionJobItem for unified control plane observability
+                job_item = IngestionJobItem(
+                    job_id=job.id,
+                    item_key=f"local://{source_id}/{filename}",
+                    title=doc_title,
+                    status="SUCCESS",
+                    sha256=sha256,
+                    document_id=doc.id,
+                    version_id=version.id,
+                )
+                self.db.add(job_item)
+
                 # 4. Extract pages, text blocks, quality status
                 pipeline = DocumentExtractionPipeline(self.db, self.storage)
                 pipeline.process_version(version.id)
@@ -134,6 +146,8 @@ class TransactionalIngestionRunner:
                 failed_job = self.db.query(IngestionJob).filter(IngestionJob.id == job.id).first()
                 if failed_job:
                     failed_job.status = "FAILED"
+                    failed_job.current_stage = "FAILED"
+                    failed_job.count_failed = (failed_job.count_failed or 0) + 1
                     failed_job.error_message = f"File '{filename}' failed: {str(exc)}"
                     failed_job.completed_at = datetime.now(timezone.utc)
                     self.db.commit()
@@ -142,7 +156,11 @@ class TransactionalIngestionRunner:
 
         # Mark job completed successfully
         job.status = "COMPLETED"
+        job.current_stage = "COMPLETED"
         job.count_ingested = ingested_count
+        job.progress_pct = 100.0
         job.completed_at = datetime.now(timezone.utc)
+        source.last_run_at = job.completed_at
+        source.last_run_status = "COMPLETED"
         self.db.commit()
         return job

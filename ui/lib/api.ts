@@ -13,6 +13,9 @@ import type {
   ReviewPageItem,
   SessionInfo,
   SourceItem,
+  IngestionJobItemRecord,
+  IngestionJobDetail,
+  PaginatedJobItemsResponse,
   SttResult,
   StreamCallbacks,
   UserProfile,
@@ -455,6 +458,136 @@ export async function toggleSourceStatus(sourceId: string, userId: string = 'adm
   if (!resp.ok) throw new Error(`Failed to toggle source status: ${resp.status}`);
   return resp.json();
 }
+
+export async function createSource(data: Partial<SourceItem>): Promise<{ id: string; name: string; message: string }> {
+  const resp = await fetch(`${API_BASE}/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err?.detail || `Failed to create source: ${resp.status}`);
+  }
+  return resp.json();
+}
+
+export async function deleteSource(sourceId: string): Promise<void> {
+  const resp = await fetch(`${API_BASE}/sources/${sourceId}`, {
+    method: 'DELETE',
+  });
+  if (!resp.ok) throw new Error(`Failed to delete source: ${resp.status}`);
+}
+
+export async function testSourceConnection(sourceId: string): Promise<{ success: boolean; message: string }> {
+  const resp = await fetch(`${API_BASE}/sources/${sourceId}/test-connection`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw new Error(`Failed to test connection: ${resp.status}`);
+  return resp.json();
+}
+
+export async function triggerIngestionJob(params: {
+  source_id: string;
+  job_type?: 'FULL' | 'INCREMENTAL';
+  max_items?: number;
+  files?: File[];
+}): Promise<{ job_id: string; status: string; message: string }> {
+  if (params.files && params.files.length > 0) {
+    const formData = new FormData();
+    formData.append('source_id', params.source_id);
+    formData.append('job_type', params.job_type || 'FULL');
+    if (params.max_items) formData.append('max_items', String(params.max_items));
+    for (const f of params.files) {
+      formData.append('files', f);
+    }
+    const resp = await fetch(`${API_BASE}/ingestion/jobs`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.detail || `Failed to trigger ingestion: ${resp.status}`);
+    }
+    return resp.json();
+  }
+
+  const resp = await fetch(`${API_BASE}/ingestion/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source_id: params.source_id,
+      job_type: params.job_type || 'FULL',
+      max_items: params.max_items,
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err?.detail || `Failed to trigger ingestion: ${resp.status}`);
+  }
+  return resp.json();
+}
+
+export async function fetchIngestionJobs(sourceId?: string, status?: string): Promise<IngestionJobItemRecord[]> {
+  try {
+    const query = new URLSearchParams();
+    if (sourceId) query.set('source_id', sourceId);
+    if (status) query.set('status', status);
+    const resp = await fetch(`${API_BASE}/ingestion/jobs?${query.toString()}`);
+    if (!resp.ok) return [];
+    return resp.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchIngestionJob(jobId: string): Promise<IngestionJobDetail | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/ingestion/jobs/${jobId}`);
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchJobItems(
+  jobId: string,
+  status?: string,
+  page: number = 1,
+  pageSize: number = 25,
+): Promise<PaginatedJobItemsResponse> {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (status && status !== 'ALL') query.set('status', status);
+  const resp = await fetch(`${API_BASE}/ingestion/jobs/${jobId}/items?${query.toString()}`);
+  if (!resp.ok) throw new Error(`Failed to fetch job items: ${resp.status}`);
+  return resp.json();
+}
+
+export async function pauseJob(jobId: string): Promise<{ job_id: string; status: string; message: string }> {
+  const resp = await fetch(`${API_BASE}/ingestion/jobs/${jobId}/pause`, { method: 'POST' });
+  if (!resp.ok) throw new Error(`Failed to pause job: ${resp.status}`);
+  return resp.json();
+}
+
+export async function resumeJob(jobId: string): Promise<{ job_id: string; status: string; message: string }> {
+  const resp = await fetch(`${API_BASE}/ingestion/jobs/${jobId}/resume`, { method: 'POST' });
+  if (!resp.ok) throw new Error(`Failed to resume job: ${resp.status}`);
+  return resp.json();
+}
+
+export async function stopJob(jobId: string): Promise<{ job_id: string; status: string; message: string }> {
+  const resp = await fetch(`${API_BASE}/ingestion/jobs/${jobId}/stop`, { method: 'POST' });
+  if (!resp.ok) throw new Error(`Failed to stop job: ${resp.status}`);
+  return resp.json();
+}
+
+export async function retryJob(jobId: string): Promise<{ retry_job_id: string; message: string }> {
+  const resp = await fetch(`${API_BASE}/ingestion/jobs/${jobId}/retry`, { method: 'POST' });
+  if (!resp.ok) throw new Error(`Failed to retry job: ${resp.status}`);
+  return resp.json();
+}
+
 
 // ── Agent Audit Logs ───────────────────────────────────────────────────────
 

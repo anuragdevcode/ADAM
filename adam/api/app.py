@@ -17,6 +17,7 @@ from adam.api.routers import (
     review,
     sessions,
     sources,
+    ingestions,
     system,
     user,
     voice,
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
     _app.include_router(documents.router, prefix="/api")
     _app.include_router(precedents.router, prefix="/api")
     _app.include_router(sources.router, prefix="/api")
+    _app.include_router(ingestions.router, prefix="/api")
     _app.include_router(audit.router, prefix="/api")
     _app.include_router(review.router, prefix="/api")
     _app.include_router(user.router, prefix="/api")

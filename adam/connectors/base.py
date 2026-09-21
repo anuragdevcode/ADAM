@@ -72,12 +72,33 @@ class FetchResult:
 class BaseConnector(ABC):
     """Abstract base connector for acquiring Uttarakhand departmental records."""
 
+    @property
+    def supports_deletion_detection(self) -> bool:
+        """Whether this connector performs exhaustive discovery enabling safe deletion reconciliation."""
+        return False
+
+    def test_connection(self, source: Source) -> tuple[bool, str]:
+        """Test reachability, credentials, or permissions for the source without executing a full crawl."""
+        return True, "Source connection configuration is valid."
+
     @abstractmethod
     def discover(self, source: Source) -> Iterator[DiscoveredItem]:
         """Discover documents from authorized index/sitemap/category pages."""
         pass
 
+    def discover_incremental(
+        self,
+        source: Source,
+        compound_cursor: Optional[Dict[str, Any]] = None,
+    ) -> Iterator[DiscoveredItem]:
+        """Discover net-new or updated documents starting after a compound cursor.
+
+        Default implementation falls back to full discovery.
+        """
+        return self.discover(source)
+
     @abstractmethod
     def fetch(self, item: DiscoveredItem) -> FetchResult:
         """Fetch immutable original bytes and HTTP headers for a discovered item."""
         pass
+

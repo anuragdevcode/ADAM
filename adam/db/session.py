@@ -32,9 +32,11 @@ def get_engine(db_url: Optional[str] = None) -> Engine:
             echo=False,
             future=True,
         )
-        # Automatically ensure schema tables exist
+        # Automatically ensure schema tables and versioned migrations exist
         from adam.db.models import Base
         Base.metadata.create_all(bind=engine)
+        from adam.db.migrations import apply_ingestion_migrations
+        apply_ingestion_migrations(engine)
         _migrate_missing_columns(engine)
         _ENGINES[url] = engine
     return _ENGINES[url]
@@ -86,7 +88,9 @@ def session_scope(engine: Optional[Engine] = None) -> Generator[Session, None, N
 
 
 def init_db(engine: Optional[Engine] = None) -> None:
-    """Create all registered database tables."""
+    """Create all registered database tables and run versioned migrations."""
     from adam.db.models import Base  # ensure all models are imported
     eng = engine or get_engine()
     Base.metadata.create_all(bind=eng)
+    from adam.db.migrations import apply_ingestion_migrations
+    apply_ingestion_migrations(eng)

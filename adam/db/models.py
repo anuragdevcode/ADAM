@@ -11,6 +11,7 @@ from sqlalchemy import (
     BigInteger,
     Integer,
     Float,
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -62,6 +63,10 @@ class Source(Base):
     rate_limit_per_minute = Column(Integer, nullable=False, default=30)
     retention_policy = Column(String(64), nullable=False, default="PERMANENT")
     status = Column(String(32), nullable=False, default=SourceStatus.PENDING_APPROVAL.value)
+    source_type = Column(String(32), nullable=False, default="WEBSITE")  # WEBSITE, DATABASE, FILE_UPLOAD, CUSTOM
+    config_json = Column(JSON, nullable=True)  # Connector configuration parameters
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    last_run_status = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
 
@@ -622,17 +627,53 @@ class IngestionJob(Base):
 
     id = Column(String(64), primary_key=True, default=lambda: _generate_id("ingest"))
     source_id = Column(String(64), ForeignKey("sources.id"), nullable=False, index=True)
-    status = Column(String(32), nullable=False, default="QUEUED")  # QUEUED, PROCESSING, COMPLETED, FAILED
+    status = Column(String(32), nullable=False, default="QUEUED")  # QUEUED, DISCOVERY, PROCESSING, DRAINING, PAUSED, CANCELLING, CANCELLED, COMPLETED, PARTIAL_SUCCESS, FAILED
+    job_type = Column(String(32), nullable=False, default="FULL")  # FULL, INCREMENTAL, RETRY
+    current_stage = Column(String(64), nullable=False, default="IDLE")
     idempotency_key = Column(String(128), nullable=True, index=True)
     trace_id = Column(String(64), nullable=True, index=True)
     collector_version = Column(String(32), nullable=False, default="v1.0.0")
     count_found = Column(Integer, nullable=False, default=0)
     count_ingested = Column(Integer, nullable=False, default=0)
+    count_skipped = Column(Integer, nullable=False, default=0)
+    count_failed = Column(Integer, nullable=False, default=0)
+    progress_pct = Column(Float, nullable=False, default=0.0)
+    checkpoint_json = Column(JSON, nullable=True)
+    failures_json = Column(JSON, nullable=True)
+    metrics_json = Column(JSON, nullable=True)
+    cancel_requested = Column(Boolean, nullable=False, default=False)
+    pause_requested = Column(Boolean, nullable=False, default=False)
+    parent_job_id = Column(String(64), ForeignKey("ingestion_jobs.id"), nullable=True)
     error_message = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     source = relationship("Source")
+    items = relationship("IngestionJobItem", back_populates="job", cascade="all, delete-orphan")
+
+
+class IngestionJobItem(Base):
+    """Normalized, item-level execution record within an ingestion job."""
+    __tablename__ = "ingestion_job_items"
+
+    id = Column(String(64), primary_key=True, default=lambda: _generate_id("item"))
+    job_id = Column(String(64), ForeignKey("ingestion_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_key = Column(String(512), nullable=False, index=True)
+    title = Column(Text, nullable=True)
+    status = Column(String(32), nullable=False, default="PENDING", index=True)  # PENDING, PROCESSING, SUCCESS, SKIPPED, FAILED
+    sha256 = Column(String(64), nullable=True, index=True)
+    document_id = Column(String(64), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+    version_id = Column(String(64), ForeignKey("document_versions.id", ondelete="SET NULL"), nullable=True)
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, nullable=False, default=0)
+    duration_ms = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
+
+    job = relationship("IngestionJob", back_populates="items")
+    document = relationship("Document")
+    version = relationship("DocumentVersion")
+
 
 
 
