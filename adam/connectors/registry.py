@@ -7,10 +7,6 @@ from adam.connectors.base import BaseConnector
 from adam.connectors.database import DatabaseConnector
 from adam.connectors.generic_web import GenericWebsiteConnector
 from adam.connectors.file_batch import FileBatchConnector
-from adam.connectors.egazette import EGazetteConnector
-from adam.connectors.ekosh import EkoshTreasuryConnector
-from adam.connectors.ukrd import UkrdConnector
-from adam.connectors.itda import ITDASampleBatchConnector
 from adam.db.models import Source
 
 logger = logging.getLogger(__name__)
@@ -59,15 +55,19 @@ class ConnectorRegistry:
         domains = [d.lower() for d in (source.permitted_domains or [])]
 
         if "ukrd" in source_id_lower or any("ukrd" in d for d in domains):
+            from adam.connectors.ukrd import UkrdConnector
             return UkrdConnector()
 
         if "gazette" in source_id_lower or any("gazette" in d for d in domains):
+            from adam.connectors.egazette import EGazetteConnector
             return EGazetteConnector()
 
         if "ekosh" in source_id_lower or any("ekosh" in d for d in domains):
+            from adam.connectors.ekosh import EkoshTreasuryConnector
             return EkoshTreasuryConnector()
 
         if "itda" in source_id_lower:
+            from adam.connectors.itda import ITDASampleBatchConnector
             batch_dir = cfg.get("batch_dir", "/tmp/itda_samples")
             return ITDASampleBatchConnector(batch_dir=batch_dir)
 
