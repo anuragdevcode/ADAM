@@ -9,6 +9,7 @@ import type {
   ModelInfo,
   OperationalStatusEvent,
   PrecedentItem,
+  RagBenchmarkData,
   ReviewPageItem,
   SessionInfo,
   SourceItem,
@@ -555,4 +556,15 @@ export async function fetchAuditMetrics(): Promise<AuditMetrics | null> {
     return null;
   }
 }
+
+export async function fetchRagBenchmark(live: boolean = false): Promise<RagBenchmarkData | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/audit/benchmark${live ? '?live=true' : ''}`);
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+
 

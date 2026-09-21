@@ -345,3 +345,30 @@ export interface UserPreferenceData {
   preferences: Record<string, unknown>;
   updated_at?: string | null;
 }
+
+export interface RagBenchmarkData {
+  total_queries: number;
+  answer_bearing_queries: number;
+  recall_at_10: number;
+  recall_at_10_target?: number;
+  citation_page_precision: number;
+  citation_page_precision_target?: number;
+  no_answer_refusal_rate: number;
+  no_answer_refusal_target?: number;
+  acl_leak_count: number;
+  acl_leak_target?: number;
+  gate_passed: boolean;
+  by_department: Record<string, { total: number; accuracy: number }>;
+  by_language: Record<string, { total: number; accuracy: number }>;
+  reranker_ablation?: {
+    pure_rrf_recall_at_10: number;
+    pure_rrf_precision: number;
+    pure_rrf_latency_ms: number;
+    reranker_recall_at_10: number;
+    reranker_precision: number;
+    reranker_latency_ms: number;
+    parity_achieved: boolean;
+    decision: string;
+  };
+}
+

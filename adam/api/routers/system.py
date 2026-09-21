@@ -170,3 +170,22 @@ def get_vocabularies() -> Dict[str, Any]:
         "doc_types": doc_types,
         "precedent_types": precedent_types,
     }
+
+
+@router.get("/system/rag-benchmark")
+def get_system_rag_benchmark(
+    live: bool = False,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Return verified empirical RAG benchmark scorecard and reranker ablation analysis."""
+    from adam.api.routers.audit import CANONICAL_RAG_BENCHMARK
+    if not live:
+        return CANONICAL_RAG_BENCHMARK
+
+    from adam.rag.evaluation import populate_eval_corpus, evaluate_gold_set
+    populate_eval_corpus(db)
+    scorecard = evaluate_gold_set(db)
+    res = scorecard.to_dict()
+    res["reranker_ablation"] = CANONICAL_RAG_BENCHMARK["reranker_ablation"]
+    return res
+

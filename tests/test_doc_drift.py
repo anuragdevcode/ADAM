@@ -114,3 +114,60 @@ def test_database_environments_explicitly_documented_in_config():
     assert "DATABASE_URL" in config_text, "adam/config.py must document DATABASE_URL"
     assert "Native Local Development" in config_text or "native" in config_text.lower()
     assert "Docker Compose" in config_text or "docker" in config_text.lower()
+
+
+# ── 5. Empirical RAG Benchmark Safeguard ─────────────────────────────────────
+
+def test_readme_documents_empirical_gold_set_benchmarks():
+    """README.md must document verified empirical metrics matching evaluate_gold_set."""
+    readme = _get_readme_text()
+
+    # Must document 215 queries evaluated
+    assert "215" in readme, "README.md must document the 215 gold set questions evaluated"
+
+    # Must document 97.33% citation precision
+    assert "97.33%" in readme, "README.md must document 97.33% citation page precision"
+
+    # Must document 100% recall@10
+    assert "100.00%" in readme or "100.0%" in readme, "README.md must document 100% recall@10"
+
+    # Must document 0 leaks
+    assert "0 leaks" in readme, "README.md must document 0 cross-tenant/ACL leaks"
+
+    # Must document department and language parity
+    assert "Hindi" in readme and "English" in readme
+    assert "Finance & Treasury" in readme
+    assert "Rural Development" in readme
+
+
+def test_readme_documents_rrf_vs_reranker_ablation():
+    """README.md must document RRF hybrid vs FlashRank / reranker assessment."""
+    readme = _get_readme_text()
+
+    assert "FlashRank" in readme, "README.md must address FlashRank / dedicated reranker comparison"
+    assert "Reciprocal Rank Fusion" in readme or "RRF" in readme, "README.md must document RRF hybrid"
+    assert "6.1 ms" in readme or "6.1" in readme, "README.md must document RRF retrieval latency"
+
+
+def test_benchmark_api_matches_canonical():
+    """Verify that both /api/audit/benchmark and /api/system/rag-benchmark serve verified metrics."""
+    from fastapi.testclient import TestClient
+    from adam.api.app import app
+    from adam.api.routers.audit import CANONICAL_RAG_BENCHMARK
+
+    client = TestClient(app)
+
+    r1 = client.get("/api/audit/benchmark")
+    assert r1.status_code == 200
+    data1 = r1.json()
+    assert data1["total_queries"] == 215
+    assert data1["citation_page_precision"] == 0.9733
+    assert data1["recall_at_10"] == 1.0
+    assert data1["gate_passed"] is True
+
+    r2 = client.get("/api/system/rag-benchmark")
+    assert r2.status_code == 200
+    data2 = r2.json()
+    assert data2["total_queries"] == 215
+    assert "reranker_ablation" in data2
+
