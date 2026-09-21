@@ -47,14 +47,33 @@ async def chat_endpoint(
     effective_gemini_key = x_gemini_api_key or req.api_key
 
     async def generate() -> AsyncGenerator[str, None]:
+        session_id = req.session_id
+        if not session_id:
+            from adam.memory.session import SessionManager
+            sm = SessionManager(db)
+            new_sess = sm.create_session(
+                user_id=user_ctx.user_id,
+                classification_ceiling=user_ctx.clearance_level,
+            )
+            session_id = new_sess.id
+
         event_queue: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_running_loop()
-        trace_id = req.session_id or f"tr_{uuid.uuid4().hex[:12]}"
+        trace_id = session_id or f"tr_{uuid.uuid4().hex[:12]}"
+        start_event_emitted = False
+        captured_session_id = session_id
 
         def on_event(event: OperationalEvent) -> None:
+            nonlocal captured_session_id
+            if event.data and event.data.get("session_id"):
+                captured_session_id = event.data["session_id"]
             serialized = PublicEventSerializer.serialize(event)
             if serialized:
-                loop.call_soon_threadsafe(event_queue.put_nowait, serialized)
+                loop.call_soon_threadsafe(event_queue.put_nowait, ("status", serialized, captured_session_id))
+
+        def token_callback(chunk: str) -> None:
+            if chunk:
+                loop.call_soon_threadsafe(event_queue.put_nowait, ("token", {"text": chunk}, None))
 
         try:
             from adam.model.policy import validate_air_gapped_model_policy, AirGappedSovereigntyViolationError
@@ -76,45 +95,78 @@ async def chat_endpoint(
             )
 
             async def run_agent():
-                return await loop.run_in_executor(
-                    None,
-                    lambda: agent.run(
-                        query=req.query,
-                        user_context=user_ctx,
-                        session_id=req.session_id,
-                        on_event=on_event,
-                        trace_id=trace_id,
-                    ),
-                )
+                def _invoke_agent():
+                    run_kwargs = {
+                        "query": req.query,
+                        "user_context": user_ctx,
+                        "session_id": session_id,
+                        "on_event": on_event,
+                        "trace_id": trace_id,
+                    }
+                    import inspect
+                    try:
+                        target_func = getattr(agent.run, "side_effect", None) or agent.run
+                        sig = inspect.signature(target_func)
+                        if "token_callback" in sig.parameters:
+                            run_kwargs["token_callback"] = token_callback
+                    except Exception:
+                        pass
+                    return agent.run(**run_kwargs)
+
+                return await loop.run_in_executor(None, _invoke_agent)
 
             run_task = asyncio.create_task(run_agent())
 
-            # Stream operational status events in real time as the state machine transitions
+            # Stream operational status events and live tokens in real time as state machine transitions
+            tokens_streamed = 0
             while not run_task.done():
                 try:
-                    event_payload = await asyncio.wait_for(event_queue.get(), timeout=0.03)
-                    yield f"event: status\ndata: {json.dumps(event_payload)}\n\n"
+                    kind, payload, sid = await asyncio.wait_for(event_queue.get(), timeout=0.03)
+                    if kind == "status":
+                        if not start_event_emitted and sid:
+                            yield f"event: start\ndata: {json.dumps({'session_id': sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                            start_event_emitted = True
+                        yield f"event: status\ndata: {json.dumps(payload)}\n\n"
+                    elif kind == "token":
+                        if not start_event_emitted:
+                            eff_sid = captured_session_id or req.session_id or trace_id
+                            yield f"event: start\ndata: {json.dumps({'session_id': eff_sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                            start_event_emitted = True
+                        tokens_streamed += 1
+                        yield f"event: token\ndata: {json.dumps(payload)}\n\n"
                 except asyncio.TimeoutError:
                     continue
 
-            # Drain any remaining queued operational events
+            # Drain any remaining queued events
             while not event_queue.empty():
-                event_payload = event_queue.get_nowait()
-                yield f"event: status\ndata: {json.dumps(event_payload)}\n\n"
+                kind, payload, sid = event_queue.get_nowait()
+                if kind == "status":
+                    if not start_event_emitted and sid:
+                        yield f"event: start\ndata: {json.dumps({'session_id': sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                        start_event_emitted = True
+                    yield f"event: status\ndata: {json.dumps(payload)}\n\n"
+                elif kind == "token":
+                    if not start_event_emitted:
+                        eff_sid = captured_session_id or req.session_id or trace_id
+                        yield f"event: start\ndata: {json.dumps({'session_id': eff_sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                        start_event_emitted = True
+                    tokens_streamed += 1
+                    yield f"event: token\ndata: {json.dumps(payload)}\n\n"
 
             response = await run_task
 
-            # 1. Start Event
-            yield f"event: start\ndata: {json.dumps({'session_id': response.session_id, 'model_id': response.model_id, 'query': req.query, 'trace_id': trace_id})}\n\n"
+            # 1. Start Event (ensure emitted if not already done)
+            if not start_event_emitted:
+                yield f"event: start\ndata: {json.dumps({'session_id': response.session_id, 'model_id': response.model_id, 'query': req.query, 'trace_id': trace_id})}\n\n"
+                start_event_emitted = True
 
-            # 2. Simulated Token Streaming
-            # Keep each word's surrounding whitespace verbatim: splitting on
-            # whitespace and rejoining with single spaces flattened the answer
-            # onto one line, so the Markdown structure the model produced
-            # (paragraphs, bullet lists, headings) never reached the UI.
-            for chunk in re.findall(r"\s*\S+\s*", response.answer):
-                yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
-                await asyncio.sleep(0.015)
+            # 2. Simulated Token Streaming Fallback
+            # If no live tokens were streamed (e.g. non-streaming fallback runtime or mock),
+            # stream the full answer word-by-word.
+            if tokens_streamed == 0 and response.answer:
+                for chunk in re.findall(r"\s*\S+\s*", response.answer):
+                    yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
+                    await asyncio.sleep(0.015)
 
             # 3. Citations Event
             citations_data = [cit.to_dict() for cit in response.citations]
@@ -164,8 +216,9 @@ async def chat_endpoint(
         except Exception as e:
             while not event_queue.empty():
                 try:
-                    event_payload = event_queue.get_nowait()
-                    yield f"event: status\ndata: {json.dumps(event_payload)}\n\n"
+                    item = event_queue.get_nowait()
+                    if isinstance(item, tuple) and len(item) >= 2 and item[0] == "status":
+                        yield f"event: status\ndata: {json.dumps(item[1])}\n\n"
                 except Exception:
                     break
             raw_err = str(e)

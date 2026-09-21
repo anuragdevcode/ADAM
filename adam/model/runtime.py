@@ -6,6 +6,7 @@ Per Phase 04 specification:
 - 'The selected model must abstain correctly on all curated unanswerable/high-risk test cases.'
 """
 
+import json
 import math
 import os
 import re
@@ -237,6 +238,10 @@ class DeterministicModelRuntime(BaseModelRuntime):
             answer = " ".join(words) + " [TRUNCATED_TOKEN_LIMIT]"
             estimated_completion_tokens = max_tokens
 
+        token_callback = kwargs.get("token_callback")
+        if token_callback and answer:
+            token_callback(answer)
+
         latency_ms = (time.perf_counter() - start_time) * 1000.0
 
         return ModelGenerationResult(
@@ -434,14 +439,52 @@ class OllamaModelRuntime(BaseModelRuntime):
         if think_flag is not None:
             payload["think"] = think_flag
 
-        try:
-            resp = self._get_client().post("/api/chat", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        token_callback = kwargs.get("token_callback")
 
-            message = data.get("message", {}) or {}
-            raw_content = message.get("content") or ""
-            raw_thinking = message.get("thinking") or None
+        try:
+            if token_callback is not None:
+                payload["stream"] = True
+                collected_content: List[str] = []
+                collected_thinking: List[str] = []
+                prompt_tokens = 0
+                completion_tokens = 0
+
+                with self._get_client().stream("POST", "/api/chat", json=payload) as resp:
+                    resp.raise_for_status()
+                    for line in resp.iter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk_data = json.loads(line)
+                            chunk_msg = chunk_data.get("message", {}) or {}
+                            delta_content = chunk_msg.get("content", "")
+                            delta_thinking = chunk_msg.get("thinking", "")
+                            if delta_content:
+                                collected_content.append(delta_content)
+                                token_callback(delta_content)
+                            if delta_thinking:
+                                collected_thinking.append(delta_thinking)
+                            if chunk_data.get("prompt_eval_count"):
+                                prompt_tokens = chunk_data["prompt_eval_count"]
+                            if chunk_data.get("eval_count"):
+                                completion_tokens = chunk_data["eval_count"]
+                        except Exception:
+                            continue
+
+                raw_content = "".join(collected_content)
+                raw_thinking = "".join(collected_thinking) if collected_thinking else None
+                prompt_tokens = prompt_tokens or max(1, len(user_prompt.split()) * 4 // 3)
+                completion_tokens = completion_tokens or max(1, len(raw_content.split()) * 4 // 3)
+            else:
+                resp = self._get_client().post("/api/chat", json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+
+                message = data.get("message", {}) or {}
+                raw_content = message.get("content") or ""
+                raw_thinking = message.get("thinking") or None
+                prompt_tokens = data.get("prompt_eval_count") or max(1, len(user_prompt.split()) * 4 // 3)
+                completion_tokens = data.get("eval_count") or max(1, len(raw_content.split()) * 4 // 3)
 
             from adam.harness.validators import HarnessOutputValidator
             clean_answer, parsed_thinking = HarnessOutputValidator.separate_thinking_tokens(raw_content)
@@ -458,8 +501,6 @@ class OllamaModelRuntime(BaseModelRuntime):
                         "Raise max_tokens or use a non-reasoning model."
                     )
 
-            prompt_tokens = data.get("prompt_eval_count") or max(1, len(user_prompt.split()) * 4 // 3)
-            completion_tokens = data.get("eval_count") or max(1, len(answer.split()) * 4 // 3)
             latency_ms = (time.perf_counter() - start_time) * 1000.0
 
             lower_ans = answer.lower()

@@ -9,6 +9,7 @@ Per Phase 04 specification:
 - 'Enforce temperature 0–0.2, output schema and token limit; redact system prompts and keys.'
 """
 
+import hashlib
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ from typing import Optional, List, Dict, Any, Tuple, Callable
 
 from sqlalchemy.orm import Session
 
+from adam.agent.cache import GLOBAL_RESPONSE_CACHE, GovernedResponseCache
 from adam.agent.coordinator import HeavyWorkerCoordinator, HeavyTaskType
 from adam.agent.redaction import SecretRedactor
 from adam.agent.tools import ReadOnlyToolRegistry, ForbiddenToolError
@@ -103,6 +105,7 @@ class AgentResponse:
     temperature_applied: float = 0.0
     applied_schema: str = "ADAM_AGENT_SCHEMA_V1"
     session_summary: Optional[Dict[str, Any]] = None
+    is_cached: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -114,6 +117,7 @@ class AgentResponse:
             "is_no_answer": self.is_no_answer,
             "is_high_risk": self.is_high_risk,
             "is_research_brief": self.is_research_brief,
+            "is_cached": self.is_cached,
             "validation_passed": self.validation_passed,
             "validation_errors": self.validation_errors,
             "search_suggestions": self.search_suggestions,
@@ -196,6 +200,7 @@ class AgentStateMachine:
         session_id: Optional[str] = None,
         on_event: Optional[Callable[[OperationalEvent], None]] = None,
         trace_id: Optional[str] = None,
+        token_callback: Optional[Callable[[str], None]] = None,
     ) -> AgentResponse:
         """Execute full bounded 7-stage state machine."""
         start_time = time.perf_counter()
@@ -537,6 +542,7 @@ class AgentStateMachine:
         prompt_tokens = 0
         completion_tokens = 0
         is_research_brief = False
+        is_cached = False
 
         if getattr(parsed_query, "is_greeting", False):
             emitter.start_stage("generation")
@@ -563,6 +569,8 @@ class AgentStateMachine:
             citations = []
             prompt_tokens = len(query.split()) * 2
             completion_tokens = len(answer.split()) * 2
+            if token_callback:
+                token_callback(answer)
             emitter.emit(
                 OperationalEventType.GENERATION_COMPLETED,
                 stage="generation",
@@ -583,6 +591,8 @@ class AgentStateMachine:
             citations = []
             prompt_tokens = len(query.split()) * 2
             completion_tokens = len(answer.split()) * 2
+            if token_callback:
+                token_callback(answer)
             emitter.emit(
                 OperationalEventType.GENERATION_COMPLETED,
                 stage="generation",
@@ -602,164 +612,239 @@ class AgentStateMachine:
             is_research_brief = True
             prompt_tokens = len(query.split()) * 3
             completion_tokens = len(answer.split()) * 2
+            if token_callback:
+                token_callback(answer)
             emitter.emit(
                 OperationalEventType.GENERATION_COMPLETED,
                 stage="generation",
                 status="completed",
                 message="High-risk research brief structured",
             )
-        elif packet.is_empty:
-            with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
-                emitter.start_stage("model")
-                emitter.emit(
-                    OperationalEventType.MODEL_LOADING,
-                    stage="model",
-                    status="running",
-                    message=f"Activating model runtime ({self.model_id})",
-                    data={"model_name": self.model_id},
-                )
-                try:
-                    runtime = self._custom_runtime or self.lifecycle.load_model(
-                        self.model_id,
-                        allow_hot_swap=True,
-                        backend=self.backend,
-                        api_key=self.api_key,
-                        clearance_level=user.clearance_level,
-                    )
-                    emitter.emit(
-                        OperationalEventType.MODEL_READY,
-                        stage="model",
-                        status="completed",
-                        message="Model runtime ready",
-                        data={"model_name": self.model_id},
-                    )
-                except Exception as m_err:
-                    emitter.emit(
-                        OperationalEventType.MODEL_FAILED,
-                        stage="model",
-                        status="failed",
-                        message=f"Model activation failed: {str(m_err)}",
-                        data={"model_name": self.model_id},
-                    )
-                    raise
-
-                emitter.start_stage("generation")
-                emitter.emit(
-                    OperationalEventType.GENERATION_STARTED,
-                    stage="generation",
-                    status="running",
-                    message="Generating conversational guidance",
-                    data={"model_name": self.model_id},
-                )
-                from adam.harness.routing import HarnessRouter
-                profile = HarnessRouter.resolve_profile(self.model_id)
-                harness_params = profile.resolve_parameters(
-                    intent="conversational",
-                    temperature=temperature if temperature > 0.0 else 0.2,
-                    max_tokens=max_tokens if max_tokens != 512 else 1024,
-                )
-                user_prompt = profile.format_conversational_prompt(query)
-                system_prompt = profile.resolve_system_prompt("conversational")
-
-                gen_result = runtime.generate(
-                    user_prompt=user_prompt,
-                    system_prompt=system_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    harness_parameters=harness_params,
-                )
-                answer = gen_result.answer
-                prompt_tokens = gen_result.tokens_prompt
-                completion_tokens = gen_result.tokens_completion
-                emitter.emit(
-                    OperationalEventType.GENERATION_COMPLETED,
-                    stage="generation",
-                    status="completed",
-                    message="Conversational response generated",
-                    data={"model_name": self.model_id},
-                )
-            citations = []
         else:
-            citations = CitationBuilder.build_citations_from_packet(packet)
-            # Enforce single heavy worker mutual exclusion on inference
-            with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
-                emitter.start_stage("model")
-                emitter.emit(
-                    OperationalEventType.MODEL_LOADING,
-                    stage="model",
-                    status="running",
-                    message=f"Activating model runtime ({self.model_id})",
-                    data={"model_name": self.model_id},
+            # Check Governed Response Cache before heavy worker acquisition
+            evidence_fp = None
+            if not packet.is_empty:
+                raw_fp = "|".join(
+                    f"{p.chunk_id}:{getattr(p, 'sha256', None) or getattr(p, 'version_id', None)}"
+                    for p in packet.passages
                 )
-                try:
-                    runtime = self._custom_runtime or self.lifecycle.load_model(
-                        self.model_id,
-                        allow_hot_swap=True,
-                        backend=self.backend,
-                        api_key=self.api_key,
-                        clearance_level=user.clearance_level,
-                    )
-                    emitter.emit(
-                        OperationalEventType.MODEL_READY,
-                        stage="model",
-                        status="completed",
-                        message="Model runtime ready",
-                        data={"model_name": self.model_id},
-                    )
-                except Exception as m_err:
-                    emitter.emit(
-                        OperationalEventType.MODEL_FAILED,
-                        stage="model",
-                        status="failed",
-                        message=f"Model activation failed: {str(m_err)}",
-                        data={"model_name": self.model_id},
-                    )
-                    raise
+                evidence_fp = hashlib.sha256(raw_fp.encode("utf-8")).hexdigest()
 
-                emitter.start_stage("generation")
-                emitter.emit(
-                    OperationalEventType.GENERATION_STARTED,
-                    stage="generation",
-                    status="running",
-                    message="Synthesizing grounded response with citations",
-                    data={"model_name": self.model_id},
-                )
-                
-                # Format grounded prompt using model-specific harness profile
-                from adam.harness.routing import HarnessRouter
-                profile = HarnessRouter.resolve_profile(self.model_id)
-                harness_params = profile.resolve_parameters(
-                    intent="rag",
-                    temperature=temperature if temperature > 0.0 else 0.2,
-                    max_tokens=max_tokens if max_tokens != 512 else 1024,
-                )
-                user_prompt = profile.format_rag_prompt(parsed_query.clean_query, packet)
-                system_prompt = profile.resolve_system_prompt("rag")
+            cache_key = GovernedResponseCache.compute_cache_key(
+                query=query,
+                model_id=self.model_id,
+                clearance_level=user.clearance_level,
+                department_id=user.department_id,
+                evidence_fingerprint=evidence_fp,
+            )
 
-                gen_result: ModelGenerationResult = runtime.generate(
-                    user_prompt=user_prompt,
-                    system_prompt=system_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    harness_parameters=harness_params,
-                )
-                answer = gen_result.answer
-                prompt_tokens = gen_result.tokens_prompt
-                completion_tokens = gen_result.tokens_completion
-                if gen_result.is_refusal:
+            cached_entry = GLOBAL_RESPONSE_CACHE.get(cache_key)
+            if cached_entry is not None:
+                is_cached = True
+                answer = cached_entry.answer
+                citations = [Citation(**c) for c in cached_entry.citations]
+                currency_banners = cached_entry.currency_banners
+                prompt_tokens = cached_entry.prompt_tokens
+                completion_tokens = cached_entry.completion_tokens
+                if cached_entry.is_refusal:
                     is_refusal = True
                     if not recorded_abstention_reason:
-                        recorded_abstention_reason = "Model determined response cannot be substantiated by verified repository records."
-
-                if packet.currency_banner:
-                    answer += f"\n\n*Currency Status: {packet.currency_banner}*"
-
+                        recorded_abstention_reason = cached_entry.refusal_category
+                if token_callback:
+                    token_callback(answer)
+                emitter.start_stage("generation")
                 emitter.emit(
                     OperationalEventType.GENERATION_COMPLETED,
                     stage="generation",
                     status="completed",
-                    message="Grounded response synthesis complete",
-                    data={"model_name": self.model_id},
+                    message="Response resolved from governed cache",
+                    data={"model_name": self.model_id, "is_cached": True},
+                )
+            elif packet.is_empty:
+                with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
+                    emitter.start_stage("model")
+                    emitter.emit(
+                        OperationalEventType.MODEL_LOADING,
+                        stage="model",
+                        status="running",
+                        message=f"Activating model runtime ({self.model_id})",
+                        data={"model_name": self.model_id},
+                    )
+                    try:
+                        runtime = self._custom_runtime or self.lifecycle.load_model(
+                            self.model_id,
+                            allow_hot_swap=True,
+                            backend=self.backend,
+                            api_key=self.api_key,
+                            clearance_level=user.clearance_level,
+                        )
+                        emitter.emit(
+                            OperationalEventType.MODEL_READY,
+                            stage="model",
+                            status="completed",
+                            message="Model runtime ready",
+                            data={"model_name": self.model_id},
+                        )
+                    except Exception as m_err:
+                        emitter.emit(
+                            OperationalEventType.MODEL_FAILED,
+                            stage="model",
+                            status="failed",
+                            message=f"Model activation failed: {str(m_err)}",
+                            data={"model_name": self.model_id},
+                        )
+                        raise
+
+                    emitter.start_stage("generation")
+                    emitter.emit(
+                        OperationalEventType.GENERATION_STARTED,
+                        stage="generation",
+                        status="running",
+                        message="Generating conversational guidance",
+                        data={"model_name": self.model_id},
+                    )
+                    from adam.harness.routing import HarnessRouter
+                    profile = HarnessRouter.resolve_profile(self.model_id)
+                    harness_params = profile.resolve_parameters(
+                        intent="conversational",
+                        temperature=temperature if temperature > 0.0 else 0.2,
+                        max_tokens=max_tokens if max_tokens != 512 else 256,
+                    )
+                    user_prompt = profile.format_conversational_prompt(query)
+                    system_prompt = profile.resolve_system_prompt("conversational")
+
+                    effective_temp = min(temperature, 0.2) if isinstance(runtime, DeterministicModelRuntime) else temperature
+                    effective_max_tokens = harness_params.max_tokens or max_tokens
+
+                    gen_result = runtime.generate(
+                        user_prompt=user_prompt,
+                        system_prompt=system_prompt,
+                        temperature=effective_temp,
+                        max_tokens=effective_max_tokens,
+                        harness_parameters=harness_params,
+                        token_callback=token_callback,
+                    )
+                    answer = gen_result.answer
+                    prompt_tokens = gen_result.tokens_prompt
+                    completion_tokens = gen_result.tokens_completion
+                    emitter.emit(
+                        OperationalEventType.GENERATION_COMPLETED,
+                        stage="generation",
+                        status="completed",
+                        message="Conversational response generated",
+                        data={"model_name": self.model_id},
+                    )
+                citations = []
+                GLOBAL_RESPONSE_CACHE.put(
+                    cache_key=cache_key,
+                    answer=answer,
+                    citations=[],
+                    currency_banners=currency_banners,
+                    search_suggestions=self.SEARCH_SUGGESTIONS if is_refusal else [],
+                    model_id=self.model_id,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    is_refusal=is_refusal,
+                    refusal_category=recorded_abstention_reason,
+                )
+            else:
+                citations = CitationBuilder.build_citations_from_packet(packet)
+                # Enforce single heavy worker mutual exclusion on inference
+                with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
+                    emitter.start_stage("model")
+                    emitter.emit(
+                        OperationalEventType.MODEL_LOADING,
+                        stage="model",
+                        status="running",
+                        message=f"Activating model runtime ({self.model_id})",
+                        data={"model_name": self.model_id},
+                    )
+                    try:
+                        runtime = self._custom_runtime or self.lifecycle.load_model(
+                            self.model_id,
+                            allow_hot_swap=True,
+                            backend=self.backend,
+                            api_key=self.api_key,
+                            clearance_level=user.clearance_level,
+                        )
+                        emitter.emit(
+                            OperationalEventType.MODEL_READY,
+                            stage="model",
+                            status="completed",
+                            message="Model runtime ready",
+                            data={"model_name": self.model_id},
+                        )
+                    except Exception as m_err:
+                        emitter.emit(
+                            OperationalEventType.MODEL_FAILED,
+                            stage="model",
+                            status="failed",
+                            message=f"Model activation failed: {str(m_err)}",
+                            data={"model_name": self.model_id},
+                        )
+                        raise
+
+                    emitter.start_stage("generation")
+                    emitter.emit(
+                        OperationalEventType.GENERATION_STARTED,
+                        stage="generation",
+                        status="running",
+                        message="Synthesizing grounded response with citations",
+                        data={"model_name": self.model_id},
+                    )
+                    
+                    # Format grounded prompt using model-specific harness profile
+                    from adam.harness.routing import HarnessRouter
+                    profile = HarnessRouter.resolve_profile(self.model_id)
+                    harness_params = profile.resolve_parameters(
+                        intent="rag",
+                        temperature=temperature if temperature > 0.0 else 0.2,
+                        max_tokens=max_tokens if max_tokens != 512 else 1024,
+                    )
+                    user_prompt = profile.format_rag_prompt(parsed_query.clean_query, packet)
+                    system_prompt = profile.resolve_system_prompt("rag")
+
+                    effective_temp = min(temperature, 0.2) if isinstance(runtime, DeterministicModelRuntime) else temperature
+                    effective_max_tokens = harness_params.max_tokens or max_tokens
+
+                    gen_result: ModelGenerationResult = runtime.generate(
+                        user_prompt=user_prompt,
+                        system_prompt=system_prompt,
+                        temperature=effective_temp,
+                        max_tokens=effective_max_tokens,
+                        harness_parameters=harness_params,
+                        token_callback=token_callback,
+                    )
+                    answer = gen_result.answer
+                    prompt_tokens = gen_result.tokens_prompt
+                    completion_tokens = gen_result.tokens_completion
+                    if gen_result.is_refusal:
+                        is_refusal = True
+                        if not recorded_abstention_reason:
+                            recorded_abstention_reason = "Model determined response cannot be substantiated by verified repository records."
+
+                    if packet.currency_banner:
+                        answer += f"\n\n*Currency Status: {packet.currency_banner}*"
+
+                    emitter.emit(
+                        OperationalEventType.GENERATION_COMPLETED,
+                        stage="generation",
+                        status="completed",
+                        message="Grounded response synthesis complete",
+                        data={"model_name": self.model_id},
+                    )
+
+                GLOBAL_RESPONSE_CACHE.put(
+                    cache_key=cache_key,
+                    answer=answer,
+                    citations=[c.to_dict() for c in citations],
+                    currency_banners=currency_banners,
+                    search_suggestions=self.SEARCH_SUGGESTIONS if is_refusal else [],
+                    model_id=self.model_id,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    is_refusal=is_refusal,
+                    refusal_category=recorded_abstention_reason,
                 )
 
         # ── Stage 6: Validate Citations ─────────────────────────────────────
@@ -942,6 +1027,7 @@ class AgentStateMachine:
             temperature_applied=temperature,
             applied_schema="ADAM_AGENT_SCHEMA_V1",
             session_summary=updated_summary.to_dict() if updated_summary else active_session_summary,
+            is_cached=is_cached,
         )
 
     def _format_research_brief(

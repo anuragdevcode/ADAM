@@ -55,6 +55,7 @@ class GeminiModelRuntime(BaseModelRuntime):
         temperature: float = 0.0,
         max_tokens: int = 512,
         stop_sequences: Optional[List[str]] = None,
+        **kwargs: Any,
     ) -> ModelGenerationResult:
         """Generate response bounded by strict temperature and token limits."""
         start_time = time.perf_counter()
@@ -171,6 +172,10 @@ class GeminiModelRuntime(BaseModelRuntime):
                 f"Gemini generation completed: model={actual_model}, prompt_tokens={prompt_tokens}, "
                 f"completion_tokens={completion_tokens}, finish_reason={finish_reason}, latency={latency_ms:.1f}ms"
             )
+
+            token_callback = kwargs.get("token_callback")
+            if token_callback and answer:
+                token_callback(answer)
 
             return ModelGenerationResult(
                 answer=answer,

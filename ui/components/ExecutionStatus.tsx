@@ -65,6 +65,25 @@ const STATE_META: Record<
   FAILED: { label: 'Security / Execution Termination', icon: XCircle },
 };
 
+const STAGE_SHORT_NAMES: Record<string, string> = {
+  AUTHENTICATE: 'Auth',
+  CLASSIFY_REQUEST: 'Routing',
+  RETRIEVE: 'Retrieval',
+  EVIDENCE_CURRENCY_CHECKS: 'Evidence',
+  GENERATE_OR_ABSTAIN: 'Synthesis',
+  VALIDATE_CITATIONS: 'Validation',
+  AUDIT: 'Audit',
+  security: 'Security',
+  query: 'Routing',
+  retrieval: 'Retrieval',
+  evidence: 'Evidence',
+  currency: 'Currency',
+  model: 'Model Init',
+  generation: 'Synthesis',
+  grounding: 'Grounding',
+  execution: 'Execution',
+};
+
 function formatStageName(stage: string): string {
   return STAGE_CONFIG[stage]?.label || stage.charAt(0).toUpperCase() + stage.slice(1);
 }
@@ -359,8 +378,19 @@ export default function ExecutionStatus({
                 <Activity className="w-3 h-3 text-amber-500" />
                 <span>Bottleneck</span>
               </div>
-              <div className="text-xs font-semibold truncate font-mono text-slate-800 dark:text-slate-100 mt-0.5" title={bottleneckStage ? `${bottleneckStage.stage} (${Math.round(bottleneckStage.duration)}ms)` : 'N/A'}>
-                {bottleneckStage ? `${bottleneckStage.duration.toFixed(0)}ms (${bottleneckStage.stage})` : 'N/A'}
+              <div
+                className="text-xs font-semibold truncate font-mono text-slate-800 dark:text-slate-100 mt-0.5"
+                title={bottleneckStage ? `${getStateInfo(bottleneckStage.stage).label || bottleneckStage.stage} (${Math.round(bottleneckStage.duration)}ms)` : 'Optimal execution'}
+              >
+                {bottleneckStage ? (
+                  bottleneckStage.duration < 5 ? (
+                    '< 5ms (Optimal)'
+                  ) : (
+                    `${bottleneckStage.duration.toFixed(0)}ms (${STAGE_SHORT_NAMES[bottleneckStage.stage] || bottleneckStage.stage})`
+                  )
+                ) : (
+                  'None'
+                )}
               </div>
             </div>
           </div>
@@ -538,6 +568,11 @@ export default function ExecutionStatus({
                             {ev.data.model_name && (
                               <span className="px-1.5 py-0.5 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 rounded text-[10px] font-mono">
                                 runtime: {ev.data.model_name}
+                              </span>
+                            )}
+                            {ev.data.is_cached && (
+                              <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded text-[10px] font-mono">
+                                cached response
                               </span>
                             )}
                             {ev.data.query_language && (

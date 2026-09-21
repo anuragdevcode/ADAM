@@ -55,7 +55,6 @@ class QwenHarnessProfile(BaseHarnessProfile):
 
     def resolve_parameters(self, intent: str = "rag", **overrides: Any) -> ModelInferenceParameters:
         # For governed RAG: low temperature (0.2) to maintain strict grounding
-        # For reasoning / conversational: moderate temperature (0.6) for fluency and depth
         if intent in ("conversational", "coding", "general"):
             temp = overrides.get("temperature", 0.6)
             max_tokens = overrides.get("max_tokens", 1536)

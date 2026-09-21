@@ -253,15 +253,20 @@ class QueryUnderstanding:
         is_out_of_jurisdiction = any(pat.search(raw_query) for pat in cls.OUT_OF_JURISDICTION_PATTERNS)
         has_unsupported_topic = any(pat.search(raw_query) for pat in cls.UNSUPPORTED_TOPIC_PATTERNS)
 
-        # 9. Conversational greeting detection
+        # 9. Conversational greeting and system guidance detection
         normalized_q = re.sub(r"[^\w\s\u0900-\u097f]", "", raw_query.lower()).strip()
         GREETING_EXACT = {
             "hi", "hello", "hey", "hola", "namaste", "greetings", "good morning",
             "good afternoon", "good evening", "howdy", "who are you", "what can you do",
-            "नमस्ते", "नमस्कार", "प्रणाम", "सुप्रभात", "आप कौन हैं", "तुम कौन हो"
+            "what is adam", "who is adam", "how to search", "how do i search", "help",
+            "capabilities", "what are your capabilities", "system status", "how to use",
+            "नमस्ते", "नमस्कार", "प्रणाम", "सुप्रभात", "आप कौन हैं", "तुम कौन हो",
+            "अदम क्या है", "सहायता", "मदद", "खोज कैसे करें", "आप क्या कर सकते हैं"
         }
-        is_greeting = normalized_q in GREETING_EXACT or any(
-            normalized_q == g for g in ("hi adam", "hello adam", "hey adam", "namaste adam")
+        is_greeting = (
+            normalized_q in GREETING_EXACT
+            or any(normalized_q == g for g in ("hi adam", "hello adam", "hey adam", "namaste adam", "about adam"))
+            or (len(normalized_q.split()) <= 4 and any(k in normalized_q for k in ("what is adam", "who are you", "how to use adam", "help me search")))
         )
 
         return ParsedQuery(
