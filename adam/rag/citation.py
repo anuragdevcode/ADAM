@@ -45,6 +45,16 @@ class CitationBuilder:
         elif passage.currency_status in ("AMENDED", "SUPERSEDED") and not eff_banner:
             eff_banner = cls.DEFAULT_UNCERTAIN_BANNER
 
+        is_ext = getattr(passage, "is_external", False)
+        ext_url = getattr(passage, "external_url", None)
+        ext_domain = getattr(passage, "external_domain", None)
+
+        if is_ext:
+            pdf_page_link = ext_url or passage.source_url or ""
+            disclaimer_text = "External Web Source - Consulted for comparative/supplementary context; not an official Uttarakhand State repository record."
+        else:
+            disclaimer_text = cls.LEGAL_DISCLAIMER
+
         return Citation(
             document_title=passage.title,
             department=passage.department_id,
@@ -60,7 +70,10 @@ class CitationBuilder:
             pdf_page_link=pdf_page_link,
             bbox=bbox,
             currency_banner=eff_banner,
-            disclaimer=cls.LEGAL_DISCLAIMER,
+            disclaimer=disclaimer_text,
+            is_external=is_ext,
+            provenance_type="EXTERNAL_WEB" if is_ext else "INTERNAL_REPOSITORY",
+            external_domain=ext_domain,
         )
 
     @classmethod
@@ -92,9 +105,24 @@ class CitationBuilder:
         if citation.currency_banner:
             banner_md = f"\n   *Currency Alert: {citation.currency_banner}*"
 
+        if citation.is_external:
+            tag = f"[WEB-{index}]"
+            domain_info = f" ({citation.external_domain})" if citation.external_domain else ""
+            link_str = f" [Open External Web Source]({citation.pdf_page_link})" if citation.pdf_page_link else ""
+            return (
+                f"{tag} **{citation.document_title}**{domain_info}{link_str}\n"
+                f"   *Web URL:* {citation.source_url or citation.pdf_page_link}\n"
+                f"   *Provenance Notice:* {citation.disclaimer}"
+            )
+
         return (
             f"[{index}] **{citation.document_title}** ({citation.department}{go_str}{date_str}, "
             f"Page {citation.page}{sec_str}){link_str}\n"
             f"   *Source URL:* {citation.source_url} | *Hash:* `{citation.version_hash[:12] if citation.version_hash else 'N/A'}`\n"
             f"   *Notice:* {citation.disclaimer}{banner_md}"
         )
+
+
+# Convenience module-level export
+format_citation_markdown = CitationBuilder.format_citation_markdown
+

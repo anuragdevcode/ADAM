@@ -54,6 +54,11 @@ class OperationalEventType(str, Enum):
     ANSWER_GROUNDED = "answer.grounded"
     ANSWER_ABSTAINED = "answer.abstained"
 
+    # Planning & Agentic Steps
+    PLAN_CREATED = "plan.created"
+    STEP_STARTED = "step.started"
+    STEP_COMPLETED = "step.completed"
+
     # Terminal Lifecycle
     EXECUTION_COMPLETED = "execution.completed"
     EXECUTION_FAILED = "execution.failed"

@@ -14,6 +14,9 @@ class UserContext:
     roles: List[str] = field(default_factory=lambda: ["PUBLIC"])
     department_id: Optional[str] = None
     clearance_level: str = Classification.PUBLIC.value
+    permissions: List[str] = field(default_factory=list)
+    can_access_web: bool = False
+    allow_web_research: bool = False
 
     def is_admin(self) -> bool:
         return "ADMIN" in [r.upper() for r in self.roles] or self.clearance_level == "ADMIN"
@@ -69,6 +72,10 @@ class EvidencePassage:
     has_conflict: bool = False
     conflict_notes: Optional[str] = None
     currency_status: str = "CURRENT"  # CURRENT, AMENDED, SUPERSEDED, UNCERTAIN
+    is_external: bool = False
+    provenance_type: str = "INTERNAL_REPOSITORY"
+    external_url: Optional[str] = None
+    external_domain: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -87,6 +94,10 @@ class EvidencePassage:
             "order_date": self.order_date.isoformat() if self.order_date else None,
             "source_url": self.source_url,
             "currency_status": self.currency_status,
+            "is_external": self.is_external,
+            "provenance_type": self.provenance_type,
+            "external_url": self.external_url,
+            "external_domain": self.external_domain,
         }
 
 
@@ -129,6 +140,10 @@ class Citation:
     bbox: Optional[List[float]] = None
     currency_banner: Optional[str] = None
     disclaimer: str = "A citation is a source pointer, not a claim of legal validity."
+    is_external: bool = False
+    provenance_type: str = "INTERNAL_REPOSITORY"
+    external_url: Optional[str] = None
+    external_domain: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -147,6 +162,10 @@ class Citation:
             "bbox": self.bbox,
             "currency_banner": self.currency_banner,
             "disclaimer": self.disclaimer,
+            "is_external": self.is_external,
+            "provenance_type": self.provenance_type,
+            "external_url": self.external_url,
+            "external_domain": self.external_domain,
         }
 
 

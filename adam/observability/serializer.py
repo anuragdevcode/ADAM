@@ -25,6 +25,12 @@ PUBLIC_DATA_WHITELIST = {
     "model_name",
     "suggested_action",
     "command_hint",
+    "step_id",
+    "title",
+    "action",
+    "summary",
+    "plan_summary",
+    "total_steps",
 }
 
 # Substrings and regex patterns indicating sensitive backend internals

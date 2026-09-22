@@ -27,6 +27,8 @@ import type {
   LastExecutionSnapshot,
   AdvancedSettingsBundle,
   AdvancedSettingsResponse,
+  AgentExecutionPlan,
+  ComputationResultRecord,
 } from './types';
 
 const API_BASE = '/api';
@@ -216,6 +218,15 @@ export async function streamChat(
               break;
             case 'suggestions':
               callbacks.onSuggestions?.(data as string[]);
+              break;
+            case 'plan':
+              callbacks.onPlan?.(data as AgentExecutionPlan);
+              break;
+            case 'calculations':
+              callbacks.onCalculations?.(data as ComputationResultRecord[]);
+              break;
+            case 'research':
+              callbacks.onResearch?.(data as { summary?: string | null; subagents?: import('@/lib/types').SubagentRecord[] });
               break;
             case 'done':
               callbacks.onDone?.(data);

@@ -176,12 +176,16 @@ class EnvironmentProfileType(StrEnum):
 
 
 class AgentState(StrEnum):
-    """Strict linear stages for bounded agent orchestration state machine."""
+    """Linear stages and problem-solving states for bounded agent orchestration state machine."""
     AUTHENTICATE = "AUTHENTICATE"
     CLASSIFY_REQUEST = "CLASSIFY_REQUEST"
+    PLAN = "PLAN"
     RETRIEVE = "RETRIEVE"
+    EXECUTE_STEP = "EXECUTE_STEP"
+    VERIFY_INTERMEDIATE = "VERIFY_INTERMEDIATE"
     EVIDENCE_CURRENCY_CHECKS = "EVIDENCE_CURRENCY_CHECKS"
     GENERATE_OR_ABSTAIN = "GENERATE_OR_ABSTAIN"
+    SYNTHESIZE = "SYNTHESIZE"
     VALIDATE_CITATIONS = "VALIDATE_CITATIONS"
     AUDIT = "AUDIT"
     COMPLETED = "COMPLETED"
@@ -190,8 +194,16 @@ class AgentState(StrEnum):
 
 
 class AgentToolName(StrEnum):
-    """Whitelisted read-only tools available to the model agent."""
+    """Whitelisted read-only and analytical tools available to the model agent."""
     SEARCH = "search"
     OPEN_CITED_SOURCE = "open_cited_source"
     LIST_AUTHORISED_COLLECTIONS = "list_authorised_collections"
+    INSPECT_SYSTEM = "inspect_system"
+    LOOKUP_PRECEDENTS = "lookup_precedents"
+    EXECUTE_PYTHON_SANDBOX = "execute_python_sandbox"
+    VERIFY_CLAIM = "verify_claim"
+    DATABASE_QUERY = "database_query"
+    COMPARE_SOURCES = "compare_sources"
+    WEB_SEARCH = "web_search"
+    FETCH_WEB_PAGE = "fetch_web_page"
 

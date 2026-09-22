@@ -241,10 +241,22 @@ async def chat_endpoint(
                 "per_stage_latency": getattr(response, "per_stage_latency_ms", {}),
                 "abstention_reason": getattr(response, "abstention_reason", None),
                 "latency_ms": response.latency_ms,
+                "plan": getattr(response, "plan", None),
+                "computation_results": getattr(response, "computation_results", []),
+                "research_summary": getattr(response, "research_summary", None),
+                "subagents": getattr(response, "subagents", []),
             }
             yield f"event: trail\ndata: {json.dumps(trail_payload)}\n\n"
 
-            # 7. Completion Event with Latency & Diagnostics
+            # 7. Agentic Execution Plan, Sandbox Calculations, and Research Orchestration
+            if getattr(response, "plan", None):
+                yield f"event: plan\ndata: {json.dumps(response.plan)}\n\n"
+            if getattr(response, "computation_results", None):
+                yield f"event: calculations\ndata: {json.dumps(response.computation_results)}\n\n"
+            if getattr(response, "research_summary", None) or getattr(response, "subagents", None):
+                yield f"event: research\ndata: {json.dumps({'summary': getattr(response, 'research_summary', None), 'subagents': getattr(response, 'subagents', [])})}\n\n"
+
+            # 8. Completion Event with Latency & Diagnostics
             done_payload = {
                 "latency_ms": response.latency_ms,
                 "validation_passed": response.validation_passed,
@@ -253,6 +265,10 @@ async def chat_endpoint(
                 "state_history": state_history_data,
                 "per_stage_latency": getattr(response, "per_stage_latency_ms", {}),
                 "abstention_reason": getattr(response, "abstention_reason", None),
+                "plan": getattr(response, "plan", None),
+                "computation_results": getattr(response, "computation_results", []),
+                "research_summary": getattr(response, "research_summary", None),
+                "subagents": getattr(response, "subagents", []),
             }
             yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
 

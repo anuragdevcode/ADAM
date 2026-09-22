@@ -155,6 +155,26 @@ class PdfExtractor:
         return False, None
 
     @classmethod
+    def _format_markdown_table(cls, headers: List[str], rows: List[List[str]]) -> str:
+        """Format 2D table data into a clean GitHub Flavored Markdown table string."""
+        if not rows and not headers:
+            return ""
+        col_count = max(len(headers), max((len(r) for r in rows), default=0))
+        if col_count == 0:
+            return ""
+
+        padded_headers = list(headers) + [""] * (col_count - len(headers))
+        hdr_line = "| " + " | ".join(h.replace("|", "\\|") for h in padded_headers) + " |"
+        sep_line = "| " + " | ".join(["---"] * col_count) + " |"
+
+        body_lines = []
+        for r in rows:
+            padded_row = list(r) + [""] * (col_count - len(r))
+            body_lines.append("| " + " | ".join(c.replace("|", "\\|") for c in padded_row) + " |")
+
+        return "\n".join([hdr_line, sep_line] + body_lines)
+
+    @classmethod
     def _extract_tables(cls, page: fitz.Page) -> List[Dict[str, Any]]:
         """Extract structured tabular data from annexures using PyMuPDF table finder."""
         tables_data: List[Dict[str, Any]] = []
@@ -167,11 +187,22 @@ class PdfExtractor:
                 for row in rows:
                     clean_rows.append([cell.strip() if cell else "" for cell in row])
 
+                clean_headers = [h.strip() if h else "" for h in df_headers]
+                md_table = ""
+                if hasattr(tab, "to_markdown"):
+                    try:
+                        md_table = tab.to_markdown()
+                    except Exception:
+                        pass
+                if not md_table:
+                    md_table = cls._format_markdown_table(clean_headers, clean_rows)
+
                 tables_data.append({
                     "table_index": idx + 1,
                     "bbox": list(tab.bbox),
-                    "headers": [h.strip() if h else "" for h in df_headers],
+                    "headers": clean_headers,
                     "rows": clean_rows,
+                    "markdown": md_table,
                     "row_count": len(clean_rows),
                     "col_count": len(df_headers) if df_headers else (len(clean_rows[0]) if clean_rows else 0),
                 })

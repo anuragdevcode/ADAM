@@ -16,6 +16,10 @@ export interface Citation {
   bbox?: number[] | null;
   currency_banner?: string | null;
   disclaimer: string;
+  is_external?: boolean;
+  provenance_type?: string;
+  external_url?: string | null;
+  external_domain?: string | null;
 }
 
 export type CurrencyStatus = 'CURRENT' | 'AMENDED' | 'SUPERSEDED' | 'UNCERTAIN';
@@ -101,6 +105,55 @@ export interface StateTransitionTrailItem {
   abstention_reason?: string | null;
 }
 
+export interface PlanStepItem {
+  step_id: number;
+  title: string;
+  description: string;
+  action_type: string;
+  tool_name?: string | null;
+  tool_args?: Record<string, unknown>;
+  status: string;
+  result_summary?: string | null;
+  computation_result?: string | null;
+  error?: string | null;
+  requires_verification?: boolean;
+}
+
+export interface AgentExecutionPlan {
+  query: string;
+  complexity: string;
+  plan_summary?: string;
+  summary?: string;
+  is_direct_lookup: boolean;
+  total_steps?: number;
+  subproblems?: string[];
+  steps: PlanStepItem[];
+  created_at?: string;
+}
+
+export interface ComputationResultRecord {
+  expression_or_code?: string;
+  result?: unknown;
+  status?: string;
+  execution_time_ms?: number;
+  timestamp?: string;
+  code?: string;
+  value?: unknown;
+  output?: string;
+  formatted?: string;
+}
+
+export interface SubagentRecord {
+  subagent_type: string;
+  task_goal: string;
+  status: string;
+  success: boolean;
+  execution_time_ms: number;
+  findings: string[];
+  external_sources?: Array<Record<string, unknown>>;
+  error?: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -118,16 +171,27 @@ export interface ChatMessage {
   perStageLatency?: Record<string, number>;
   abstentionReason?: string | null;
   latencyMs?: number;
+  plan?: AgentExecutionPlan | null;
+  computationResults?: ComputationResultRecord[];
+  researchSummary?: string | null;
+  subagents?: SubagentRecord[];
 }
 
 export interface StreamCallbacks {
   onStart?: (sessionId: string, modelId: string) => void;
   onStatus?: (event: OperationalStatusEvent) => void;
+  onPlan?: (plan: AgentExecutionPlan) => void;
+  onCalculations?: (calcs: ComputationResultRecord[]) => void;
+  onResearch?: (data: { summary?: string | null; subagents?: SubagentRecord[] }) => void;
   onTrail?: (trail: {
     state_history: StateTransitionTrailItem[];
     per_stage_latency?: Record<string, number>;
     abstention_reason?: string | null;
     latency_ms?: number;
+    plan?: AgentExecutionPlan | null;
+    computation_results?: ComputationResultRecord[];
+    research_summary?: string | null;
+    subagents?: SubagentRecord[];
   }) => void;
   onToken?: (text: string) => void;
   onCitations?: (citations: Citation[]) => void;
@@ -141,6 +205,10 @@ export interface StreamCallbacks {
     state_history?: StateTransitionTrailItem[];
     per_stage_latency?: Record<string, number>;
     abstention_reason?: string | null;
+    plan?: AgentExecutionPlan | null;
+    computation_results?: ComputationResultRecord[];
+    research_summary?: string | null;
+    subagents?: SubagentRecord[];
   }) => void;
   onError?: (error: ChatErrorDetails | string) => void;
 }

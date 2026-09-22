@@ -39,8 +39,9 @@ ADAM is a platform for turning approved Uttarakhand public records into a connec
   5. `GENERATE_OR_ABSTAIN`: Synthesizes cited response or abstains if insufficient records exist (enforcing temperature 0–0.2).
   6. `VALIDATE_CITATIONS`: Audits and verifies all claim citations against the evidence packet.
   7. `AUDIT`: Writes an immutable, redacted audit record to the database.
+  - **Dynamic Multi-Step Reasoning States:** For complex multi-step problem solving, calculations, or precedent tracing, ADAM activates bounded agentic states: `PLAN` (sub-problem decomposition), `EXECUTE_STEP` (bounded tool execution), `VERIFY_INTERMEDIATE` (intermediate result verification), and `SYNTHESIZE` (grounded multi-source synthesis).
   - **Terminal States:** `COMPLETED` (successful response), `ABSTAINED` (governed refusal/abstention), or `FAILED` (pipeline error/clearance denial).
-  - **Whitelisted Read-Only Tools (`AgentToolName`):** `search`, `open_cited_source`, and `list_authorised_collections`. No arbitrary web browsing, emailing, or database write tools are available to the model.
+  - **Whitelisted Read-Only Tools (`AgentToolName`):** `search`, `open_cited_source`, `list_authorised_collections`, `inspect_system`, `lookup_precedents`, `execute_python_sandbox`, `verify_claim`, `database_query`, `compare_sources`, `web_search`, and `fetch_web_page`. No destructive commands, arbitrary emailing, or unauthorized database write tools are available to the model. Network tools (`web_search`, `fetch_web_page`) are strictly gated by permission checks and SSRF guards, and are disallowed under air-gapped clearances.
 - **Hosted API models:** supported as an alternative or addition to local Ollama models, for deployments that prefer or require it
 
 ### Document processing & OCR
@@ -291,6 +292,9 @@ ADAM incorporates a minimal, security-hardened operational transparency layer pr
 | `answer.abstained` | `grounding` | `warning` | Pipeline abstained due to lack of evidence | `citation_count: 0` |
 | `execution.completed`| `execution` | `completed` | Overall execution finished | `citation_count`, `duration_ms` |
 | `execution.failed` | `execution` | `failed` | Execution halted unexpectedly | None |
+| `plan.created` | `query` | `completed` | Dynamic problem execution plan created | `step_id`, `title`, `plan_summary`, `total_steps` |
+| `step.started` | `execution` | `running` | Agent reasoning step started | `step_id`, `action`, `tool_name` |
+| `step.completed` | `execution` | `completed` | Agent reasoning step completed | `step_id`, `status`, `summary` |
 
 ### Security & Sanitization Boundary
 

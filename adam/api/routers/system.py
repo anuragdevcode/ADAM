@@ -43,6 +43,7 @@ import os
 import httpx
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Header
+from fastapi.responses import PlainTextResponse
 from adam.agent.redaction import SecretRedactor
 
 
@@ -83,6 +84,14 @@ def validate_gemini_key(req: ValidateKeyRequest) -> Dict[str, Any]:
             "valid": False,
             "message": sanitized_msg,
         }
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def get_prometheus_metrics(db: Session = Depends(get_db)) -> PlainTextResponse:
+    """Expose Prometheus / OpenMetrics telemetry endpoint for standard infrastructure monitoring."""
+    from adam.observability.metrics import GLOBAL_METRICS
+    content = GLOBAL_METRICS.generate_metrics_text(session=db)
+    return PlainTextResponse(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @router.get("/system/models")

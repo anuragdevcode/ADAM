@@ -392,6 +392,14 @@ class HybridRetriever:
             self._vector_min_similarity = 0.55
             self._enable_rerank = True
 
+    def _is_postgresql(self) -> bool:
+        """Check if active database connection is PostgreSQL."""
+        try:
+            bind = self.session.get_bind()
+            return bind is not None and bind.dialect.name == "postgresql"
+        except Exception:
+            return False
+
     def retrieve(
         self,
         parsed_query: ParsedQuery,
@@ -464,6 +472,22 @@ class HybridRetriever:
                 )
                 if range_q.count() > 0:
                     query = range_q
+
+        # PostgreSQL Optimization: For large collections, apply full-text index acceleration
+        if self._is_postgresql() and not parsed_query.go_number:
+            from sqlalchemy import func
+            q_clean = parsed_query.clean_query or parsed_query.raw_query
+            if q_clean and len(q_clean.strip()) > 2:
+                try:
+                    ts_query = query.filter(
+                        func.to_tsvector("simple", DocumentChunk.content).op("@@")(
+                            func.plainto_tsquery("simple", q_clean)
+                        )
+                    )
+                    if ts_query.count() >= top_k:
+                        query = ts_query
+                except Exception:
+                    pass
 
         candidates = query.all()
         if not candidates:

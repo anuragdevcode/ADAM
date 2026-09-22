@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from adam.agent.cache import GLOBAL_RESPONSE_CACHE, GovernedResponseCache
 from adam.agent.coordinator import HeavyWorkerCoordinator, HeavyTaskType
+from adam.agent.planner import AgentExecutionPlan, AgenticPlanner
 from adam.agent.redaction import SecretRedactor
 from adam.agent.tools import ReadOnlyToolRegistry, ForbiddenToolError
 from adam.db.models import AgentExecutionAudit, AuditEvent
@@ -106,6 +107,10 @@ class AgentResponse:
     applied_schema: str = "ADAM_AGENT_SCHEMA_V1"
     session_summary: Optional[Dict[str, Any]] = None
     is_cached: bool = False
+    plan: Optional[Dict[str, Any]] = None
+    computation_results: List[Dict[str, Any]] = field(default_factory=list)
+    research_summary: Optional[str] = None
+    subagents: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -144,6 +149,10 @@ class AgentResponse:
             ],
             "tool_calls": self.tool_calls,
             "session_summary": self.session_summary,
+            "plan": self.plan,
+            "computation_results": self.computation_results,
+            "research_summary": self.research_summary,
+            "subagents": self.subagents,
         }
 
 
@@ -439,6 +448,48 @@ class AgentStateMachine:
                 "is_system_introspection": bool(getattr(parsed_query, "is_system_introspection", False)),
             },
         )
+
+        # Agentic Problem-Solving: Formulate execution plan and evaluate complexity
+        from adam.agent.planner import AgenticPlanner, AgentExecutionPlan
+        execution_plan: AgentExecutionPlan = AgenticPlanner.create_plan(
+            query=query,
+            user_context=user,
+            department_id=parsed_query.department_id,
+        )
+        emitter.emit(
+            OperationalEventType.PLAN_CREATED,
+            stage="query",
+            status="completed",
+            message=execution_plan.plan_summary,
+            data=execution_plan.to_dict(),
+        )
+
+        # If complex task requiring multi-step reasoning, computation, or precedents:
+        if (
+            not execution_plan.is_direct_lookup
+            and not is_refusal
+            and not getattr(parsed_query, "is_greeting", False)
+            and not getattr(parsed_query, "is_system_introspection", False)
+            and not getattr(parsed_query, "is_high_risk", False)
+        ):
+            return self._run_agentic_flow(
+                query=query,
+                user=user,
+                session_id=session_id,
+                parsed_query=parsed_query,
+                execution_plan=execution_plan,
+                start_time=start_time,
+                top_k=top_k,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                token_callback=token_callback,
+                emitter=emitter,
+                state_history=state_history,
+                transition_to=transition_to,
+                per_stage_latency_ms=per_stage_latency_ms,
+                active_session_summary=active_session_summary,
+                retrieval_settings=_retrieval_settings,
+            )
 
         # ── Stage 3: Retrieve (Strict Limit: Max 1 Retrieval Pass) ───────────
         emitter.start_stage("retrieval")
@@ -1181,6 +1232,8 @@ class AgentStateMachine:
             applied_schema="ADAM_AGENT_SCHEMA_V1",
             session_summary=updated_summary.to_dict() if updated_summary else active_session_summary,
             is_cached=is_cached,
+            plan=execution_plan.to_dict() if execution_plan else None,
+            computation_results=[],
         )
 
     def _format_research_brief(
@@ -1222,6 +1275,271 @@ class AgentStateMachine:
         )
 
         return header + body + footer
+
+    def _run_agentic_flow(
+        self,
+        query: str,
+        user: UserContext,
+        session_id: str,
+        parsed_query: ParsedQuery,
+        execution_plan: AgentExecutionPlan,
+        start_time: float,
+        top_k: int,
+        temperature: float,
+        max_tokens: int,
+        token_callback: Optional[Callable[[str], None]],
+        emitter: OperationalEventEmitter,
+        state_history: List[AgentStateTransition],
+        transition_to: Callable[..., None],
+        per_stage_latency_ms: Dict[str, float],
+        active_session_summary: Optional[Dict[str, Any]],
+        retrieval_settings: Optional[Any],
+    ) -> AgentResponse:
+        """Dynamic multi-step problem solving, verification, and grounded synthesis flow."""
+        from adam.agent.orchestrator import AgenticOrchestrator
+
+        transition_to(
+            AgentState.PLAN,
+            f"Formulated dynamic execution plan ({execution_plan.complexity.value}): {execution_plan.plan_summary}",
+        )
+
+        with self.coordinator.acquire_worker(HeavyTaskType.CHAT_INFERENCE, task_id=session_id):
+            emitter.start_stage("model")
+            emitter.emit(
+                OperationalEventType.MODEL_LOADING,
+                stage="model",
+                status="running",
+                message=f"Activating model runtime ({self.model_id})",
+                data={"model_name": self.model_id},
+            )
+            try:
+                runtime = self._custom_runtime or self.lifecycle.load_model(
+                    self.model_id,
+                    allow_hot_swap=True,
+                    backend=self.backend,
+                    api_key=self.api_key,
+                    clearance_level=user.clearance_level,
+                )
+                emitter.emit(
+                    OperationalEventType.MODEL_READY,
+                    stage="model",
+                    status="completed",
+                    message="Model runtime ready",
+                    data={"model_name": self.model_id},
+                )
+            except Exception as m_err:
+                emitter.emit(
+                    OperationalEventType.MODEL_FAILED,
+                    stage="model",
+                    status="failed",
+                    message=f"Model activation failed: {str(m_err)}",
+                    data={"model_name": self.model_id},
+                )
+                raise
+
+            orchestrator = AgenticOrchestrator(
+                session=self.session,
+                runtime=runtime,
+                model_id=self.model_id,
+                emitter=emitter,
+                retrieval_settings=retrieval_settings,
+            )
+
+            transition_to(
+                AgentState.EXECUTE_STEP,
+                f"Executing dynamic plan ({len(execution_plan.steps)} steps)",
+            )
+
+            orch_res = orchestrator.execute_plan(
+                plan=execution_plan,
+                user_context=user,
+                top_k=top_k,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                token_callback=token_callback,
+            )
+
+        answer = orch_res["answer"]
+        citations = orch_res["citations"]
+        currency_banners = orch_res["currency_banners"]
+        is_refusal = orch_res["is_no_answer"]
+        passed = orch_res["validation_passed"]
+        val_errors = orch_res["validation_errors"]
+        tool_calls = orch_res["tool_calls"]
+        verified_calculations = orch_res["verified_calculations"]
+        subagents = orch_res.get("subagents", [])
+        research_summary = orch_res.get("research_summary")
+        prompt_tokens = orch_res["tokens_prompt"]
+        completion_tokens = orch_res["tokens_completion"]
+
+        transition_to(
+            AgentState.VERIFY_INTERMEDIATE,
+            "Completed intermediate verification of evidence and calculation results",
+        )
+        transition_to(
+            AgentState.SYNTHESIZE,
+            f"Synthesized grounded response with {len(citations)} citations and {len(verified_calculations)} verified calculations",
+        )
+
+        # Stage 7: Audit
+        transition_to(AgentState.AUDIT, "Compiling audit record and redacting credentials/system prompts")
+        total_latency_ms = (time.perf_counter() - start_time) * 1000.0
+
+        raw_audit_summary = (
+            f"Session: {session_id} | User: {user.user_id} | Role: {user.roles[0] if user.roles else 'N/A'} | "
+            f"Query: {query} | Model: {self.model_id} | Latency: {total_latency_ms:.1f}ms | "
+            f"AgenticPlan: {execution_plan.complexity.value} | Tokens: P={prompt_tokens}/C={completion_tokens}"
+        )
+        redacted_audit_log = SecretRedactor.sanitize_text(raw_audit_summary)
+
+        final_state = AgentState.COMPLETED if not is_refusal else AgentState.ABSTAINED
+        transition_notes = (
+            "Agent execution completed successfully"
+            if final_state == AgentState.COMPLETED
+            else "Agent execution abstained: Insufficient verified repository records"
+        )
+        transition_to(
+            final_state,
+            transition_notes,
+            abstention_reason=self.NO_EVIDENCE_REFUSAL if final_state == AgentState.ABSTAINED else None,
+        )
+
+        # Persist AgentExecutionAudit
+        agent_audit = AgentExecutionAudit(
+            session_id=session_id,
+            user_id=user.user_id,
+            user_role=user.roles[0] if user.roles else "PUBLIC",
+            department_id=user.department_id,
+            clearance_level=user.clearance_level,
+            query_text=SecretRedactor.sanitize_text(query),
+            detected_intent=f"AGENTIC_{execution_plan.complexity.value}",
+            model_id=self.model_id,
+            retrieval_pass_count=1,
+            answer_pass_count=1,
+            is_no_answer=1 if is_refusal else 0,
+            is_high_risk=0,
+            state_transitions_json=[
+                t.to_dict() if hasattr(t, "to_dict") else {
+                    "from": t.from_state,
+                    "to": t.to_state,
+                    "at": t.timestamp,
+                    "notes": t.notes,
+                    "duration_ms": getattr(t, "duration_ms", 0.0),
+                    "stage": getattr(t, "stage", None),
+                    "abstention_reason": getattr(t, "abstention_reason", None),
+                }
+                for t in state_history
+            ],
+            tool_calls_json=tool_calls,
+            validation_passed=1 if passed else 0,
+            validation_errors_json=val_errors,
+            currency_banners_json=currency_banners,
+            latency_ms=total_latency_ms,
+            memory_used_mb=self.registry.get(self.model_id).file_size_bytes / (1024 * 1024) if self.registry.get(self.model_id) else 0.0,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            temperature_applied=temperature,
+            redacted_audit_log=redacted_audit_log,
+        )
+        self.session.add(agent_audit)
+
+        std_audit = AuditEvent(
+            entity_type="AGENT",
+            entity_id=session_id,
+            action="AGENT_EXECUTION_COMPLETED",
+            actor=user.user_id,
+            details_json={
+                "model_id": self.model_id,
+                "is_no_answer": is_refusal,
+                "is_agentic": True,
+                "complexity": execution_plan.complexity.value,
+                "validation_passed": passed,
+                "latency_ms": round(total_latency_ms, 2),
+            },
+        )
+        self.session.add(std_audit)
+        self.session.commit()
+
+        safe_answer = SecretRedactor.sanitize_text(answer)
+
+        # Record encrypted turns
+        cited_cids = [c.chunk_id for c in citations if hasattr(c, "chunk_id") and c.chunk_id]
+        self.session_manager.add_turn(
+            session_id=session_id,
+            user_id=user.user_id,
+            role="user",
+            content=query,
+            is_classified_or_pii=False,
+        )
+        self.session_manager.add_turn(
+            session_id=session_id,
+            user_id=user.user_id,
+            role="assistant",
+            content=safe_answer,
+            cited_chunk_ids=cited_cids,
+            is_classified_or_pii=False,
+        )
+        updated_summary = self.summarizer.update_summary(session_id=session_id, requesting_user_id=user.user_id)
+
+        emitter.start_stage("grounding")
+        if is_refusal:
+            emitter.emit(
+                OperationalEventType.ANSWER_ABSTAINED,
+                stage="grounding",
+                status="warning",
+                message="Abstained from answering due to lack of verified repository records",
+                data={"citation_count": 0},
+            )
+        else:
+            emitter.emit(
+                OperationalEventType.ANSWER_GROUNDED,
+                stage="grounding",
+                status="completed",
+                message=f"Grounded response in {len(citations)} official sources with verified reasoning",
+                data={"citation_count": len(citations)},
+            )
+
+        emitter.emit(
+            OperationalEventType.EXECUTION_COMPLETED,
+            stage="execution",
+            status="completed",
+            message="Pipeline execution completed successfully",
+            data={
+                "citation_count": len(citations),
+                "duration_ms": total_latency_ms,
+            },
+        )
+
+        return AgentResponse(
+            session_id=session_id,
+            answer=safe_answer,
+            citations=citations,
+            currency_banners=currency_banners,
+            is_no_answer=is_refusal,
+            is_high_risk=False,
+            is_research_brief=False,
+            validation_passed=passed,
+            validation_errors=val_errors,
+            search_suggestions=self.SEARCH_SUGGESTIONS if is_refusal else [],
+            state_history=state_history,
+            tool_calls=tool_calls,
+            retrieval_pass_count=1,
+            answer_pass_count=1,
+            latency_ms=total_latency_ms,
+            per_stage_latency_ms=per_stage_latency_ms,
+            abstention_reason=self.NO_EVIDENCE_REFUSAL if is_refusal else None,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            model_id=self.model_id,
+            temperature_applied=temperature,
+            applied_schema="ADAM_AGENT_SCHEMA_V1",
+            session_summary=updated_summary.to_dict() if updated_summary else active_session_summary,
+            is_cached=False,
+            plan=execution_plan.to_dict(),
+            computation_results=verified_calculations,
+            research_summary=research_summary,
+            subagents=subagents,
+        )
 
 
 # Alias for backward and forward compatibility

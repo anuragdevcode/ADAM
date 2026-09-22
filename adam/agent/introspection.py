@@ -532,7 +532,8 @@ class SystemIntrospectionService:
         lines.extend([
             "- **Forbidden Capabilities (Hardcoded Sandbox Enforcement)**:",
             f"  * The following are strictly blocked and unavailable: {', '.join(t.forbidden_tools[:12])}...",
-            f"  * ADAM has NO web browser, NO email sender, NO code execution sandbox, and NO database write capabilities.",
+            f"  * ADAM has NO web browser, NO email sender, and NO database write capabilities.",
+            f"  * ADAM features an isolated, read-only Python calculation sandbox for deterministic arithmetic, date math, and government order financial analysis.",
             "- **Core Governance Invariants**:",
         ])
         for inv in t.guardrail_invariants[:4]:

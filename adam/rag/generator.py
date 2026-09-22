@@ -68,8 +68,9 @@ class CitationValidator:
         cls,
         answer: str,
         packet: EvidencePacket,
+        verified_calculations: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[bool, List[str]]:
-        """Verify that every material claim in the answer is grounded in the evidence packet."""
+        """Verify that every material claim in the answer is grounded in the evidence packet or verified calculations."""
         if not answer:
             return True, []
 
@@ -77,8 +78,17 @@ class CitationValidator:
         if not claims:
             return True, []
 
+        calc_context = ""
+        if verified_calculations:
+            calc_context = " ".join(
+                str(c.get("value") or "") + " " + str(c.get("output") or "")
+                for c in verified_calculations
+                if isinstance(c, dict)
+            )
+
         extra_context = " ".join([
             packet.currency_banner or "",
+            calc_context,
             " ".join(str(p.order_date or "") for p in packet.passages),
             " ".join(str(p.effective_from or "") for p in packet.passages),
             " ".join(str(p.effective_to or "") for p in packet.passages),
@@ -92,7 +102,7 @@ class CitationValidator:
             # Date normalization check
             is_grounded = c_norm in corpus_text
 
-            # Numeric/currency/date check: verify the numbers appear in the corpus
+            # Numeric/currency/date check: verify the numbers appear in the corpus or calculation results
             if not is_grounded and claim_type in ("MONEY_AMOUNT", "RULE_OR_GO_NUMBER", "DATE"):
                 digits = re.findall(r"\d+", claim_val)
                 if digits and all(d in corpus_text for d in digits):

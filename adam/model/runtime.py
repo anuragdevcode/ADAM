@@ -654,6 +654,113 @@ class OllamaModelRuntime(BaseModelRuntime):
             self.is_loaded = False
 
 
+class LlamaCppServerRuntime(BaseModelRuntime):
+    """Physical local execution runtime backed by standalone llama-server (llama.cpp).
+
+    Provides direct Apple Silicon Metal acceleration with minimal overhead,
+    OpenAI-compatible /v1/chat/completions endpoint, slot health monitoring,
+    and strict temperature/token budget enforcement.
+    """
+
+    DEFAULT_HOST = "http://localhost:8080"
+
+    def __init__(
+        self,
+        artifact: ModelArtifact,
+        host: Optional[str] = None,
+        timeout: float = 120.0,
+    ):
+        super().__init__(artifact)
+        self.host = (host or os.getenv("LLAMA_SERVER_HOST") or self.DEFAULT_HOST).rstrip("/")
+        self.timeout = timeout
+        self._client: Optional[httpx.Client] = None
+
+    def _get_client(self) -> httpx.Client:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.Client(base_url=self.host, timeout=self.timeout)
+        return self._client
+
+    def is_available(self) -> bool:
+        """Check if llama-server is healthy and running."""
+        try:
+            client = self._get_client()
+            resp = client.get("/health")
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 512,
+        stop_sequences: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> ModelGenerationResult:
+        """Execute inference against llama-server OpenAI-compatible API."""
+        if not (0.0 <= temperature <= 0.2):
+            raise TemperatureOutOfBoundsError(
+                f"Temperature {temperature} outside permitted range [0.0, 0.2]."
+            )
+
+        start_time = time.perf_counter()
+        client = self._get_client()
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
+
+        payload = {
+            "model": self.artifact.id,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": min(max_tokens, self.artifact.context_window),
+            "stream": False,
+        }
+        if stop_sequences:
+            payload["stop"] = stop_sequences
+
+        token_callback = kwargs.get("token_callback")
+
+        try:
+            resp = client.post("/v1/chat/completions", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+
+            choice = data["choices"][0]
+            answer = choice["message"]["content"] or ""
+            usage = data.get("usage", {})
+            prompt_tokens = usage.get("prompt_tokens", len(user_prompt) // 4)
+            completion_tokens = usage.get("completion_tokens", len(answer) // 4)
+
+            if token_callback:
+                token_callback(answer)
+
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+
+            return ModelGenerationResult(
+                answer=answer.strip(),
+                raw_completion=answer,
+                tokens_prompt=prompt_tokens,
+                tokens_completion=completion_tokens,
+                model_id=self.artifact.id,
+                latency_ms=elapsed_ms,
+                temperature=temperature,
+                finish_reason=choice.get("finish_reason", "stop"),
+                is_refusal=False,
+            )
+        except Exception as err:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+            raise RuntimeError(f"llama-server execution error: {err}") from err
+
+    def unload(self) -> None:
+        if self._client and not self._client.is_closed:
+            self._client.close()
+        self.is_loaded = False
+
+
 def is_test_environment(backend: Optional[str] = None, env_backend: Optional[str] = None) -> bool:
     """Check whether execution is occurring within automated tests or deterministic mode."""
     if os.getenv("ADAM_TEST_MODE") == "1":
@@ -738,6 +845,8 @@ class SingleModelLifecycleManager:
                 resolved_backend = env_backend.lower()
             elif getattr(artifact, "serving_runtime", "") == "gemini":
                 resolved_backend = "gemini"
+            elif getattr(artifact, "serving_runtime", "").lower() in ("llama_server",):
+                resolved_backend = "llama_server"
             elif artifact.serving_runtime and artifact.serving_runtime.lower() in ("ollama", "llamacpp"):
                 resolved_backend = "ollama"
             elif artifact.serving_runtime:
@@ -748,6 +857,8 @@ class SingleModelLifecycleManager:
             if resolved_backend == "gemini":
                 from adam.model.gemini import GeminiModelRuntime
                 expected_runtime_cls = GeminiModelRuntime
+            elif resolved_backend in ("llamacpp", "llama_server"):
+                expected_runtime_cls = LlamaCppServerRuntime
             elif resolved_backend == "ollama":
                 expected_runtime_cls = OllamaModelRuntime
             else:
@@ -773,6 +884,22 @@ class SingleModelLifecycleManager:
 
             if runtime_override:
                 self._active_runtime = runtime_override
+            elif resolved_backend in ("llamacpp", "llama_server"):
+                llama_rt = LlamaCppServerRuntime(artifact)
+                if not llama_rt.is_available():
+                    if is_test_mode:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"llama-server not reachable at {llama_rt.host}. Falling back to DeterministicModelRuntime in test mode for {model_id}."
+                        )
+                        self._active_runtime = DeterministicModelRuntime(artifact)
+                    else:
+                        raise RuntimeError(
+                            f"Cannot connect to llama-server service at {llama_rt.host}. "
+                            "Please start llama-server in your terminal ('llama-server -m model.gguf -ngl 99')."
+                        )
+                else:
+                    self._active_runtime = llama_rt
             elif resolved_backend == "gemini":
                 from adam.model.gemini import GeminiModelRuntime
                 gemini_rt = GeminiModelRuntime(artifact, api_key=api_key)

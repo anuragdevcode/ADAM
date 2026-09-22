@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { OperationalStatusEvent, StateTransitionTrailItem } from '@/lib/types';
+import type {
+  OperationalStatusEvent,
+  StateTransitionTrailItem,
+  AgentExecutionPlan,
+  ComputationResultRecord,
+  SubagentRecord,
+} from '@/lib/types';
 import {
   ShieldCheck,
   Search,
@@ -21,6 +27,11 @@ import {
   Gauge,
   BarChart2,
   Info,
+  Calculator,
+  Globe,
+  Database,
+  Bot,
+  GitCompare,
 } from 'lucide-react';
 
 interface ExecutionStatusProps {
@@ -32,6 +43,10 @@ interface ExecutionStatusProps {
   isStreaming?: boolean;
   hasError?: boolean;
   isNoAnswer?: boolean;
+  plan?: AgentExecutionPlan | null;
+  computationResults?: ComputationResultRecord[];
+  researchSummary?: string | null;
+  subagents?: SubagentRecord[];
 }
 
 const STAGE_CONFIG: Record<
@@ -60,6 +75,10 @@ const STATE_META: Record<
   GENERATE_OR_ABSTAIN: { label: 'Governed Model Synthesis / Abstain', stageNumber: 5, icon: Sparkles },
   VALIDATE_CITATIONS: { label: 'Citation & Claim Grounding Check', stageNumber: 6, icon: CheckCircle2 },
   AUDIT: { label: 'Governance Audit & Redaction', stageNumber: 7, icon: Fingerprint },
+  PLAN: { label: 'Dynamic Problem Formulation & Planning', icon: Layers },
+  EXECUTE_STEP: { label: 'Bounded Multi-Step Action Execution', icon: Activity },
+  VERIFY_INTERMEDIATE: { label: 'Intermediate Result Verification', icon: CheckCircle2 },
+  SYNTHESIZE: { label: 'Multi-Source Grounded Synthesis', icon: Sparkles },
   COMPLETED: { label: 'Pipeline Completed Successfully', icon: CheckCircle2 },
   ABSTAINED: { label: 'Deterministic Policy Abstention', icon: AlertTriangle },
   FAILED: { label: 'Security / Execution Termination', icon: XCircle },
@@ -73,6 +92,10 @@ const STAGE_SHORT_NAMES: Record<string, string> = {
   GENERATE_OR_ABSTAIN: 'Synthesis',
   VALIDATE_CITATIONS: 'Validation',
   AUDIT: 'Audit',
+  PLAN: 'Plan',
+  EXECUTE_STEP: 'Step',
+  VERIFY_INTERMEDIATE: 'Verify',
+  SYNTHESIZE: 'Synthesize',
   security: 'Security',
   query: 'Routing',
   retrieval: 'Retrieval',
@@ -108,14 +131,23 @@ export default function ExecutionStatus({
   isStreaming = false,
   hasError = false,
   isNoAnswer = false,
+  plan,
+  computationResults = [],
+  researchSummary,
+  subagents = [],
 }: ExecutionStatusProps) {
+  const isAgentic = !!plan && !plan.is_direct_lookup;
+  const hasCalculations = computationResults && computationResults.length > 0;
+  const hasSubagents = subagents && subagents.length > 0;
+  const hasResearch = !!researchSummary || hasSubagents;
   const [isExpanded, setIsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'trail' | 'telemetry'>('trail');
+  const [activeTab, setActiveTab] = useState<'plan' | 'trail' | 'telemetry'>('plan');
+  const effectiveTab = (activeTab === 'plan' && !isAgentic) ? 'trail' : activeTab;
 
   const hasEvents = events && events.length > 0;
   const hasTrail = stateHistory && stateHistory.length > 0;
 
-  if (!hasEvents && !hasTrail) {
+  if (!hasEvents && !hasTrail && !isAgentic && !hasCalculations && !hasResearch) {
     if (isStreaming) {
       return (
         <div className="flex items-center gap-2 px-3 py-1.5 mb-2 text-xs font-medium text-purple-700 bg-purple-50/70 border border-purple-100 rounded-lg w-fit animate-pulse">
@@ -255,6 +287,9 @@ export default function ExecutionStatus({
   } else if (isAbstained) {
     badgeTitle = 'Repository Boundary Abstained';
     badgeColor = 'bg-amber-50/80 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40';
+  } else if (isAgentic && plan) {
+    badgeTitle = `Reasoning Plan: ${plan.complexity.replace(/_/g, ' ')} (${plan.steps.length} steps)`;
+    badgeColor = 'bg-indigo-50/80 text-indigo-800 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/40';
   } else if (citationCount != null && citationCount > 0) {
     badgeTitle = `Grounded in ${citationCount} official ${citationCount === 1 ? 'source' : 'sources'}`;
   } else if (selectedCount != null && selectedCount > 0) {
@@ -264,38 +299,47 @@ export default function ExecutionStatus({
   return (
     <div className="mb-3">
       {/* Collapsed Badge with reasoning trail toggle */}
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className={`inline-flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border transition-colors hover:brightness-95 select-none focus:outline-none focus:ring-1 focus:ring-purple-400 ${badgeColor}`}
-        aria-expanded={isExpanded}
-        title="Click to inspect the state-transition reasoning trail and per-stage latency"
-      >
-        {hasError ? (
-          <XCircle className="w-3.5 h-3.5 text-red-500" />
-        ) : isAbstained ? (
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-        ) : (
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-        )}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`inline-flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border transition-colors hover:brightness-95 select-none focus:outline-none focus:ring-1 focus:ring-purple-400 ${badgeColor}`}
+          aria-expanded={isExpanded}
+          title="Click to inspect the state-transition reasoning trail and per-stage latency"
+        >
+          {hasError ? (
+            <XCircle className="w-3.5 h-3.5 text-red-500" />
+          ) : isAbstained ? (
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+          ) : (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          )}
 
-        <span className="font-medium">{badgeTitle}</span>
+          <span className="font-medium">{badgeTitle}</span>
 
-        {totalCalculatedLatency > 0 && (
-          <span className="text-[10px] opacity-75 font-mono border-l border-current/20 pl-1.5 ml-0.5">
-            {totalCalculatedLatency > 1000 ? `${(totalCalculatedLatency / 1000).toFixed(2)}s` : `${Math.round(totalCalculatedLatency)}ms`}
+          {totalCalculatedLatency > 0 && (
+            <span className="text-[10px] opacity-75 font-mono border-l border-current/20 pl-1.5 ml-0.5">
+              {totalCalculatedLatency > 1000 ? `${(totalCalculatedLatency / 1000).toFixed(2)}s` : `${Math.round(totalCalculatedLatency)}ms`}
+            </span>
+          )}
+
+          <span className="flex items-center gap-0.5 text-[11px] opacity-90 ml-1 font-semibold underline decoration-dotted underline-offset-2">
+            {isExpanded ? 'Hide reasoning trail' : 'Show reasoning trail'}
+            {isExpanded ? (
+              <ChevronUp className="w-3 h-3 ml-0.5" />
+            ) : (
+              <ChevronDown className="w-3 h-3 ml-0.5" />
+            )}
+          </span>
+        </button>
+
+        {hasCalculations && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-50/80 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/40">
+            <Calculator className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>{computationResults.length} Verified {computationResults.length === 1 ? 'Calculation' : 'Calculations'}</span>
           </span>
         )}
-
-        <span className="flex items-center gap-0.5 text-[11px] opacity-90 ml-1 font-semibold underline decoration-dotted underline-offset-2">
-          {isExpanded ? 'Hide reasoning trail' : 'Show reasoning trail'}
-          {isExpanded ? (
-            <ChevronUp className="w-3 h-3 ml-0.5" />
-          ) : (
-            <ChevronDown className="w-3 h-3 ml-0.5" />
-          )}
-        </span>
-      </button>
+      </div>
 
       {/* Expandable Reasoning Trail & Latency Dashboard */}
       {isExpanded && (
@@ -309,36 +353,49 @@ export default function ExecutionStatus({
                 Administrative Reasoning Trail
               </span>
               <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono">
-                7-Stage State Machine
+                {isAgentic ? 'Agentic Problem Solver' : '7-Stage State Machine'}
               </span>
             </div>
 
-            {hasEvents && hasTrail && (
-              <div className="flex items-center p-0.5 bg-slate-200/60 dark:bg-slate-800/80 rounded-lg text-[11px]">
+            <div className="flex items-center p-0.5 bg-slate-200/60 dark:bg-slate-800/80 rounded-lg text-[11px]">
+              {isAgentic && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab('trail')}
+                  onClick={() => setActiveTab('plan')}
                   className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
-                    activeTab === 'trail'
-                      ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-300 shadow-xs'
+                    effectiveTab === 'plan'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  Stage Trail &amp; Latency
+                  Reasoning Plan ({plan?.steps.length ?? 0} Steps)
                 </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setActiveTab('trail')}
+                className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
+                  effectiveTab === 'trail'
+                    ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Stage Trail &amp; Latency
+              </button>
+              {hasEvents && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('telemetry')}
                   className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
-                    activeTab === 'telemetry'
+                    effectiveTab === 'telemetry'
                       ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-300 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
                   Telemetry Events ({sortedEvents.length})
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Average Response Time & Latency Metrics Bar */}
@@ -397,15 +454,16 @@ export default function ExecutionStatus({
 
           {/* Abstention Rationale Callout Card */}
           {isAbstained && (
-            <div className="p-2.5 rounded-xl border border-amber-200/80 bg-amber-50/70 dark:bg-amber-950/20 dark:border-amber-800/50 text-left">
-              <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-200 font-semibold text-xs">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>Administrative Abstention Rationale</span>
+            <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl space-y-1.5 text-left">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-semibold text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Air-Gapped Repository Boundary Protection</span>
               </div>
-              <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
-                {effectiveAbstentionReason || 'The query cannot be substantiated from approved Uttarakhand Public Records within the current user clearance boundary.'}
-              </p>
-              <div className="mt-1.5 flex items-center gap-2 text-[10px] text-amber-700 dark:text-amber-400">
+              <div className="text-amber-900 dark:text-amber-200 text-xs leading-relaxed">
+                {effectiveAbstentionReason ||
+                  'The request cannot be verified against official Uttarakhand Government Orders, Rules, or Gazette notifications in the authorised repository.'}
+              </div>
+              <div className="flex items-center gap-3 pt-1 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
                 <span className="inline-flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" /> Non-hallucinatory guarantee
                 </span>
@@ -415,8 +473,246 @@ export default function ExecutionStatus({
             </div>
           )}
 
+          {/* Tab Content: Agentic Plan & Proof */}
+          {effectiveTab === 'plan' && plan && (
+            <div className="space-y-3 pt-1 text-left">
+              {/* Strategy & Goal Card */}
+              <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/60 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-indigo-900 dark:text-indigo-200 text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <span>Autonomous Problem Decomposition</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">
+                    {plan.complexity.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                {(plan.plan_summary || plan.summary) && (
+                  <p className="text-xs text-indigo-900/80 dark:text-indigo-300/90 leading-relaxed">
+                    {plan.plan_summary || plan.summary}
+                  </p>
+                )}
+                {plan.subproblems && plan.subproblems.length > 0 && (
+                  <div className="pt-1 border-t border-indigo-200/50 dark:border-indigo-900/40 space-y-1">
+                    <span className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
+                      Sub-problems ({plan.subproblems.length})
+                    </span>
+                    <ul className="space-y-0.5 pl-3 list-disc text-[11px] text-indigo-800 dark:text-indigo-300">
+                      {plan.subproblems.map((sub, i) => (
+                        <li key={i}>{sub}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Verified Mathematical Proofs */}
+              {hasCalculations && (
+                <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+                      <Calculator className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>Verified Sandbox Proof ({computationResults.length})</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 rounded font-mono">
+                      Isolated AST Sandbox
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {computationResults.map((calc, cIdx) => {
+                      const displayCode = calc.expression_or_code || calc.code || '';
+                      const displayVal = calc.result !== undefined ? calc.result : (calc.value !== undefined ? calc.value : calc.output);
+                      const execTime = calc.execution_time_ms != null ? calc.execution_time_ms.toFixed(1) : '0.0';
+
+                      return (
+                        <div key={cIdx} className="bg-slate-900 text-slate-100 rounded-lg p-2.5 font-mono text-[11px] space-y-1 shadow-xs">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 pb-1 border-b border-slate-800">
+                            <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                              <CheckCircle2 className="w-3 h-3" /> Proof #{cIdx + 1}
+                            </span>
+                            <span>{execTime}ms execution</span>
+                          </div>
+                          <div className="text-slate-300 whitespace-pre-wrap pt-1 select-all font-mono text-[11px]">
+                            {displayCode}
+                          </div>
+                          <div className="pt-1.5 mt-1 border-t border-slate-800 flex items-center justify-between text-xs">
+                            <span className="text-slate-400 font-sans text-[10px] uppercase tracking-wider">Deterministic Output</span>
+                            <span className="text-emerald-400 font-bold font-mono">
+                              {typeof displayVal === 'object' && displayVal !== null ? JSON.stringify(displayVal) : String(displayVal ?? '')}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Research & Subagent Orchestration Card */}
+              {hasResearch && (
+                <div className="p-3 bg-sky-50/70 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-900 dark:text-sky-200">
+                      <Globe className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                      <span>Research &amp; Tool Orchestration</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 bg-sky-100 dark:bg-sky-900/50 text-sky-800 dark:text-sky-300 rounded font-medium flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-sky-600" /> Local Verification First
+                    </span>
+                  </div>
+
+                  {researchSummary && (
+                    <div className="text-xs text-sky-950 dark:text-sky-100 bg-white/90 dark:bg-slate-900/60 p-2.5 rounded-lg border border-sky-200/60 dark:border-sky-900/40 font-mono leading-relaxed">
+                      {researchSummary}
+                    </div>
+                  )}
+
+                  {hasSubagents && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="text-[10px] font-semibold text-sky-800 dark:text-sky-300 uppercase tracking-wider flex items-center gap-1">
+                        <Bot className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Specialized Subagents Dispatched ({subagents.length})</span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        {subagents.map((sub, sIdx) => (
+                          <div
+                            key={sIdx}
+                            className="bg-white/95 dark:bg-slate-900/70 border border-sky-100 dark:border-sky-900/40 rounded-lg p-2.5 text-xs space-y-1.5 shadow-xs"
+                          >
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                {sub.subagent_type}
+                              </span>
+                              <span className="font-mono text-[10px] text-slate-400">
+                                {sub.execution_time_ms.toFixed(1)}ms
+                              </span>
+                            </div>
+                            <p className="text-slate-600 dark:text-slate-300 text-[11px]">
+                              {sub.task_goal}
+                            </p>
+                            {sub.findings && sub.findings.length > 0 && (
+                              <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded text-[11px] text-slate-700 dark:text-slate-300 space-y-0.5">
+                                {sub.findings.map((f, fIdx) => (
+                                  <div key={fIdx} className="flex items-start gap-1.5">
+                                    <span className="text-sky-600 font-bold">•</span>
+                                    <span>{f}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Execution Steps Timeline */}
+              <div className="space-y-2 pt-1">
+                <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Action Execution Steps</span>
+                  <span className="text-[10px] text-slate-400 font-normal">{plan.steps.length} Bounded Steps</span>
+                </div>
+
+                <div className="space-y-2">
+                  {plan.steps.map((step) => {
+                    const statusLower = (step.status || '').toLowerCase();
+                    const isCompleted = statusLower === 'completed' || statusLower === 'verified';
+                    const isFailed = statusLower === 'failed';
+                    const isInProgress = statusLower === 'in_progress';
+                    const toolLabel = step.tool_name || step.action_type;
+                    const resultText = step.result_summary || step.computation_result;
+
+                    return (
+                      <div
+                        key={step.step_id}
+                        className={`p-2.5 rounded-xl border transition-all ${
+                          isFailed
+                            ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50'
+                            : isCompleted
+                            ? 'bg-white/80 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60'
+                            : isInProgress
+                            ? 'bg-indigo-50/50 dark:bg-indigo-950/30 border-indigo-300 dark:border-indigo-800 animate-pulse'
+                            : 'bg-slate-50/40 dark:bg-slate-900/30 border-slate-200/50 dark:border-slate-800/40 opacity-70'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2">
+                            <div className="mt-0.5 shrink-0">
+                              {isCompleted ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                              ) : isFailed ? (
+                                <XCircle className="w-4 h-4 text-red-500" />
+                              ) : isInProgress ? (
+                                <Activity className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin" />
+                              ) : (
+                                <div className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-500 font-mono">
+                                  {step.step_id}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-slate-800 dark:text-slate-100 text-xs">
+                                  Step {step.step_id}: {step.title || step.description}
+                                </span>
+                                {toolLabel && (
+                                  toolLabel.includes('database') ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+                                      <Database className="w-2.5 h-2.5" /> {toolLabel}
+                                    </span>
+                                  ) : toolLabel.includes('web') || toolLabel.includes('fetch') ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200/60 dark:border-sky-800/40">
+                                      <Globe className="w-2.5 h-2.5" /> {toolLabel}
+                                    </span>
+                                  ) : toolLabel.includes('compare') ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40">
+                                      <GitCompare className="w-2.5 h-2.5" /> {toolLabel}
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/50 dark:border-purple-800/40">
+                                      {toolLabel}
+                                    </span>
+                                  )
+                                )}
+                                {(step.requires_verification || step.action_type === 'verify') && (
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/50">
+                                    Verification Active
+                                  </span>
+                                )}
+                              </div>
+
+                              {step.title && step.description && step.title !== step.description && (
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-normal">
+                                  {step.description}
+                                </div>
+                              )}
+
+                              {resultText && (
+                                <div className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100/70 dark:bg-slate-900/50 rounded-lg p-1.5 font-mono leading-relaxed">
+                                  {resultText}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wide shrink-0">
+                            {step.status}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Tab Content 1: State-Transition Reasoning Trail */}
-          {activeTab === 'trail' && (
+          {effectiveTab === 'trail' && (
             <div className="space-y-2 pt-1 text-left">
               <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
                 <span>Deterministic State Transitions</span>

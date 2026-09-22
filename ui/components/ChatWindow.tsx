@@ -373,6 +373,25 @@ export default function ChatWindow({
                 prev.map((m) => (m.id === assistantMsgId ? { ...m, suggestions } : m)),
               );
             },
+            onPlan: (plan) => {
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantMsgId ? { ...m, plan } : m)),
+              );
+            },
+            onCalculations: (calcs) => {
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantMsgId ? { ...m, computationResults: calcs } : m)),
+              );
+            },
+            onResearch: (res) => {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, researchSummary: res.summary, subagents: res.subagents }
+                    : m,
+                ),
+              );
+            },
             onTrail: (trail) => {
               setMessages((prev) =>
                 prev.map((m) => {
@@ -383,6 +402,10 @@ export default function ChatWindow({
                     perStageLatency: trail.per_stage_latency,
                     abstentionReason: trail.abstention_reason,
                     latencyMs: trail.latency_ms,
+                    plan: trail.plan ?? m.plan,
+                    computationResults: trail.computation_results ?? m.computationResults,
+                    researchSummary: trail.research_summary ?? m.researchSummary,
+                    subagents: trail.subagents ?? m.subagents,
                   };
                 }),
               );
@@ -400,6 +423,10 @@ export default function ChatWindow({
                         stateHistory: meta.state_history || m.stateHistory,
                         perStageLatency: meta.per_stage_latency || m.perStageLatency,
                         abstentionReason: meta.abstention_reason || m.abstentionReason,
+                        plan: meta.plan ?? m.plan,
+                        computationResults: meta.computation_results ?? m.computationResults,
+                        researchSummary: meta.research_summary ?? m.researchSummary,
+                        subagents: meta.subagents ?? m.subagents,
                       }
                     : m,
                 );
@@ -708,6 +735,10 @@ export default function ChatWindow({
                       isStreaming={msg.isStreaming}
                       hasError={!!msg.error}
                       isNoAnswer={msg.isNoAnswer}
+                      plan={msg.plan}
+                      computationResults={msg.computationResults}
+                      researchSummary={msg.researchSummary}
+                      subagents={msg.subagents}
                     />
 
                     {msg.error ? (
