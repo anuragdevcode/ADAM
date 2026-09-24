@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import type { VoiceConversation } from '@/lib/useVoiceConversation';
 import { VOICE_LANGUAGES } from '@/lib/voice';
 import type { VoiceLanguage } from '@/lib/types';
@@ -21,10 +22,7 @@ const PHASE_LABEL: Record<VoiceConversation['phase'], string> = {
 
 /**
  * Voice controls for the chat composer.
- *
- * All state lives in `useVoiceConversation` (owned by ChatWindow) so the loop
- * survives this component being re-mounted when the layout switches from the
- * empty state to the docked composer.
+ * Full dark mode support and micro-animations.
  */
 export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) {
   const {
@@ -53,8 +51,6 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
   const isSpeaking = phase === 'speaking';
   const isThinking = phase === 'thinking';
 
-  // Inside voice mode the mic button reflects the loop phase and doubles as
-  // the interrupt control; outside it is a plain hold-to-talk button.
   const micTitle = voiceMode
     ? PHASE_LABEL[phase]
     : isRecording
@@ -66,12 +62,12 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
       ? 'bg-rose-500 text-white shadow-sm'
       : isSpeaking
       ? 'bg-purple-600 text-white shadow-sm'
-      : 'bg-purple-50 text-purple-600'
+      : 'bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400'
     : isRecording
     ? 'bg-rose-500 text-white shadow-sm animate-pulse'
     : isTranscribing
-    ? 'bg-gray-100 text-gray-400 cursor-wait'
-    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70';
+    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-wait'
+    : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60';
 
   const micIcon = isTranscribing || isThinking ? (
     <Loader2 className="w-4 h-4 animate-spin" />
@@ -90,7 +86,7 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
           onChange={(e) => setLanguage(e.target.value as VoiceLanguage)}
           title="Spoken language"
           aria-label="Spoken language"
-          className="h-7 px-1.5 text-[11px] font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none cursor-pointer"
+          className="h-7 px-1.5 text-[11px] font-medium rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 outline-none cursor-pointer"
         >
           {VOICE_LANGUAGES.map((l) => (
             <option key={l.value} value={l.value}>
@@ -129,10 +125,10 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
           disabled={!inputSupported}
           title={voiceMode ? 'End voice conversation' : 'Start voice conversation (talk, listen, repeat)'}
           aria-pressed={voiceMode}
-          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors disabled:opacity-50 ${
             voiceMode
-              ? 'text-white bg-gradient-to-r from-purple-600 to-fuchsia-500 border-transparent shadow-sm'
-              : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200/60'
+              ? 'text-white bg-gradient-to-r from-purple-600 to-indigo-600 border-transparent shadow-sm'
+              : 'text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 border-purple-200/80 dark:border-purple-800/60'
           }`}
         >
           {voiceMode ? <Square className="w-3 h-3 fill-current" /> : <AudioLines className="w-3.5 h-3.5" />}
@@ -149,8 +145,8 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
               aria-pressed={ttsEnabled}
               className={`p-2 rounded-xl transition-all ${
                 ttsEnabled
-                  ? 'text-purple-600 bg-purple-50/80'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100/70'
+                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50/80 dark:bg-purple-950/50'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
               }`}
             >
               {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -161,7 +157,7 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
                 type="button"
                 onClick={isSpeaking ? stopSpeaking : speakLatest}
                 title={isSpeaking ? 'Stop reading' : 'Read answer aloud'}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200/80 dark:border-purple-800/60 transition-colors"
               >
                 {isSpeaking ? (
                   <>
@@ -184,7 +180,7 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
         <p
           role="status"
           aria-live="polite"
-          className="flex items-center gap-1.5 text-[11px] leading-tight text-purple-700"
+          className="flex items-center gap-1.5 text-[11px] leading-tight text-purple-700 dark:text-purple-400"
         >
           {isThinking ? (
             <Brain className="w-3 h-3" />
@@ -197,12 +193,12 @@ export default function VoiceControls({ voice, hasAnswer }: VoiceControlsProps) 
             />
           )}
           <span>{PHASE_LABEL[phase]}</span>
-          {status && <span className="text-gray-400">· {engineLabel}</span>}
+          {status && <span className="text-slate-400">· {engineLabel}</span>}
         </p>
       )}
 
       {error && (
-        <p role="alert" className="max-w-64 text-right text-[10px] leading-tight text-rose-600">
+        <p role="alert" className="max-w-64 text-right text-[10px] leading-tight text-rose-600 dark:text-rose-400">
           {error}
         </p>
       )}

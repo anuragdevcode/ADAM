@@ -47,7 +47,7 @@ class GenerationSettings:
     # Conversational / general intent (0.0–0.8 user-adjustable)
     temperature_conversational: float = 0.6
     # Maximum completion tokens
-    max_tokens_rag: int = 1024
+    max_tokens_rag: int = 512
     max_tokens_conversational: int = 1536
     # Nucleus sampling
     top_p: float = 0.9
@@ -55,8 +55,8 @@ class GenerationSettings:
     top_k_sampling: int = 40
     # min-p (Qwen family)
     min_p: float = 0.05
-    # Context window passed to Ollama num_ctx
-    context_size: int = 8192
+    # Context window passed to Ollama num_ctx (4096 optimal for local Mac pilot)
+    context_size: int = 4096
     # Max passages injected into RAG prompt
     max_rag_prompt_passages: int = 4
     # Qwen3 thinking mode (recommended ON by default for Qwen reasoning variants)
@@ -266,12 +266,12 @@ PRESET_BUNDLES: Dict[AdvancedSettingsPreset, AdvancedSettingsBundle] = {
         generation=GenerationSettings(
             temperature_rag=0.0,
             temperature_conversational=0.6,
-            max_tokens_rag=1024,
+            max_tokens_rag=768,
             max_tokens_conversational=1536,
             top_p=0.9,
             top_k_sampling=40,
             min_p=0.05,
-            context_size=8192,
+            context_size=4096,
             max_rag_prompt_passages=4,
             thinking_enabled=True,
             thinking_budget=1024,

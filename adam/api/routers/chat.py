@@ -58,9 +58,11 @@ async def chat_endpoint(
             PRESET_BUNDLES, AdvancedSettingsPreset, DEFAULT_BUNDLE,
         )
         user_id = getattr(user_ctx, "user_id", "anonymous") or "anonymous"
-        # Start from DB-persisted settings (or defaults)
-        manager = AdvancedSettingsManager(db, user_id=user_id)
-        _settings_bundle = manager.load()
+        if user_id == "anonymous" and not x_adam_settings_preset:
+            _settings_bundle = AdvancedSettingsBundle.from_dict(DEFAULT_BUNDLE.to_dict())
+        else:
+            manager = AdvancedSettingsManager(db, user_id=user_id)
+            _settings_bundle = manager.load()
 
         # Apply per-request header overrides
         if x_adam_settings_preset:

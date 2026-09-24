@@ -894,6 +894,68 @@ def evaluate_rag(output_json: Optional[str], compare_reranker: bool = False):
         sys.exit(1)
 
 
+@rag_group.command(name="triad")
+@click.option("--sample", default=25, type=int, help="Sample size of golden questions to evaluate")
+@click.option("--model", default="qwen3-4b-instruct-q4", help="Model ID to evaluate")
+@click.option("--trigger", default="MANUAL", help="Trigger event identifier")
+@click.option("--output-json", default=None, help="Path to write evaluation results JSON")
+def evaluate_triad(sample: int, model: str, trigger: str, output_json: Optional[str]):
+    """Execute Continuous Sovereign RAG Triad benchmarking (Ragas / ARES aligned)."""
+    import json
+    from pathlib import Path
+    from adam.evaluation.worker import ContinuousTriadWorker
+
+    session = get_session()
+    click.echo("=" * 80)
+    click.echo(f"CONTINUOUS SOVEREIGN RAG TRIAD BENCHMARK ({model})")
+    click.echo("=" * 80)
+    click.echo(f"Sample Size: {sample} queries | Trigger: {trigger}")
+    click.echo("Evaluating Context Relevance, Groundedness (ProvenanceGraph), and Answer Relevance...")
+
+    worker = ContinuousTriadWorker(session=session, model_id=model)
+    summary = worker.run_benchmark(sample_size=sample, trigger_event=trigger)
+
+    cr_pass = summary.mean_context_relevance >= 0.75
+    g_pass = summary.mean_groundedness >= 0.95
+    ar_pass = summary.mean_answer_relevance >= 0.80
+    comp_pass = summary.mean_composite_score >= 0.85
+
+    click.echo("\n" + "=" * 80)
+    click.echo("SOVEREIGN RAG TRIAD EVALUATION SCORECARD")
+    click.echo("=" * 80)
+    click.echo(f"Total Questions Evaluated:          {summary.total_questions}")
+    click.echo(f"Passed All Triad Thresholds:       {summary.passed_questions} ({summary.pass_rate*100:.1f}%)")
+    click.echo(f"1. Context Relevance  (Target >= 0.75): {summary.mean_context_relevance * 100:.2f}%  [{'PASS' if cr_pass else 'FAIL'}]")
+    click.echo(f"2. Groundedness (ProvenanceGraph >= 0.95): {summary.mean_groundedness * 100:.2f}%  [{'PASS' if g_pass else 'FAIL'}]")
+    click.echo(f"3. Answer Relevance   (Target >= 0.80): {summary.mean_answer_relevance * 100:.2f}%  [{'PASS' if ar_pass else 'FAIL'}]")
+    click.echo("-" * 80)
+    click.echo(f"Composite Triad Score (Target >= 0.85): {summary.mean_composite_score * 100:.2f}%  [{'PASS' if comp_pass else 'FAIL'}]")
+    click.echo(f"Zero-Hallucination Rate:            {summary.zero_hallucination_rate * 100:.2f}%")
+    click.echo(f"Drift Status:                       {'DRIFT DETECTED' if summary.drift_detected else 'CLEAN (NO DRIFT)'}")
+    if summary.drift_notes:
+        for note in summary.drift_notes:
+            click.echo(f"  [!] {note}")
+    click.echo(f"Duration:                           {summary.duration_seconds:.2f}s")
+    click.echo("=" * 80)
+
+    click.echo("\nBreakdown by Department:")
+    for dept_id, stats in summary.by_department.items():
+        click.echo(f"  {dept_id:<28}: Mean Score: {stats['mean_score']*100:.1f}% (Count: {stats['count']})")
+
+    click.echo("\nBreakdown by Language:")
+    for lang, stats in summary.by_language.items():
+        lang_name = "Hindi (hi)" if lang == "hi" else "English (en)"
+        click.echo(f"  {lang_name:<28}: Mean Score: {stats['mean_score']*100:.1f}% (Count: {stats['count']})")
+
+    if output_json:
+        out_p = Path(output_json)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_p.write_text(json.dumps(summary.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        click.echo(f"\nTriad benchmark report exported to {output_json}")
+
+    session.close()
+
+
 
 # ── Phase 04: Model Architecture & Governance CLI ───────────────────────────
 

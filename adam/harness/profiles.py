@@ -25,7 +25,7 @@ class BaseHarnessProfile(ABC):
         """Resolve model-appropriate inference parameters for the given task intent."""
 
     @abstractmethod
-    def format_rag_prompt(self, query: str, packet: EvidencePacket) -> str:
+    def format_rag_prompt(self, query: str, packet: EvidencePacket, max_passages: int = 4) -> str:
         """Format a grounded RAG prompt suited to this model's attention capacity."""
 
     @abstractmethod
@@ -80,15 +80,18 @@ class QwenHarnessProfile(BaseHarnessProfile):
             top_k=overrides.get("top_k", 40),
             min_p=overrides.get("min_p", 0.05),
             max_tokens=max_tokens,
-            context_size=overrides.get("context_size", 8192),
+            context_size=overrides.get("context_size", 4096),
             thinking_enabled=thinking_enabled,
             thinking_budget=overrides.get("thinking_budget", 1024 if thinking_enabled else 0),
-            stop_sequences=overrides.get("stop_sequences", ["<|im_end|>", "<|endoftext|>"]),
+            stop_sequences=overrides.get(
+                "stop_sequences",
+                ["<|im_end|>", "<|endoftext|>", "\n\nUser:", "\n\nQuestion:", "\n\nHuman:", "\n\nReference Records:"],
+            ),
         )
         return params
 
-    def format_rag_prompt(self, query: str, packet: EvidencePacket) -> str:
-        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=4)
+    def format_rag_prompt(self, query: str, packet: EvidencePacket, max_passages: int = 4) -> str:
+        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=max_passages)
 
     def format_conversational_prompt(self, query: str) -> str:
         return PromptTemplateRegistry.format_conversational_turn(query, model_mention="ADAM (Qwen)")
@@ -105,19 +108,20 @@ class LlamaHarnessProfile(BaseHarnessProfile):
     def resolve_parameters(self, intent: str = "rag", **overrides: Any) -> ModelInferenceParameters:
         temp = 0.2 if intent == "rag" else 0.5
         temp = overrides.get("temperature", temp)
+        max_tokens = 512 if intent == "rag" else 1024
         return ModelInferenceParameters(
             temperature=temp,
             top_p=overrides.get("top_p", 0.9),
             top_k=overrides.get("top_k", 40),
             min_p=0.0,
-            max_tokens=overrides.get("max_tokens", 1024),
-            context_size=overrides.get("context_size", 8192),
+            max_tokens=overrides.get("max_tokens", max_tokens),
+            context_size=overrides.get("context_size", 4096),
             thinking_enabled=False,
             stop_sequences=overrides.get("stop_sequences", ["<|eot_id|>", "<|end_of_text|>"]),
         )
 
-    def format_rag_prompt(self, query: str, packet: EvidencePacket) -> str:
-        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=4)
+    def format_rag_prompt(self, query: str, packet: EvidencePacket, max_passages: int = 4) -> str:
+        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=max_passages)
 
     def format_conversational_prompt(self, query: str) -> str:
         return PromptTemplateRegistry.format_conversational_turn(query, model_mention="ADAM (Llama)")
@@ -134,19 +138,20 @@ class GemmaHarnessProfile(BaseHarnessProfile):
     def resolve_parameters(self, intent: str = "rag", **overrides: Any) -> ModelInferenceParameters:
         temp = 0.2 if intent == "rag" else 0.4
         temp = overrides.get("temperature", temp)
+        max_tokens = 512 if intent == "rag" else 1024
         return ModelInferenceParameters(
             temperature=temp,
             top_p=overrides.get("top_p", 0.9),
             top_k=overrides.get("top_k", 40),
             min_p=0.0,
-            max_tokens=overrides.get("max_tokens", 1024),
+            max_tokens=overrides.get("max_tokens", max_tokens),
             context_size=overrides.get("context_size", 4096),
             thinking_enabled=False,
             stop_sequences=overrides.get("stop_sequences", ["<end_of_turn>"]),
         )
 
-    def format_rag_prompt(self, query: str, packet: EvidencePacket) -> str:
-        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=4)
+    def format_rag_prompt(self, query: str, packet: EvidencePacket, max_passages: int = 4) -> str:
+        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=max_passages)
 
     def format_conversational_prompt(self, query: str) -> str:
         return PromptTemplateRegistry.format_conversational_turn(query, model_mention="ADAM (Gemma)")
@@ -174,8 +179,8 @@ class GeminiHarnessProfile(BaseHarnessProfile):
             stop_sequences=overrides.get("stop_sequences", ["\n\nUser:"]),
         )
 
-    def format_rag_prompt(self, query: str, packet: EvidencePacket) -> str:
-        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=6)
+    def format_rag_prompt(self, query: str, packet: EvidencePacket, max_passages: int = 6) -> str:
+        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=max_passages)
 
     def format_conversational_prompt(self, query: str) -> str:
         return PromptTemplateRegistry.format_conversational_turn(query, model_mention="ADAM (Gemini)")
@@ -192,19 +197,20 @@ class DefaultHarnessProfile(BaseHarnessProfile):
     def resolve_parameters(self, intent: str = "rag", **overrides: Any) -> ModelInferenceParameters:
         temp = 0.2 if intent == "rag" else 0.5
         temp = overrides.get("temperature", temp)
+        max_tokens = 512 if intent == "rag" else 1024
         return ModelInferenceParameters(
             temperature=temp,
             top_p=overrides.get("top_p", 0.9),
             top_k=overrides.get("top_k", 40),
             min_p=0.0,
-            max_tokens=overrides.get("max_tokens", 1024),
+            max_tokens=overrides.get("max_tokens", max_tokens),
             context_size=overrides.get("context_size", 4096),
             thinking_enabled=False,
             stop_sequences=overrides.get("stop_sequences", ["<|im_end|>", "<|endoftext|>"]),
         )
 
-    def format_rag_prompt(self, query: str, packet: EvidencePacket) -> str:
-        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=4)
+    def format_rag_prompt(self, query: str, packet: EvidencePacket, max_passages: int = 4) -> str:
+        return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=max_passages)
 
     def format_conversational_prompt(self, query: str) -> str:
         return PromptTemplateRegistry.format_conversational_turn(query, model_mention="ADAM")

@@ -25,6 +25,19 @@ from adam.agent.sandbox import SecurePythonSandbox
 from adam.agent.subagents import SubagentCoordinator, SubagentResult
 from adam.agent.tools import ReadOnlyToolRegistry
 from adam.harness.templates import PromptTemplateRegistry
+from adam.prompts import (
+    FewShotCatalog,
+    PersonaRole,
+    PromptBuilder,
+    PromptCatalog,
+    PromptDelimiters,
+    PromptSanitizer,
+)
+from adam.loops import (
+    CycleDetector,
+    ExecutionBudgetWatchdog,
+    RefinementLoopController,
+)
 from adam.model.runtime import BaseModelRuntime, ModelGenerationResult
 from adam.observability.events import (
     OperationalEvent,
@@ -142,6 +155,7 @@ class AgenticOrchestrator:
         accumulated_passages: List[EvidencePassage] = []
         seen_passage_ids: Set[str] = set()
         seen_signatures: Set[str] = set()  # Loop prevention
+        cycle_detector = CycleDetector(max_cycle_length=3, max_action_frequency=3)
         verified_calculations: List[Dict[str, Any]] = []
         tool_call_records: List[Dict[str, Any]] = []
         subagent_records: List[Dict[str, Any]] = []
@@ -167,13 +181,23 @@ class AgenticOrchestrator:
                 step.result_summary = f"Execution budget reached ({elapsed:.1f}s)."
                 break
 
-            # Loop Prevention: Skip identical repeated tool calls
+            # Loop & Cycle Prevention: Skip duplicate actions or cyclic oscillations
             step_sig = f"{step.action_type}:{str(sorted(step.tool_args.items()))}"
-            if step_sig in seen_signatures:
+            should_terminate, cycle_reason = cycle_detector.should_terminate(
+                action_type=step.action_type,
+                tool_args=step.tool_args,
+            )
+            if should_terminate or (step_sig in seen_signatures):
                 step.status = StepStatus.COMPLETED
-                step.result_summary = "Skipped duplicate repeated action (loop prevention)."
+                step.result_summary = f"Skipped duplicate or cyclic action: {cycle_reason or 'loop prevention'}."
                 continue
             seen_signatures.add(step_sig)
+            cycle_detector.record_action(
+                step_id=step.step_id,
+                action_type=step.action_type,
+                tool_args=step.tool_args,
+                timestamp=time.perf_counter(),
+            )
 
             # Local Verification First: If local evidence is already sufficient, skip external web research
             if local_evidence_sufficient and step.action_type in ("web_research", "web_search", "fetch_web_page"):
@@ -562,9 +586,13 @@ class AgenticOrchestrator:
         )
 
         system_prompt = (
-            PromptTemplateRegistry.INTROSPECTION_SYSTEM_PROMPT
+            PromptCatalog.resolve_system_prompt("introspection")
             if plan.complexity == TaskComplexity.SYSTEM_INTROSPECTION
-            else PromptTemplateRegistry.REASONING_SYSTEM_PROMPT
+            else (
+                PromptCatalog.resolve_system_prompt("reasoning")
+                if plan.complexity == TaskComplexity.QUANTITATIVE_COMPUTATION
+                else PromptCatalog.resolve_system_prompt("rag")
+            )
         )
 
         gen_result: ModelGenerationResult = self.runtime.generate(
@@ -585,17 +613,47 @@ class AgenticOrchestrator:
             verified_calculations=verified_calculations,
         )
 
+        final_answer = gen_result.answer
+        was_refined = False
+        if not valid_passed and packet.passages and not (gen_result.is_refusal or self.NO_EVIDENCE_REFUSAL in gen_result.answer):
+            refiner = RefinementLoopController(runtime=self.runtime, max_refinements=2)
+            role = (
+                PersonaRole.SYSTEM_INTROSPECTION
+                if plan.complexity == TaskComplexity.SYSTEM_INTROSPECTION
+                else (
+                    PersonaRole.ADMINISTRATIVE_REASONING
+                    if plan.complexity == TaskComplexity.QUANTITATIVE_COMPUTATION
+                    else PersonaRole.GOVERNED_RAG
+                )
+            )
+            refine_res = refiner.run_refinement_loop(
+                initial_answer=gen_result.answer,
+                initial_passed=False,
+                initial_errors=valid_errors,
+                query=plan.query,
+                packet=packet,
+                verified_calculations=verified_calculations,
+                system_prompt=system_prompt,
+                token_callback=token_callback,
+                role=role,
+            )
+            final_answer = refine_res.final_answer
+            valid_passed = refine_res.validation_passed
+            valid_errors = refine_res.remaining_errors
+            was_refined = refine_res.was_refined
+
         if synthesis_step:
             synthesis_step.status = StepStatus.VERIFIED if valid_passed else StepStatus.COMPLETED
             synthesis_step.result_summary = f"Synthesized grounded response with {len(citations)} source citations."
 
         return {
-            "answer": gen_result.answer,
+            "answer": final_answer,
             "citations": citations,
             "currency_banners": [packet.currency_banner] if packet.currency_banner else [],
-            "is_no_answer": gen_result.is_refusal or (self.NO_EVIDENCE_REFUSAL in gen_result.answer),
+            "is_no_answer": gen_result.is_refusal or (self.NO_EVIDENCE_REFUSAL in final_answer),
             "validation_passed": valid_passed,
             "validation_errors": valid_errors,
+            "was_refined": was_refined,
             "plan": plan,
             "tool_calls": tool_call_records,
             "subagents": subagent_records,
@@ -673,53 +731,35 @@ total
         action_summary: Optional[str] = None,
     ) -> str:
         """Format structured evidence context enclosing plan, calculations, and passages."""
-        lines = [f"User Query: {query}\n"]
-
-        if plan.plan_summary:
-            lines.append(f"Execution Strategy: {plan.plan_summary}\n")
-
-        if action_summary:
-            lines.append(f"Operational Summary: {action_summary}\n")
-
-        if verified_calculations:
-            lines.append("=== VERIFIED MATHEMATICAL CALCULATIONS (DETERMINISTIC SANDBOX PROOF) ===")
-            for c in verified_calculations:
-                lines.append(f"Result: {c.get('formatted') or c.get('value')}")
-                if c.get("output"):
-                    lines.append(f"Output:\n{c.get('output')}")
-            lines.append("========================================================================\n")
-
-        if introspection_context:
-            lines.append("=== AUTHORITATIVE SYSTEM STATE SNAPSHOT ===")
-            lines.append(introspection_context)
-            lines.append("===========================================\n")
-
-        if packet.currency_banner:
-            lines.append(f"CURRENCY NOTICE: {packet.currency_banner}\n")
-
-        # Distinguish local authoritative records from external web sources
-        local_passages = [p for p in packet.passages if not getattr(p, "is_external", False)]
-        ext_passages = [p for p in packet.passages if getattr(p, "is_external", False)]
-
-        if local_passages:
-            lines.append("### Authoritative Local Public Records (Uttarakhand State):")
-            for idx, p in enumerate(local_passages, start=1):
-                go_info = f" [GO: {p.go_number}]" if p.go_number else ""
-                lines.append(f"### Evidence Passage [{idx}] (Doc: {p.document_id}{go_info}, Dept: {p.department_id}):\n{p.content}\n")
-            lines.append("==============================================\n")
-
-        if ext_passages:
-            lines.append("### External Web Sources (Consulted for Comparative/Supplementary Research):")
-            for idx, p in enumerate(ext_passages, start=1):
-                dom_info = f" [Domain: {p.external_domain}]" if p.external_domain else ""
-                lines.append(f"### External Finding [WEB-{idx}] ({p.title}{dom_info}, URL: {p.external_url or p.source_url}):\n{p.content}\n")
-            lines.append("==============================================\n")
-
-        lines.append(
-            "[Instruction: Synthesize a clear, authoritative, and structured response. "
-            "Use citations [1], [2] for local public records, and [WEB-1], [WEB-2] for external web sources. "
-            "Incorporate verified mathematical proofs if calculations were performed. "
-            "Do not extrapolate beyond the retrieved evidence records or verified calculation outputs. "
-            "Never output hidden chain-of-thought or <think> tags.]"
+        role = (
+            PersonaRole.SYSTEM_INTROSPECTION
+            if plan.complexity == TaskComplexity.SYSTEM_INTROSPECTION
+            else (
+                PersonaRole.ADMINISTRATIVE_REASONING
+                if plan.complexity == TaskComplexity.QUANTITATIVE_COMPUTATION
+                else PersonaRole.GOVERNED_RAG
+            )
         )
-        return "\n".join(lines)
+        builder = (
+            PromptBuilder()
+            .with_role(role)
+            .with_user_query(query)
+            .with_system_state(introspection_context)
+            .with_precedent_notice(packet.currency_banner)
+            .with_calculations(verified_calculations)
+            .with_evidence(packet.passages)
+        )
+        if plan.plan_summary:
+            strategy_text = plan.plan_summary
+            if action_summary:
+                strategy_text += f"\nOperational Summary: {action_summary}"
+            builder.with_execution_strategy(strategy_text)
+        elif action_summary:
+            builder.with_execution_strategy(f"Operational Summary: {action_summary}")
+
+        if plan.complexity == TaskComplexity.QUANTITATIVE_COMPUTATION:
+            builder.with_few_shot_category("financial_calculation")
+        elif plan.complexity == TaskComplexity.PRECEDENT_TRACKING:
+            builder.with_few_shot_category("superseded_order")
+
+        return builder.build_user_prompt()

@@ -32,7 +32,7 @@ class ModelInferenceParameters:
     top_p: float = 0.9
     top_k: int = 40
     min_p: float = 0.05
-    max_tokens: int = 1024
+    max_tokens: int = 512
     context_size: int = 4096
     thinking_enabled: bool = False
     thinking_budget: int = 1024
@@ -41,6 +41,8 @@ class ModelInferenceParameters:
 
     def to_ollama_options(self) -> Dict[str, Any]:
         """Convert parameters to Ollama /api/chat 'options' payload."""
+        import os
+
         total_predict = self.max_tokens
         if self.thinking_enabled:
             total_predict += self.thinking_budget
@@ -56,6 +58,11 @@ class ModelInferenceParameters:
             options["min_p"] = self.min_p
         if self.stop_sequences:
             options["stop"] = list(self.stop_sequences)
+
+        # Set optimal physical core count for CPU threads if not overridden
+        if "num_thread" not in self.custom_options:
+            cpu_count = os.cpu_count() or 4
+            options["num_thread"] = min(8, max(2, cpu_count))
 
         options.update(self.custom_options)
         return options

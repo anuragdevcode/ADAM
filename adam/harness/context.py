@@ -83,7 +83,9 @@ class ContextStrategy:
             f"Reference Records:\n"
             f"{evidence_text}\n\n"
             f"User Question: {query}\n\n"
-            f"Instructions: Provide an accurate, clear answer strictly based on the reference records above. "
+            f"Instructions: Provide an accurate, concise answer strictly based on the reference records above. "
+            f"State the facts directly without conversational preamble or repetitive commentary. "
+            f"Format lists as compact bullet points where appropriate. "
             f"Include exact citations like [1] or [2] only for the passages directly supporting each fact. "
             f"If the records do not contain the answer, state that you could not establish this from the approved repository."
         )

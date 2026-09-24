@@ -145,6 +145,8 @@ class DocumentVersion(Base):
     __table_args__ = (
         Index("idx_doc_ver_sha256", "sha256"),
         Index("idx_doc_ver_source_url", "source_url"),
+        Index("idx_doc_ver_document_id", "document_id"),
+        Index("idx_doc_ver_retrieved_at", "retrieved_at"),
     )
 
 
@@ -178,6 +180,7 @@ class DocumentPage(Base):
 
     __table_args__ = (
         Index("idx_page_ver_num", "version_id", "page_number"),
+        Index("idx_page_version_id", "version_id"),
     )
 
 
@@ -197,6 +200,10 @@ class PrecedentReference(Base):
 
     source_version = relationship("DocumentVersion", back_populates="precedent_references")
     target_document = relationship("Document", foreign_keys=[target_document_id])
+
+    __table_args__ = (
+        Index("idx_prec_source_version", "source_version_id"),
+    )
 
 
 class DocumentAttribute(Base):
@@ -381,7 +388,9 @@ class DocumentChunk(Base):
 
     __table_args__ = (
         Index("idx_chunk_version_idx", "version_id", "chunk_index"),
+        Index("idx_chunk_document_id", "document_id"),
         Index("idx_chunk_dept_class", "department_id", "classification"),
+        Index("idx_chunk_review_dept_class", "review_status", "department_id", "classification"),
         Index("idx_chunk_go_num", "go_number"),
     )
 
@@ -675,7 +684,23 @@ class IngestionJobItem(Base):
     version = relationship("DocumentVersion")
 
 
+class RagTriadBenchmarkRecord(Base):
+    """Sovereign RAG Triad benchmark evaluation record for continuous quality tracking."""
+    __tablename__ = "rag_triad_benchmarks"
 
-
-
-
+    id = Column(String(64), primary_key=True, default=lambda: _generate_id("triad"))
+    model_id = Column(String(128), nullable=False, index=True)
+    trigger_event = Column(String(64), nullable=False, default="MANUAL")  # MANUAL, POST_INGESTION, SCHEDULED
+    total_queries = Column(Integer, nullable=False, default=0)
+    passed_queries = Column(Integer, nullable=False, default=0)
+    context_relevance = Column(Float, nullable=False, default=0.0)
+    groundedness = Column(Float, nullable=False, default=0.0)
+    answer_relevance = Column(Float, nullable=False, default=0.0)
+    composite_score = Column(Float, nullable=False, default=0.0)
+    zero_hallucination_rate = Column(Float, nullable=False, default=0.0)
+    drift_detected = Column(Boolean, nullable=False, default=False)
+    drift_notes_json = Column(JSON, nullable=True)
+    department_scores_json = Column(JSON, nullable=True)
+    language_scores_json = Column(JSON, nullable=True)
+    duration_seconds = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)

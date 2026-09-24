@@ -54,10 +54,12 @@ class DocumentExtractionPipeline:
         session: Session,
         storage: StorageBackend,
         ocr_engine: Optional[BaseOcrEngine] = None,
+        enable_auto_triad_eval: bool = False,
     ):
         self.session = session
         self.storage = storage
         self._ocr_engine = ocr_engine
+        self.enable_auto_triad_eval = enable_auto_triad_eval
 
     @property
     def ocr_engine(self) -> BaseOcrEngine:
@@ -90,177 +92,184 @@ class DocumentExtractionPipeline:
         data = self.storage.get(version.original_object_key)
         is_pdf = "pdf" in version.mime_type.lower() or data.startswith(b"%PDF-")
 
-        # ── Step 1: Born-digital text extraction ──────────────────────────
+        fitz_doc = None
         if is_pdf:
-            pages = PdfExtractor.extract_pages(data)
-            expected_page_count = PdfExtractor.get_page_count(data)
-        else:
-            pages = []
-            expected_page_count = 0
+            import fitz
+            fitz_doc = fitz.open(stream=data, filetype="pdf")
 
-        # Acceptance criterion 1: 100% pages accounted for
-        if is_pdf and len(pages) != expected_page_count:
-            logger.error(
-                "Page count mismatch for version %s: extracted %d, expected %d",
-                version_id, len(pages), expected_page_count,
-            )
-            raise ValueError(
-                f"Page count mismatch: extracted {len(pages)}, "
-                f"PDF has {expected_page_count} pages."
-            )
-
-        # ── Step 2: Clear previous records for idempotency ────────────────
-        self.session.query(TextBlock).filter(
-            TextBlock.page_id.in_(
-                self.session.query(DocumentPage.id).filter(DocumentPage.version_id == version.id)
-            )
-        ).delete(synchronize_session="fetch")
-        self.session.query(ExtractedTable).filter(
-            ExtractedTable.page_id.in_(
-                self.session.query(DocumentPage.id).filter(DocumentPage.version_id == version.id)
-            )
-        ).delete(synchronize_session="fetch")
-        self.session.query(DocumentPage).filter(DocumentPage.version_id == version.id).delete()
-
-        # OCR engine info for ProcessingRun
-        ocr_engine = self.ocr_engine
-        ocr_engine_name = type(ocr_engine).__name__
-        ocr_available = ocr_engine.is_available() and ocr_engine_name != "NullOcrEngine"
-
-        full_text_parts = []
-        quality_summary = {"flagged_pages": 0, "auto_approved_pages": 0, "total_flags": 0}
-
-        for p in pages:
-            # ── Step 3: Page image rendering ──────────────────────────────
-            image_key = None
-            if is_pdf:
-                try:
-                    png_bytes = PdfExtractor.render_page_image(data, p.page_number, dpi=150)
-                    image_storage_path = f"pages/{version.id}/page_{p.page_number:04d}.png"
-                    storage_obj = self.storage.store(
-                        key=image_storage_path,
-                        data=png_bytes,
-                    )
-                    image_key = storage_obj.key
-                except Exception as img_err:
-                    logger.warning("Failed to render page %d image: %s", p.page_number, img_err)
-
-            # ── Step 4: OCR for scanned pages ─────────────────────────────
-            ocr_text = ""
-            text_confidence = 1.0 if not p.is_scanned else 0.0
-
-            if p.is_scanned and ocr_available and image_key:
-                try:
-                    img_data = self.storage.get(image_key)
-                    languages = ["hin", "eng"] if p.detected_language in ("hi", "bilingual") else ["eng"]
-                    ocr_result: OcrResult = ocr_engine.ocr_page_image(img_data, languages=languages)
-                    ocr_text = ocr_result.text
-                    text_confidence = ocr_result.confidence
-                except Exception as ocr_err:
-                    logger.warning("OCR failed for page %d: %s", p.page_number, ocr_err)
-
-            # ── Step 5: Select best text ──────────────────────────────────
-            if p.is_scanned and ocr_text:
-                selected_text = ocr_text
+        try:
+            # ── Step 1: Born-digital text extraction ──────────────────────────
+            if is_pdf and fitz_doc is not None:
+                pages = PdfExtractor.extract_pages(data, doc=fitz_doc)
+                expected_page_count = PdfExtractor.get_page_count(data)
             else:
-                selected_text = p.clean_text
+                pages = []
+                expected_page_count = 0
 
-            # ── Step 6: Quality gate evaluation ───────────────────────────
-            flags = PageQualityGate.evaluate(
-                page_number=p.page_number,
-                clean_text=p.clean_text,
-                ocr_text=ocr_text if ocr_text else None,
-                text_confidence=text_confidence,
-                is_scanned=p.is_scanned,
-                has_tables=bool(p.tables),
-                detected_language=p.detected_language,
-            )
-            review_status = determine_review_status(flags)
+            # Acceptance criterion 1: 100% pages accounted for
+            if is_pdf and len(pages) != expected_page_count:
+                logger.error(
+                    "Page count mismatch for version %s: extracted %d, expected %d",
+                    version_id, len(pages), expected_page_count,
+                )
+                raise ValueError(
+                    f"Page count mismatch: extracted {len(pages)}, "
+                    f"PDF has {expected_page_count} pages."
+                )
 
-            if review_status == "FLAGGED":
-                quality_summary["flagged_pages"] += 1
-            else:
-                quality_summary["auto_approved_pages"] += 1
-            quality_summary["total_flags"] += len(flags)
+            # ── Step 2: Clear previous records for idempotency ────────────────
+            self.session.query(TextBlock).filter(
+                TextBlock.page_id.in_(
+                    self.session.query(DocumentPage.id).filter(DocumentPage.version_id == version.id)
+                )
+            ).delete(synchronize_session="fetch")
+            self.session.query(ExtractedTable).filter(
+                ExtractedTable.page_id.in_(
+                    self.session.query(DocumentPage.id).filter(DocumentPage.version_id == version.id)
+                )
+            ).delete(synchronize_session="fetch")
+            self.session.query(DocumentPage).filter(DocumentPage.version_id == version.id).delete()
 
-            # ── Step 7: Persist DocumentPage ──────────────────────────────
-            doc_page = DocumentPage(
-                version_id=version.id,
-                page_number=p.page_number,
-                clean_text=p.clean_text,
-                raw_text=p.raw_text,
-                is_scanned=1 if p.is_scanned else 0,
-                scan_quality_score=p.scan_quality_score,
-                detected_language=p.detected_language,
-                tables_json=p.tables if p.tables else None,
-                word_count=p.word_count,
-                image_key=image_key,
-                ocr_text=ocr_text,
-                selected_text=selected_text,
-                text_confidence=text_confidence,
-                rotation=0,
-                review_status=review_status,
-            )
-            self.session.add(doc_page)
-            self.session.flush()  # ensure doc_page.id is available for child records
+            # OCR engine info for ProcessingRun
+            ocr_engine = self.ocr_engine
+            ocr_engine_name = type(ocr_engine).__name__
+            ocr_available = ocr_engine.is_available() and ocr_engine_name != "NullOcrEngine"
 
-            # ── Step 8: Block-level extraction ────────────────────────────
-            if is_pdf:
-                try:
-                    import fitz
-                    pdf_doc = fitz.open(stream=data, filetype="pdf")
-                    fitz_page = pdf_doc[p.page_number - 1]
+            full_text_parts = []
+            quality_summary = {"flagged_pages": 0, "auto_approved_pages": 0, "total_flags": 0}
 
-                    from adam.extract.blocks import BlockExtractor
-                    blocks = BlockExtractor.extract_blocks(fitz_page)
-                    for blk in blocks:
-                        text_block = TextBlock(
-                            page_id=doc_page.id,
-                            block_type=blk.block_type,
-                            text=blk.text,
-                            bbox=blk.bbox,
-                            reading_order=blk.reading_order,
-                            confidence=blk.confidence,
-                        )
-                        self.session.add(text_block)
-
-                    pdf_doc.close()
-                except Exception as blk_err:
-                    logger.warning("Block extraction failed for page %d: %s", p.page_number, blk_err)
-
-            # ── Step 9: Dedicated ExtractedTable records ──────────────────
-            if p.tables:
-                for tbl_data in p.tables:
-                    # Store table data as CSV in storage
-                    csv_key = None
+            for p in pages:
+                # ── Step 3: Page image rendering ──────────────────────────────
+                image_key = None
+                if is_pdf and fitz_doc is not None:
                     try:
-                        import csv
-                        import io
-                        buf = io.StringIO()
-                        writer = csv.writer(buf)
-                        if tbl_data.get("headers"):
-                            writer.writerow(tbl_data["headers"])
-                        for row in tbl_data.get("rows", []):
-                            writer.writerow(row)
-                        csv_bytes = buf.getvalue().encode("utf-8")
-                        csv_path = f"tables/{version.id}/page_{p.page_number:04d}_tbl_{tbl_data.get('table_index', 0)}.csv"
-                        csv_obj = self.storage.store(key=csv_path, data=csv_bytes)
-                        csv_key = csv_obj.key
-                    except Exception as tbl_err:
-                        logger.warning("Table CSV storage failed: %s", tbl_err)
+                        png_bytes = PdfExtractor.render_page_image(data, p.page_number, dpi=150, doc=fitz_doc)
+                        image_storage_path = f"pages/{version.id}/page_{p.page_number:04d}.png"
+                        storage_obj = self.storage.store(
+                            key=image_storage_path,
+                            data=png_bytes,
+                        )
+                        image_key = storage_obj.key
+                    except Exception as img_err:
+                        logger.warning("Failed to render page %d image: %s", p.page_number, img_err)
 
-                    ext_table = ExtractedTable(
-                        page_id=doc_page.id,
-                        html_or_csv_key=csv_key,
-                        bbox=tbl_data.get("bbox"),
-                        extraction_method="PYMUPDF",
-                        review_status="PENDING",
-                        table_data_json=tbl_data,
-                    )
-                    self.session.add(ext_table)
+                # ── Step 4: OCR for scanned pages ─────────────────────────────
+                ocr_text = ""
+                text_confidence = 1.0 if not p.is_scanned else 0.0
 
-            if selected_text:
-                full_text_parts.append(selected_text)
+                if p.is_scanned and ocr_available and image_key:
+                    try:
+                        img_data = self.storage.get(image_key)
+                        languages = ["hin", "eng"] if p.detected_language in ("hi", "bilingual") else ["eng"]
+                        ocr_result: OcrResult = ocr_engine.ocr_page_image(img_data, languages=languages)
+                        ocr_text = ocr_result.text
+                        text_confidence = ocr_result.confidence
+                    except Exception as ocr_err:
+                        logger.warning("OCR failed for page %d: %s", p.page_number, ocr_err)
+
+                # ── Step 5: Select best text ──────────────────────────────────
+                if p.is_scanned and ocr_text:
+                    selected_text = ocr_text
+                else:
+                    selected_text = p.clean_text
+
+                # ── Step 6: Quality gate evaluation ───────────────────────────
+                flags = PageQualityGate.evaluate(
+                    page_number=p.page_number,
+                    clean_text=p.clean_text,
+                    ocr_text=ocr_text if ocr_text else None,
+                    text_confidence=text_confidence,
+                    is_scanned=p.is_scanned,
+                    has_tables=bool(p.tables),
+                    detected_language=p.detected_language,
+                )
+                review_status = determine_review_status(flags)
+
+                if review_status == "FLAGGED":
+                    quality_summary["flagged_pages"] += 1
+                else:
+                    quality_summary["auto_approved_pages"] += 1
+                quality_summary["total_flags"] += len(flags)
+
+                # ── Step 7: Persist DocumentPage ──────────────────────────────
+                doc_page = DocumentPage(
+                    version_id=version.id,
+                    page_number=p.page_number,
+                    clean_text=p.clean_text,
+                    raw_text=p.raw_text,
+                    is_scanned=1 if p.is_scanned else 0,
+                    scan_quality_score=p.scan_quality_score,
+                    detected_language=p.detected_language,
+                    tables_json=p.tables if p.tables else None,
+                    word_count=p.word_count,
+                    image_key=image_key,
+                    ocr_text=ocr_text,
+                    selected_text=selected_text,
+                    text_confidence=text_confidence,
+                    rotation=0,
+                    review_status=review_status,
+                )
+                self.session.add(doc_page)
+                self.session.flush()  # ensure doc_page.id is available for child records
+
+                # ── Step 8: Block-level extraction ────────────────────────────
+                if is_pdf and fitz_doc is not None:
+                    try:
+                        fitz_page = fitz_doc[p.page_number - 1]
+                        from adam.extract.blocks import BlockExtractor
+                        blocks = BlockExtractor.extract_blocks(fitz_page)
+                        for blk in blocks:
+                            text_block = TextBlock(
+                                page_id=doc_page.id,
+                                block_type=blk.block_type,
+                                text=blk.text,
+                                bbox=blk.bbox,
+                                reading_order=blk.reading_order,
+                                confidence=blk.confidence,
+                            )
+                            self.session.add(text_block)
+                    except Exception as blk_err:
+                        logger.warning("Block extraction failed for page %d: %s", p.page_number, blk_err)
+
+                # ── Step 9: Dedicated ExtractedTable records ──────────────────
+                if p.tables:
+                    for tbl_data in p.tables:
+                        # Store table data as CSV in storage
+                        csv_key = None
+                        try:
+                            import csv
+                            import io
+                            buf = io.StringIO()
+                            writer = csv.writer(buf)
+                            if tbl_data.get("headers"):
+                                writer.writerow(tbl_data["headers"])
+                            for row in tbl_data.get("rows", []):
+                                writer.writerow(row)
+                            csv_bytes = buf.getvalue().encode("utf-8")
+                            csv_path = f"tables/{version.id}/page_{p.page_number:04d}_tbl_{tbl_data.get('table_index', 0)}.csv"
+                            csv_obj = self.storage.store(key=csv_path, data=csv_bytes)
+                            csv_key = csv_obj.key
+                        except Exception as tbl_err:
+                            logger.warning("Table CSV storage failed: %s", tbl_err)
+
+                        ext_table = ExtractedTable(
+                            page_id=doc_page.id,
+                            html_or_csv_key=csv_key,
+                            bbox=tbl_data.get("bbox"),
+                            extraction_method="PYMUPDF",
+                            review_status="PENDING",
+                            table_data_json=tbl_data,
+                        )
+                        self.session.add(ext_table)
+
+                if selected_text:
+                    full_text_parts.append(selected_text)
+        finally:
+            if fitz_doc is not None:
+                try:
+                    fitz_doc.close()
+                except Exception:
+                    pass
 
         full_text = "\n\n".join(full_text_parts)
 
@@ -374,6 +383,14 @@ class DocumentExtractionPipeline:
         )
         self.session.add(audit)
         self.session.commit()
+
+        if self.enable_auto_triad_eval and doc.id:
+            try:
+                from adam.evaluation.worker import trigger_triad_evaluation_on_ingestion
+                trigger_triad_evaluation_on_ingestion(self.session, document_id=doc.id, sample_size=10)
+            except Exception as eval_err:
+                logger.warning("Automated post-ingestion RAG Triad evaluation skipped: %s", eval_err)
+
         return version
 
     def process_all(self, source_id: Optional[str] = None, actor: str = "extractor") -> int:

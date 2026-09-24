@@ -297,9 +297,9 @@ export default function SourcesView() {
   );
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#fcfcfc] overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-[#f8fafc] dark:bg-[#090d16] overflow-hidden transition-colors">
       {/* Top Header */}
-      <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-white/80 backdrop-blur-xs shrink-0">
+      <div className="p-6 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between bg-white/80 dark:bg-[#0d121e]/80 backdrop-blur-xs shrink-0">
         <div>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
@@ -307,23 +307,23 @@ export default function SourcesView() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-semibold text-gray-800">
+                <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                   Government Data Sources &amp; Ingestion Operating System
                 </h1>
-                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-semibold">
+                <span className="px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-xs font-semibold border border-purple-200/80 dark:border-purple-800">
                   {sources.length} Sources
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+                <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200 dark:border-blue-800">
                   {totalDocsIngested} Documents
                 </span>
                 {activeJobs.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold animate-pulse flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold animate-pulse flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400" />
                     {activeJobs.length} Ingesting
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                 Pluggable Portals • Relational Databases • Batch Files • Deduplication &amp; Checkpoints
               </p>
             </div>
@@ -346,10 +346,10 @@ export default function SourcesView() {
             onClick={() => {
               if (fileInputRef.current) fileInputRef.current.click();
             }}
-            className="p-2 px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-medium text-gray-700 flex items-center gap-1.5 shadow-xs transition-all"
+            className="p-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs transition-all"
             title="Directly upload PDF, DOCX, or text files for extraction"
           >
-            <Upload className="w-3.5 h-3.5 text-purple-600" />
+            <Upload className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
             <span>Upload Files</span>
           </button>
 
@@ -357,13 +357,13 @@ export default function SourcesView() {
             type="button"
             disabled={seedingLoading}
             onClick={handleSeedOfficialSources}
-            className="p-2 px-3 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 active:scale-[0.98] text-xs font-semibold text-purple-700 flex items-center gap-1.5 shadow-2xs transition-all disabled:opacity-50"
+            className="p-2 px-3 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 active:scale-[0.98] text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50"
             title="Populate authentic Uttarakhand sources (eKosh, UKRD, e-Gazette, ITDA Samples)"
           >
             {seedingLoading ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-700" />
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-700 dark:text-purple-300" />
             ) : (
-              <Landmark className="w-3.5 h-3.5 text-purple-700" />
+              <Landmark className="w-3.5 h-3.5 text-purple-700 dark:text-purple-300" />
             )}
             <span>Seed Official Sources</span>
           </button>
@@ -380,7 +380,7 @@ export default function SourcesView() {
           <button
             type="button"
             onClick={loadData}
-            className="p-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-medium text-gray-600 flex items-center gap-1.5 shadow-xs"
+            className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs"
             title="Refresh Sources &amp; Jobs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-purple-600' : ''}`} />
@@ -389,19 +389,19 @@ export default function SourcesView() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="px-6 pt-3 border-b border-gray-100 flex items-center gap-4 bg-white/50 shrink-0 text-xs font-semibold">
+      <div className="px-6 pt-3 border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-4 bg-white/50 dark:bg-[#0c111c]/50 shrink-0 text-xs font-semibold">
         <button
           type="button"
           onClick={() => setActiveTab('SOURCES')}
           className={`pb-3 transition-all flex items-center gap-1.5 border-b-2 ${
             activeTab === 'SOURCES'
-              ? 'border-purple-600 text-purple-700 font-bold'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
+              ? 'border-purple-600 text-purple-700 dark:text-purple-400 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
           <Layers className="w-4 h-4" />
           <span>Data Sources Directory</span>
-          <span className="ml-1 px-1.5 py-0.2 rounded-full bg-gray-100 text-gray-600 text-[10px]">
+          <span className="ml-1 px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
             {sources.length}
           </span>
         </button>
@@ -411,14 +411,14 @@ export default function SourcesView() {
           onClick={() => setActiveTab('JOBS')}
           className={`pb-3 transition-all flex items-center gap-1.5 border-b-2 ${
             activeTab === 'JOBS'
-              ? 'border-purple-600 text-purple-700 font-bold'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
+              ? 'border-purple-600 text-purple-700 dark:text-purple-400 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
           <RotateCcw className="w-4 h-4" />
           <span>Active Control Plane</span>
           {activeJobs.length > 0 && (
-            <span className="ml-1 px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+            <span className="ml-1 px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold">
               {activeJobs.length} active
             </span>
           )}
@@ -429,13 +429,13 @@ export default function SourcesView() {
           onClick={() => setActiveTab('HISTORY')}
           className={`pb-3 transition-all flex items-center gap-1.5 border-b-2 ${
             activeTab === 'HISTORY'
-              ? 'border-purple-600 text-purple-700 font-bold'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
+              ? 'border-purple-600 text-purple-700 dark:text-purple-400 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
           <FileText className="w-4 h-4" />
           <span>Ingestion History &amp; Audit</span>
-          <span className="ml-1 px-1.5 py-0.2 rounded-full bg-gray-100 text-gray-600 text-[10px]">
+          <span className="ml-1 px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
             {historyJobs.length}
           </span>
         </button>
@@ -448,13 +448,13 @@ export default function SourcesView() {
           <div>
             {sources.length === 0 ? (
               <div className="py-16 px-4 flex flex-col items-center justify-center text-center max-w-lg mx-auto">
-                <div className="w-14 h-14 rounded-3xl bg-purple-50 border border-purple-100 flex items-center justify-center shadow-xs mb-4">
-                  <Landmark className="w-7 h-7 text-purple-600" />
+                <div className="w-14 h-14 rounded-3xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 flex items-center justify-center shadow-xs mb-4">
+                  <Landmark className="w-7 h-7 text-purple-600 dark:text-purple-400" />
                 </div>
-                <h3 className="text-base font-bold text-gray-900 mb-1">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">
                   No Data Sources Onboarded Yet
                 </h3>
-                <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
                   Get started by seeding the official Uttarakhand state government playbook (eKosh Treasury, UKRD Rural Development, State e-Gazette, and ITDA Verified Batch), or register a custom source.
                 </p>
                 <div className="flex items-center gap-3">
@@ -474,7 +474,7 @@ export default function SourcesView() {
                   <button
                     type="button"
                     onClick={() => setIsAddModalOpen(true)}
-                    className="px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all"
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Custom Source</span>
@@ -493,22 +493,22 @@ export default function SourcesView() {
                   return (
                     <div
                       key={src.id}
-                      className="bg-white rounded-2xl border border-gray-100 p-5 shadow-xs flex flex-col justify-between hover:shadow-sm transition-all"
+                      className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between hover:border-purple-300 dark:hover:border-purple-700 transition-all"
                     >
                       <div>
                         {/* Header Pills */}
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-600">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                               {src.department_id.replace(/_/g, ' ')}
                             </span>
                             <span
                               className={`px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 ${
                                 stype === 'DATABASE'
-                                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
                                   : stype === 'FILE_UPLOAD'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                               }`}
                             >
                               {stype === 'DATABASE' ? (
@@ -522,10 +522,10 @@ export default function SourcesView() {
                             </span>
                             {officialInfo && (
                               <span
-                                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100/90 text-purple-900 border border-purple-200 flex items-center gap-1 shadow-2xs"
+                                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 dark:bg-purple-950/80 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 flex items-center gap-1"
                                 title={`Official Uttarakhand Governed Connector: ${officialInfo.connector}`}
                               >
-                                <Landmark className="w-3 h-3 text-purple-700" />
+                                <Landmark className="w-3 h-3 text-purple-700 dark:text-purple-400" />
                                 <span>{officialInfo.label}</span>
                               </span>
                             )}
@@ -535,8 +535,8 @@ export default function SourcesView() {
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                                 isApproved
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                               }`}
                             >
                               {src.status}
@@ -544,7 +544,7 @@ export default function SourcesView() {
                             <button
                               type="button"
                               onClick={() => handleDeleteSource(src.id)}
-                              className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                              className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all"
                               title="Delete source"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -553,32 +553,32 @@ export default function SourcesView() {
                         </div>
 
                         {/* Title & Metadata */}
-                        <h3 className="text-sm font-semibold text-gray-900 line-clamp-1 mb-1">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-1 mb-1">
                           {src.name}
                         </h3>
 
-                        <div className="text-[11px] text-gray-400 space-y-1 mt-2">
-                          <p className="truncate font-mono text-[10px] text-gray-600">
-                            <span className="text-gray-400">Locator: </span>
+                        <div className="text-[11px] text-slate-400 dark:text-slate-500 space-y-1 mt-2">
+                          <p className="truncate font-mono text-[10px] text-slate-600 dark:text-slate-400">
+                            <span className="text-slate-400">Locator: </span>
                             {stype === 'DATABASE'
                               ? String(src.config_json?.connection_uri || 'External DB')
                               : src.base_url || 'N/A'}
                           </p>
-                          <div className="flex items-center gap-4 text-gray-500">
+                          <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400">
                             <span>Cadence: {src.refresh_cadence}</span>
                             <span>Clearance: {src.access_classification}</span>
                           </div>
                           {officialInfo && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-purple-800">
-                              <ShieldCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                              <span className="text-gray-400">Governed Connector:</span>
-                              <span className="font-mono font-semibold px-1.5 py-0.2 rounded bg-purple-50 border border-purple-100">
+                            <div className="flex items-center gap-1.5 text-[10px] text-purple-800 dark:text-purple-300">
+                              <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                              <span className="text-slate-400">Governed Connector:</span>
+                              <span className="font-mono font-semibold px-1.5 py-0.2 rounded bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-800">
                                 {officialInfo.connector}
                               </span>
                             </div>
                           )}
                           {src.last_run_at && (
-                            <p className="text-[10px] text-purple-700">
+                            <p className="text-[10px] text-purple-700 dark:text-purple-300">
                               Last Run: {new Date(src.last_run_at).toLocaleString()} ({src.last_run_status})
                             </p>
                           )}
@@ -589,14 +589,14 @@ export default function SourcesView() {
                           <div
                             className={`mt-2 p-2 rounded-xl text-xs flex items-center gap-1.5 ${
                               testMsg.success
-                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                : 'bg-amber-50 text-amber-800 border border-amber-200'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800'
                             }`}
                           >
                             {testMsg.success ? (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                             ) : (
-                              <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                             )}
                             <span className="truncate">{testMsg.message}</span>
                           </div>
@@ -604,8 +604,8 @@ export default function SourcesView() {
                       </div>
 
                       {/* Footer Actions */}
-                      <div className="mt-4 pt-3 border-t border-gray-50 flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-xs font-semibold text-purple-700">
+                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-purple-700 dark:text-purple-400">
                           {src.document_count} docs indexed
                         </span>
 
@@ -615,10 +615,10 @@ export default function SourcesView() {
                             type="button"
                             disabled={isActing}
                             onClick={() => handleTestSource(src.id)}
-                            className="px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50 transition-all flex items-center gap-1"
+                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-1"
                             title="Verify reachability"
                           >
-                            <Plug className="w-3 h-3 text-purple-600" />
+                            <Plug className="w-3 h-3 text-purple-600 dark:text-purple-400" />
                             <span>Test</span>
                           </button>
 
@@ -627,10 +627,10 @@ export default function SourcesView() {
                             type="button"
                             disabled={isActing}
                             onClick={() => handleToggleStatus(src.id)}
-                            className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1 ${
+                            className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 ${
                               isApproved
-                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800'
-                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
+                                ? 'bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                                : 'bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                             }`}
                           >
                             {isApproved ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -642,7 +642,7 @@ export default function SourcesView() {
                             type="button"
                             disabled={isActing || !isApproved}
                             onClick={() => handleTriggerSync(src.id, 'FULL')}
-                            className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-semibold shadow-2xs transition-all flex items-center gap-1 disabled:opacity-40"
+                            className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-semibold shadow-xs transition-all flex items-center gap-1 disabled:opacity-40"
                             title="Trigger a full crawl and ingestion pass"
                           >
                             <Play className="w-3 h-3" />
@@ -654,7 +654,7 @@ export default function SourcesView() {
                             type="button"
                             disabled={isActing || !isApproved}
                             onClick={() => handleTriggerSync(src.id, 'INCREMENTAL')}
-                            className="px-2 py-1 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 text-[11px] font-medium transition-all flex items-center gap-1 disabled:opacity-40"
+                            className="px-2 py-1 rounded-lg border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/60 text-[11px] font-semibold transition-all flex items-center gap-1 disabled:opacity-40"
                             title="Trigger incremental sync since last watermark"
                           >
                             <span>Sync &Delta;</span>
@@ -673,10 +673,10 @@ export default function SourcesView() {
         {activeTab === 'JOBS' && (
           <div className="space-y-4">
             {activeJobs.length === 0 ? (
-              <div className="h-64 flex flex-col items-center justify-center text-xs text-gray-400 gap-2">
-                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                <p>All ingestion jobs are idle or completed. Zero active tasks.</p>
-                <p className="text-[11px] text-gray-400">Click &quot;Run Ingest&quot; on any source to launch a job.</p>
+              <div className="h-64 flex flex-col items-center justify-center text-xs text-slate-400 dark:text-slate-500 gap-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                <p className="font-semibold text-slate-700 dark:text-slate-300">All ingestion jobs are idle or completed. Zero active tasks.</p>
+                <p className="text-[11px] text-slate-400">Click &quot;Run Ingest&quot; on any source to launch a job.</p>
               </div>
             ) : (
               activeJobs.map((job) => {
@@ -687,23 +687,23 @@ export default function SourcesView() {
                 return (
                   <div
                     key={job.id}
-                    className="p-5 rounded-2xl border border-gray-100 bg-white shadow-xs flex flex-col gap-3"
+                    className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#111726] shadow-xs flex flex-col gap-3"
                   >
                     {/* Job Card Header */}
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-gray-900">{job.source_name}</span>
-                          <span className="px-2 py-0.5 rounded-full font-mono text-[10px] bg-purple-50 text-purple-700 font-bold">
+                          <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">{job.source_name}</span>
+                          <span className="px-2 py-0.5 rounded-full font-mono text-[10px] bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold border border-purple-200 dark:border-purple-800">
                             {job.id}
                           </span>
-                          <span className="px-2 py-0.5 rounded-md text-[10px] bg-gray-100 text-gray-600 font-semibold">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
                             {job.job_type}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           Stage:{' '}
-                          <span className="font-semibold text-purple-700 uppercase">{job.current_stage}</span>
+                          <span className="font-semibold text-purple-700 dark:text-purple-400 uppercase">{job.current_stage}</span>
                           {job.started_at && ` • Started ${new Date(job.started_at).toLocaleTimeString()}`}
                         </p>
                       </div>
@@ -714,7 +714,7 @@ export default function SourcesView() {
                           <button
                             type="button"
                             onClick={() => handlePauseJob(job.id)}
-                            className="px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold flex items-center gap-1 transition-all"
+                            className="px-2.5 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center gap-1 transition-all"
                           >
                             <Pause className="w-3.5 h-3.5" />
                             <span>Pause</span>
@@ -736,7 +736,7 @@ export default function SourcesView() {
                           <button
                             type="button"
                             onClick={() => handleStopJob(job.id)}
-                            className="px-2.5 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold flex items-center gap-1 transition-all"
+                            className="px-2.5 py-1.5 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-700 dark:text-red-300 text-xs font-semibold flex items-center gap-1 transition-all"
                           >
                             <StopCircle className="w-3.5 h-3.5" />
                             <span>Stop</span>
@@ -746,9 +746,9 @@ export default function SourcesView() {
                         <button
                           type="button"
                           onClick={() => setSelectedJobForItems(job)}
-                          className="px-2.5 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold flex items-center gap-1 transition-all"
+                          className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition-all"
                         >
-                          <ListFilter className="w-3.5 h-3.5 text-purple-600" />
+                          <ListFilter className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                           <span>View Items</span>
                         </button>
                       </div>
@@ -756,11 +756,11 @@ export default function SourcesView() {
 
                     {/* Progress Bar */}
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs font-semibold text-gray-700">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
                         <span>{job.progress_pct.toFixed(0)}% Completed</span>
                         <span>{job.count_ingested + job.count_skipped + job.count_failed} / {job.count_found || '?'} items</span>
                       </div>
-                      <div className="w-full h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                         <div
                           className={`h-full transition-all duration-300 ${
                             isDraining ? 'bg-amber-500' : isCancelling ? 'bg-red-500' : 'bg-purple-600'
@@ -772,14 +772,14 @@ export default function SourcesView() {
 
                     {/* Stage Metrics Counters */}
                     <div className="flex items-center gap-3 text-xs pt-1">
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold">
                         ✓ {job.count_ingested} Ingested
                       </span>
-                      <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-semibold">
+                      <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-semibold">
                         ⚡ {job.count_skipped} Deduplicated
                       </span>
                       {job.count_failed > 0 && (
-                        <span className="px-2 py-0.5 rounded-md bg-red-50 text-red-700 font-semibold">
+                        <span className="px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 font-semibold">
                           ✗ {job.count_failed} Failed
                         </span>
                       )}
@@ -795,7 +795,7 @@ export default function SourcesView() {
         {activeTab === 'HISTORY' && (
           <div className="space-y-3">
             {historyJobs.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-xs text-gray-400">
+              <div className="h-64 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">
                 No past ingestion runs recorded.
               </div>
             ) : (
@@ -808,39 +808,39 @@ export default function SourcesView() {
                 return (
                   <div
                     key={job.id}
-                    className="p-4 rounded-2xl border border-gray-100 bg-white hover:border-gray-200 transition-all shadow-2xs flex items-center justify-between gap-4 text-xs"
+                    className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#111726] hover:border-purple-300 dark:hover:border-purple-700 transition-all shadow-xs flex items-center justify-between gap-4 text-xs"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900">{job.source_name}</span>
-                        <span className="font-mono text-[10px] text-gray-400">{job.id}</span>
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">{job.source_name}</span>
+                        <span className="font-mono text-[10px] text-slate-400">{job.id}</span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             isSuccess
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                               : isPartial
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                               : isFailed
-                              ? 'bg-red-50 text-red-700 border border-red-200'
+                              ? 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
                               : isCancelled
-                              ? 'bg-gray-100 text-gray-700 border border-gray-200'
-                              : 'bg-gray-100 text-gray-600'
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           {job.status}
                         </span>
                       </div>
-                      <div className="text-[11px] text-gray-400 mt-1 flex items-center gap-3">
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-3">
                         <span>Type: {job.job_type}</span>
                         <span>Ingested: {job.count_ingested}</span>
                         <span>Deduped: {job.count_skipped}</span>
-                        {job.count_failed > 0 && <span className="text-red-600">Failed: {job.count_failed}</span>}
+                        {job.count_failed > 0 && <span className="text-red-600 dark:text-red-400">Failed: {job.count_failed}</span>}
                         {job.started_at && (
                           <span>{new Date(job.started_at).toLocaleString()}</span>
                         )}
                       </div>
                       {job.error_message && (
-                        <p className="text-[11px] text-red-600 mt-1 font-mono truncate max-w-md">
+                        <p className="text-[11px] text-red-600 dark:text-red-400 mt-1 font-mono truncate max-w-md">
                           {job.error_message}
                         </p>
                       )}
@@ -851,7 +851,7 @@ export default function SourcesView() {
                         <button
                           type="button"
                           onClick={() => handleRetryJob(job.id)}
-                          className="px-2.5 py-1.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold flex items-center gap-1 transition-all"
+                          className="px-2.5 py-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-xs font-semibold flex items-center gap-1 transition-all"
                           title="Retry only failed items"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
@@ -862,9 +862,9 @@ export default function SourcesView() {
                       <button
                         type="button"
                         onClick={() => setSelectedJobForItems(job)}
-                        className="px-2.5 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1 transition-all"
+                        className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 transition-all"
                       >
-                        <ListFilter className="w-3.5 h-3.5 text-purple-600" />
+                        <ListFilter className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                         <span>Items</span>
                       </button>
                     </div>

@@ -216,7 +216,13 @@ class DeterministicModelRuntime(BaseModelRuntime):
                 "Hello — I’m ADAM, your Uttarakhand Public Records assistant. "
                 "I can help search and explain approved Government Orders, circulars, gazettes, and rules."
             )
-        elif "### evidence passage" in lower_prompt or "### evidence packet" in lower_prompt or "reference records:" in lower_prompt:
+        elif (
+            "### evidence passage" in lower_prompt
+            or "### evidence packet" in lower_prompt
+            or "reference records:" in lower_prompt
+            or "<approved_evidence>" in lower_prompt
+            or "<evidence_passage" in lower_prompt
+        ):
             # Evidence packet is provided directly in the prompt
             answer = self._synthesize_from_packet_prompt(user_prompt)
         elif "### research brief" in lower_prompt or "[human authority required]" in lower_prompt:
@@ -265,11 +271,18 @@ class DeterministicModelRuntime(BaseModelRuntime):
         in_passage = False
         for line in lines:
             line_s = line.strip()
-            if line_s.startswith("### Evidence Passage") or line_s.startswith("Passage ["):
+            if (
+                line_s.startswith("### Evidence Passage")
+                or line_s.startswith("Passage [")
+                or line_s.startswith("<evidence_passage")
+            ):
                 in_passage = True
                 evidence_lines.append(f"\n{line_s}")
             elif in_passage and line_s:
-                evidence_lines.append(line_s)
+                if line_s.startswith("</evidence_passage>"):
+                    in_passage = False
+                else:
+                    evidence_lines.append(line_s)
 
         if not evidence_lines:
             return self.NO_EVIDENCE_REFUSAL
@@ -508,11 +521,13 @@ class OllamaModelRuntime(BaseModelRuntime):
                 think_flag = None
         else:
             valid_temp = self.validate_temperature(temperature)
-            stops = stop_sequences or ["<|im_end|>", "<|endoftext|>", "\n\nUser:", "\n\nQuestion:"]
+            stops = stop_sequences or ["<|im_end|>", "<|endoftext|>", "\n\nUser:", "\n\nQuestion:", "\n\nHuman:", "\n\nReference Records:"]
+            cpu_count = os.cpu_count() or 4
             options = {
                 "temperature": valid_temp,
                 "num_predict": max_tokens,
                 "num_ctx": min(self.artifact.context_window, 4096),
+                "num_thread": min(8, max(2, cpu_count)),
                 "stop": stops,
             }
             effective_max_tokens = max_tokens

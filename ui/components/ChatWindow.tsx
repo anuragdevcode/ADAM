@@ -9,6 +9,7 @@ import ExecutionStatus from './ExecutionStatus';
 import VoiceControls from './VoiceControls';
 import { useVoiceConversation, type VoiceAnswer } from '@/lib/useVoiceConversation';
 import { Markdown } from '@/lib/markdown';
+import { useToast } from './ToastProvider';
 import {
   Sparkles,
   Paperclip,
@@ -57,15 +58,15 @@ function CopyableCommand({ command }: { command: string }) {
   };
 
   return (
-    <div className="mt-2.5 flex items-center justify-between gap-3 px-3 py-2 bg-[#1f242e] text-gray-200 rounded-lg font-mono text-xs border border-gray-700/60 shadow-inner">
+    <div className="mt-2.5 flex items-center justify-between gap-3 px-3 py-2 bg-slate-900 dark:bg-[#0c1017] text-slate-200 rounded-lg font-mono text-xs border border-slate-700/60 dark:border-slate-800 shadow-inner">
       <div className="flex items-center gap-2 overflow-x-auto select-all">
         <span className="text-purple-400 select-none font-bold">$</span>
-        <span className="text-gray-100">{command}</span>
+        <span className="text-slate-100">{command}</span>
       </div>
       <button
         type="button"
         onClick={handleCopy}
-        className="shrink-0 inline-flex items-center gap-1 text-[11px] font-sans font-medium text-gray-300 hover:text-white px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
+        className="shrink-0 inline-flex items-center gap-1 text-[11px] font-sans font-medium text-slate-300 hover:text-white px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
       >
         {copied ? (
           <>
@@ -74,7 +75,7 @@ function CopyableCommand({ command }: { command: string }) {
           </>
         ) : (
           <>
-            <Copy className="w-3 h-3 text-gray-400" />
+            <Copy className="w-3 h-3 text-slate-400" />
             <span>Copy</span>
           </>
         )}
@@ -100,9 +101,9 @@ function AiErrorCard({
   const isGeminiIssue = error.category === 'gemini_key_missing' || error.category === 'gemini_api_error';
 
   return (
-    <div className="w-full rounded-xl border border-rose-200/90 bg-rose-50/40 p-4 sm:p-5 shadow-xs text-left transition-all">
+    <div className="w-full rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 p-4 sm:p-5 shadow-xs text-left transition-all">
       <div className="flex items-start gap-3">
-        <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center shrink-0 text-rose-700 mt-0.5 shadow-xs">
+        <div className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center shrink-0 text-rose-700 dark:text-rose-300 mt-0.5 shadow-xs">
           {isGeminiIssue ? (
             <Key className="w-4 h-4" />
           ) : isOllamaIssue ? (
@@ -113,10 +114,10 @@ function AiErrorCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h3 className="text-sm font-semibold text-gray-900 leading-tight">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-tight">
               {error.title || 'Inference Service Unavailable'}
             </h3>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-100/80 text-rose-800 border border-rose-200/60">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
               {error.category === 'ollama_offline'
                 ? 'Local Service Offline'
                 : error.category === 'model_not_pulled'
@@ -124,14 +125,14 @@ function AiErrorCard({
                 : error.category === 'gemini_key_missing'
                 ? 'API Key Required'
                 : error.category === 'gemini_api_error'
-                ? 'API Configuration'
+                ? 'API Error'
                 : error.category === 'rate_limit'
                 ? 'Rate Limited'
                 : 'Connection Issue'}
             </span>
           </div>
 
-          <p className="text-xs text-gray-700 leading-relaxed">
+          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
             {error.message}
           </p>
 
@@ -139,13 +140,13 @@ function AiErrorCard({
             <CopyableCommand command={error.commandHint} />
           )}
 
-          <div className="mt-3.5 flex items-center gap-2 flex-wrap pt-2.5 border-t border-rose-200/60">
+          <div className="mt-3.5 flex items-center gap-2 flex-wrap pt-2.5 border-t border-rose-200/60 dark:border-rose-900/40">
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 shadow-xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-[#131926] border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-xs transition-colors"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
               <span>Retry</span>
             </button>
 
@@ -156,7 +157,7 @@ function AiErrorCard({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-colors"
               >
                 {isGeminiIssue ? <Key className="w-3.5 h-3.5" /> : <Cloud className="w-3.5 h-3.5" />}
-                <span>{isGeminiIssue ? 'Configure Gemini API Key' : 'Switch to Google Gemini Cloud'}</span>
+                <span>{isGeminiIssue ? 'Configure Gemini Key' : 'Switch to Google Gemini Cloud'}</span>
               </button>
             )}
 
@@ -164,9 +165,9 @@ function AiErrorCard({
               <button
                 type="button"
                 onClick={onOpenModelSelector}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 shadow-xs transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-[#131926] border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-700 dark:text-purple-300 shadow-xs transition-colors"
               >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                 <span>Switch Model</span>
               </button>
             )}
@@ -175,7 +176,7 @@ function AiErrorCard({
               <button
                 type="button"
                 onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
-                className="ml-auto text-[11px] text-gray-500 hover:text-gray-700 underline underline-offset-2 transition-colors"
+                className="ml-auto text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline underline-offset-2 transition-colors"
               >
                 {showTechnicalDetails ? 'Hide details' : 'Technical details'}
               </button>
@@ -183,7 +184,7 @@ function AiErrorCard({
           </div>
 
           {showTechnicalDetails && error.raw && (
-            <div className="mt-2.5 p-2.5 rounded-lg bg-gray-900 text-gray-300 font-mono text-[11px] overflow-x-auto leading-normal">
+            <div className="mt-2.5 p-2.5 rounded-lg bg-slate-900 text-slate-300 font-mono text-[11px] overflow-x-auto leading-normal">
               {error.raw}
             </div>
           )}
@@ -205,19 +206,19 @@ const EXAMPLE_CARDS = [
     title: 'Timeline for online land mutation (dakhil-kharij)',
     dept: 'Board of Revenue',
     query:
-      'What is the prescribed timeline for disposing of online land mutation and varasat applications?',
+      'What is the prescribed timeline for disposing of online land mutation and varasat applications in Uttarakhand?',
     icon: Landmark,
   },
   {
     title: 'Secretariat working hours and holiday schedule',
     dept: 'General Administration',
-    query: 'What are the official working hours for the Uttarakhand Civil Secretariat?',
+    query: 'What are the official working hours for the Uttarakhand Civil Secretariat and official holiday rules?',
     icon: Clock,
   },
   {
     title: 'SDRF ex-gratia relief norms for loss of life',
     dept: 'Disaster Management',
-    query: 'What ex-gratia relief is payable from the SDRF in case of loss of life?',
+    query: 'What ex-gratia relief is payable from the State Disaster Response Fund (SDRF) in case of loss of life?',
     icon: LifeBuoy,
   },
 ];
@@ -237,8 +238,6 @@ export default function ChatWindow({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  // Latest completed answer; `seq` bumps every turn so voice mode can tell a
-  // new answer from a repeated one.
   const [lastAnswer, setLastAnswer] = useState<VoiceAnswer>({ text: '', seq: 0 });
   const [citationEnabled, setCitationEnabled] = useState(true);
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
@@ -248,6 +247,7 @@ export default function ChatWindow({
   const scrollRef = useRef<HTMLDivElement>(null);
   const locallyStartedSession = useRef<string | null>(null);
   const idPrefix = useId();
+  const { toast } = useToast();
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -491,8 +491,6 @@ export default function ChatWindow({
     [messages, sendMessage],
   );
 
-  // Voice state lives here (not in VoiceControls) because the composer is
-  // re-mounted when the layout switches from the empty state to the docked bar.
   const voice = useVoiceConversation({
     onTranscript: (text) => {
       setInput(text);
@@ -505,9 +503,9 @@ export default function ChatWindow({
 
   const composerPlaceholder =
     voice.phase === 'listening'
-      ? 'Listening… speak your question'
+      ? 'Listening… speak your administrative question'
       : voice.phase === 'transcribing'
-      ? 'Transcribing…'
+      ? 'Transcribing speech…'
       : 'Ask about Uttarakhand Government Orders, circulars, or statutory rules…';
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -515,6 +513,12 @@ export default function ChatWindow({
       e.preventDefault();
       sendMessage(input);
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast.success('Answer copied to clipboard');
+    });
   };
 
   const hasMessages = messages.length > 0;
@@ -527,26 +531,26 @@ export default function ChatWindow({
     .find((message) => message.role === 'assistant' && message.citations?.length)?.citations ?? [];
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden relative">
+    <div className="flex flex-col h-full bg-white dark:bg-[#0c111c] overflow-hidden relative transition-colors">
       {/* ── EMPTY / WELCOME STATE ────────────────────────────────────── */}
       {!hasMessages ? (
-        <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-10 flex flex-col items-center justify-center min-h-0 bg-[radial-gradient(ellipse_at_top,#faf7ff_0%,#fff_48%)]">
-          <div className="max-w-[860px] w-full flex flex-col items-center text-center my-auto">
-            {/* 3D Purple Glowing Sphere */}
-            <div className="purple-orb mb-5 shadow-2xl" />
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 flex flex-col items-center justify-center min-h-0 bg-[radial-gradient(ellipse_at_top,#faf7ff_0%,#fff_50%)] dark:bg-[radial-gradient(ellipse_at_top,#1a1429_0%,#0c111c_55%)]">
+          <div className="max-w-3xl w-full flex flex-col items-center text-center my-auto">
+            {/* Signature Sovereign 3D Orb */}
+            <div className="sovereign-orb mb-5 shadow-xl" />
 
-            {/* Greetings */}
-            <h1 className="text-3xl sm:text-4xl font-semibold text-[#1d2939] tracking-tight mb-2">
-              Good Afternoon, {userName}
+            {/* Greetings & Header */}
+            <h1 className="text-3xl sm:text-4xl font-semibold text-slate-900 dark:text-slate-100 tracking-tight mb-2">
+              Welcome, {userName}
             </h1>
-            <h2 className="text-xl sm:text-2xl font-normal text-gray-600 mb-8">
-              What&apos;s on <span className="text-[#a855f7] font-medium">your mind?</span>
+            <h2 className="text-lg sm:text-xl font-normal text-slate-600 dark:text-slate-400 mb-8">
+              Uttarakhand State Administrative <span className="text-purple-600 dark:text-purple-400 font-semibold">Intelligence</span>
             </h2>
 
-            {/* Main Floating Search / Prompt Card */}
-            <div className="w-full bg-white rounded-2xl border border-[#e4e7ec] shadow-[0_12px_30px_rgba(16,24,40,0.06)] p-4 text-left transition-all focus-within:border-purple-300 focus-within:shadow-[0_12px_32px_rgba(124,58,237,0.12)] mb-8">
-              <div className="flex items-start gap-2.5">
-                <Sparkles className="w-4 h-4 text-gray-400 mt-1 shrink-0" />
+            {/* Main Floating Search / Prompt Composer Card */}
+            <div className="w-full bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg p-4 text-left transition-all focus-within:border-purple-400 dark:focus-within:border-purple-600 focus-within:shadow-xl mb-8">
+              <div className="flex items-start gap-3">
+                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-1 shrink-0" />
                 <textarea
                   rows={2}
                   value={input}
@@ -554,21 +558,21 @@ export default function ChatWindow({
                   onKeyDown={handleKeyDown}
                   placeholder={composerPlaceholder}
                   disabled={isLoading}
-                  className="w-full bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none resize-none pt-0.5 leading-relaxed"
+                  className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none resize-none pt-0.5 leading-relaxed"
                 />
               </div>
 
               {/* Bottom Actions Toolbar inside prompt card */}
-              <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-50 flex-wrap gap-2">
+              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex-wrap gap-2">
                 {/* Left side: Attach + Department filter */}
                 <div className="flex items-center gap-2 relative">
                   <button
                     type="button"
                     onClick={onOpenUpload}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e4e7ec] text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     title="Upload official order PDF for verification"
                   >
-                    <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+                    <Paperclip className="w-3.5 h-3.5 text-slate-400" />
                     <span>Attach Order</span>
                   </button>
 
@@ -576,15 +580,15 @@ export default function ChatWindow({
                     <button
                       type="button"
                       onClick={() => setDeptMenuOpen(!deptMenuOpen)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#e4e7ec] text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
                       <span className="max-w-[130px] truncate">{currentDeptLabel}</span>
-                      <ChevronDown className="w-3 h-3 text-gray-400 shrink-0" />
+                      <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
                     </button>
 
                     {deptMenuOpen && (
-                      <div className="absolute left-0 bottom-full mb-1 w-64 bg-white rounded-2xl border border-gray-100 shadow-xl py-1.5 z-30 max-h-56 overflow-y-auto">
-                        <div className="px-3 py-1 text-[10px] uppercase font-semibold text-gray-400">
+                      <div className="absolute left-0 bottom-full mb-1 w-64 bg-white dark:bg-[#131926] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-30 max-h-56 overflow-y-auto">
+                        <div className="px-3.5 py-1 text-[10px] uppercase font-semibold text-slate-400 dark:text-slate-500">
                           Scope Department
                         </div>
                         <button
@@ -593,10 +597,10 @@ export default function ChatWindow({
                             setSelectedDept('ALL');
                             setDeptMenuOpen(false);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-700 flex items-center justify-between"
+                          className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:text-purple-700 dark:hover:text-purple-300 flex items-center justify-between"
                         >
                           <span>All Departments</span>
-                          {selectedDept === 'ALL' && <Check className="w-3 h-3 text-purple-600" />}
+                          {selectedDept === 'ALL' && <Check className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />}
                         </button>
                         {departments.map((d) => (
                           <button
@@ -606,10 +610,10 @@ export default function ChatWindow({
                               setSelectedDept(d.id);
                               setDeptMenuOpen(false);
                             }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-700 flex items-center justify-between"
+                            className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:text-purple-700 dark:hover:text-purple-300 flex items-center justify-between"
                           >
                             <span className="truncate pr-2">{d.label}</span>
-                            {selectedDept === d.id && <Check className="w-3 h-3 text-purple-600 shrink-0" />}
+                            {selectedDept === d.id && <Check className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />}
                           </button>
                         ))}
                       </div>
@@ -624,7 +628,7 @@ export default function ChatWindow({
                     <div
                       onClick={() => setCitationEnabled(!citationEnabled)}
                       className={`w-8 h-4.5 rounded-full transition-colors relative flex items-center p-0.5 ${
-                        citationEnabled ? 'bg-purple-600' : 'bg-gray-200'
+                        citationEnabled ? 'bg-purple-600' : 'bg-slate-200 dark:bg-slate-700'
                       }`}
                     >
                       <div
@@ -633,7 +637,7 @@ export default function ChatWindow({
                         }`}
                       />
                     </div>
-                    <span className="text-xs text-gray-500 font-medium">Citation</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Citation</span>
                   </label>
 
                   {/* Voice Controls */}
@@ -644,8 +648,8 @@ export default function ChatWindow({
                     type="button"
                     onClick={() => sendMessage(input)}
                     disabled={isLoading || !input.trim()}
-                    className="p-2 rounded-lg bg-[#292c33] text-white hover:bg-[#17191d] active:scale-95 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all shadow-sm"
-                    title="Send query"
+                    className="p-2 rounded-xl bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 active:scale-95 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-xs"
+                    title="Send query (Enter)"
                   >
                     <ArrowUp className="w-4 h-4" />
                   </button>
@@ -655,7 +659,7 @@ export default function ChatWindow({
 
             {/* Example Prompts Header */}
             <div className="w-full text-left mb-3">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 EXPLORE VERIFIED UTTARAKHAND PUBLIC RECORDS
               </p>
             </div>
@@ -668,17 +672,17 @@ export default function ChatWindow({
                   <div
                     key={idx}
                     onClick={() => sendMessage(card.query)}
-                    className="bg-white/80 hover:bg-white hover:-translate-y-0.5 hover:shadow-md border border-[#eaecf0] rounded-xl p-4 transition-all cursor-pointer flex flex-col justify-between h-32 group"
+                    className="bg-white/80 dark:bg-[#111726]/80 hover:bg-white dark:hover:bg-[#141b2c] hover:-translate-y-0.5 hover:shadow-md border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between h-32 group"
                   >
                     <div>
-                      <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-wide block mb-1">
+                      <span className="text-[10px] font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide block mb-1">
                         {card.dept}
                       </span>
-                      <p className="text-xs text-gray-700 leading-snug font-medium group-hover:text-gray-900 transition-colors line-clamp-3">
+                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug font-medium group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors line-clamp-3">
                         {card.title}
                       </p>
                     </div>
-                    <div className="flex items-center justify-between text-gray-400 group-hover:text-purple-600 pt-2 border-t border-gray-100/60">
+                    <div className="flex items-center justify-between text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 pt-2 border-t border-slate-100 dark:border-slate-800/60">
                       <IconComponent className="w-4 h-4" />
                       <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
@@ -690,183 +694,201 @@ export default function ChatWindow({
         </div>
       ) : (
         /* ── ACTIVE CHAT MESSAGES VIEW ─────────────────────────────── */
-        <div className="flex-1 flex min-h-0 bg-[#fcfcfd]">
-        <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-8 space-y-6 min-w-0">
-          <div className="max-w-4xl w-full mx-auto space-y-6">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-              >
-                {/* User Message */}
-                {msg.role === 'user' ? (
-                  <div className="bg-[#292c33] text-white rounded-2xl rounded-tr-md px-5 py-3 text-sm max-w-xl shadow-sm leading-relaxed whitespace-pre-wrap">
-                    {msg.content}
-                  </div>
-                ) : (
-                  /* Assistant Message */
-                  <div className="w-full max-w-3xl bg-white rounded-2xl border border-[#eaecf0] p-5 shadow-[0_2px_8px_rgba(16,24,40,0.04)]">
-                    <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-xs">
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-xs font-semibold text-gray-800">ADAM Assistant</span>
-                      <span className="text-[10px] text-gray-400">• Uttarakhand Records Repository</span>
-                      {msg.modelId?.toLowerCase().includes('gemini') ? (
-                        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                          ☁️ Google Gemini 3.6 Flash
-                        </span>
-                      ) : msg.modelId ? (
-                        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          ⚡ {msg.modelId}
-                        </span>
-                      ) : null}
+        <div className="flex-1 flex min-h-0 bg-slate-50/50 dark:bg-[#090d16]">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 space-y-6 min-w-0">
+            <div className="max-w-4xl w-full mx-auto space-y-6">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                >
+                  {/* User Message */}
+                  {msg.role === 'user' ? (
+                    <div className="bg-slate-900 dark:bg-[#1a2336] text-white dark:text-slate-100 border border-transparent dark:border-slate-700/60 rounded-2xl rounded-tr-md px-5 py-3 text-sm max-w-xl shadow-xs leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
                     </div>
+                  ) : (
+                    /* Assistant Message */
+                    <div className="w-full max-w-3xl bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs">
+                      {/* Assistant Header Row */}
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-xs">
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">ADAM Sovereign</span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">• Governed Synthesis</span>
 
-                    {/* Operational Transparency Execution Status */}
-                    <ExecutionStatus
-                      events={msg.operationalEvents}
-                      stateHistory={msg.stateHistory}
-                      perStageLatency={msg.perStageLatency}
-                      abstentionReason={msg.abstentionReason}
-                      latencyMs={msg.latencyMs}
-                      isStreaming={msg.isStreaming}
-                      hasError={!!msg.error}
-                      isNoAnswer={msg.isNoAnswer}
-                      plan={msg.plan}
-                      computationResults={msg.computationResults}
-                      researchSummary={msg.researchSummary}
-                      subagents={msg.subagents}
-                    />
+                        {msg.modelId?.toLowerCase().includes('gemini') ? (
+                          <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                            ☁️ Google Gemini
+                          </span>
+                        ) : msg.modelId ? (
+                          <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            ⚡ {msg.modelId}
+                          </span>
+                        ) : null}
 
-                    {msg.error ? (
-                      <AiErrorCard
-                        error={msg.error}
-                        onRetry={() => handleRetry(msg)}
-                        onOpenApiKeyModal={onOpenApiKeyModal}
-                        onOpenModelSelector={onOpenModelSelector}
-                      />
-                    ) : (
-                      <div className="text-sm text-gray-800 leading-relaxed">
-                        <Markdown text={msg.content} />
-                        {msg.isStreaming && (
-                          <span className="inline-block w-1.5 h-4 ml-1 bg-purple-600 animate-pulse rounded-full align-middle" />
+                        {/* Copy Answer Button */}
+                        {msg.content && !msg.isStreaming && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(msg.content)}
+                            className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ml-1"
+                            title="Copy answer"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
-                    )}
 
-                    {/* Precedent / Amendment Notice Banners */}
-                    {msg.banners && msg.banners.length > 0 && (
-                      <div className="mt-3">
-                        {msg.banners.map((b, i) => (
-                          <CurrencyBanner key={i} message={b} />
-                        ))}
-                      </div>
-                    )}
+                      {/* Operational Transparency Execution Status */}
+                      <ExecutionStatus
+                        events={msg.operationalEvents}
+                        stateHistory={msg.stateHistory}
+                        perStageLatency={msg.perStageLatency}
+                        abstentionReason={msg.abstentionReason}
+                        latencyMs={msg.latencyMs}
+                        isStreaming={msg.isStreaming}
+                        hasError={!!msg.error}
+                        isNoAnswer={msg.isNoAnswer}
+                        plan={msg.plan}
+                        computationResults={msg.computationResults}
+                        researchSummary={msg.researchSummary}
+                        subagents={msg.subagents}
+                      />
 
-                    {/* Citation Cards */}
-                    {msg.citations && msg.citations.length > 0 && (
-                      <div className="mt-4 pt-3 border-t border-gray-100">
-                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                          Sources &amp; Precedents
-                        </p>
-                        {msg.citations.map((c, i) => (
-                          <CitationCard key={i} citation={c} index={i} />
-                        ))}
-                      </div>
-                    )}
+                      {msg.error ? (
+                        <AiErrorCard
+                          error={msg.error}
+                          onRetry={() => handleRetry(msg)}
+                          onOpenApiKeyModal={onOpenApiKeyModal}
+                          onOpenModelSelector={onOpenModelSelector}
+                        />
+                      ) : (
+                        <div className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">
+                          <Markdown text={msg.content} />
+                          {msg.isStreaming && (
+                            <span className="inline-block w-1.5 h-4 ml-1 bg-purple-600 dark:bg-purple-400 animate-pulse rounded-full align-middle" />
+                          )}
+                        </div>
+                      )}
 
-                    {/* Search Suggestions if No Answer */}
-                    {msg.suggestions && msg.suggestions.length > 0 && (
-                      <div className="mt-3 p-3 rounded-xl bg-purple-50/70 border border-purple-100 text-xs text-purple-900">
-                        <p className="font-semibold mb-1">Search suggestions:</p>
-                        <ul className="list-disc list-inside space-y-0.5 text-purple-800">
-                          {msg.suggestions.map((s, i) => (
-                            <li key={i}>{s}</li>
+                      {/* Precedent / Amendment Notice Banners */}
+                      {msg.banners && msg.banners.length > 0 && (
+                        <div className="mt-3">
+                          {msg.banners.map((b, i) => (
+                            <CurrencyBanner key={i} message={b} />
                           ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-            <div ref={scrollRef} />
-          </div>
-        </div>
-        <aside className="hidden xl:flex w-[300px] shrink-0 border-l border-[#eaecf0] bg-white p-4 flex-col gap-4 overflow-y-auto">
-          <section className="rounded-xl border border-[#eaecf0] p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Link2 className="w-4 h-4 text-purple-600" />
-              <h2 className="text-sm font-semibold text-[#1d2939]">Sources</h2>
+                        </div>
+                      )}
+
+                      {/* Citation Cards */}
+                      {msg.citations && msg.citations.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                          <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+                            Sources &amp; Precedents
+                          </p>
+                          {msg.citations.map((c, i) => (
+                            <CitationCard key={i} citation={c} index={i} />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Search Suggestions if No Answer */}
+                      {msg.suggestions && msg.suggestions.length > 0 && (
+                        <div className="mt-3 p-3 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-800 text-xs text-purple-900 dark:text-purple-300">
+                          <p className="font-semibold mb-1">Search suggestions:</p>
+                          <ul className="list-disc list-inside space-y-0.5 text-purple-800 dark:text-purple-300">
+                            {msg.suggestions.map((s, i) => (
+                              <li key={i}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div ref={scrollRef} />
             </div>
-            {latestCitations.length ? (
-              <div className="space-y-2">
-                {latestCitations.slice(0, 3).map((citation, index) => (
-                  <a
-                    key={`${citation.document_id || citation.document_title}-${index}`}
-                    href={citation.source_url || citation.pdf_page_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block rounded-lg bg-[#f8fafc] p-2.5 hover:bg-purple-50 transition-colors"
+          </div>
+
+          {/* Right Sidebar: Sources & Suggested Follow-ups */}
+          <aside className="hidden xl:flex w-[300px] shrink-0 border-l border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0c111c] p-4 flex-col gap-4 overflow-y-auto transition-colors">
+            <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 bg-white dark:bg-[#111726]">
+              <div className="flex items-center gap-2 mb-3">
+                <Link2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-900 dark:text-slate-100">Verified Sources</h2>
+              </div>
+              {latestCitations.length ? (
+                <div className="space-y-2">
+                  {latestCitations.slice(0, 3).map((citation, index) => (
+                    <a
+                      key={`${citation.document_id || citation.document_title}-${index}`}
+                      href={citation.source_url || citation.pdf_page_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-xl bg-slate-50 dark:bg-[#161d2d] p-2.5 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-slate-100 dark:border-slate-800 transition-colors"
+                    >
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 line-clamp-2">{citation.document_title}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 font-mono">
+                        {citation.go_number || `Page ${citation.page}`}
+                      </p>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-4 text-center">
+                  <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">Sources from verified government records will appear here.</p>
+                  <button
+                    type="button"
+                    onClick={onOpenUpload}
+                    className="mt-3 text-xs font-semibold text-purple-700 dark:text-purple-400 hover:underline"
                   >
-                    <p className="text-xs font-medium text-[#344054] line-clamp-2">{citation.document_title}</p>
-                    <p className="mt-1 text-[10px] uppercase tracking-wide text-[#667085]">
-                      {citation.go_number || `Page ${citation.page}`}
-                    </p>
-                  </a>
+                    Add an order
+                  </button>
+                </div>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 bg-white dark:bg-[#111726]">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-900 dark:text-slate-100 mb-3">Suggested follow-ups</h2>
+              <div className="space-y-2">
+                {[
+                  'Show the source document for this answer.',
+                  'Which department issued this order?',
+                  'Are there any amendments or superseding orders?',
+                ].map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => sendMessage(question)}
+                    className="w-full rounded-xl bg-slate-50 dark:bg-[#161d2d] px-3 py-2 text-left text-xs leading-snug text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:text-purple-700 dark:hover:text-purple-300 border border-slate-100 dark:border-slate-800 transition-colors"
+                  >
+                    {question}
+                  </button>
                 ))}
               </div>
-            ) : (
-              <div className="py-3 text-center">
-                <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50">
-                  <FileText className="h-4 w-4 text-purple-600" />
-                </div>
-                <p className="text-xs leading-relaxed text-[#667085]">Sources from verified records will appear here.</p>
-                <button
-                  type="button"
-                  onClick={onOpenUpload}
-                  className="mt-3 text-xs font-semibold text-purple-700 hover:text-purple-800"
-                >
-                  Add an order
-                </button>
-              </div>
-            )}
-          </section>
-          <section className="rounded-xl border border-[#eaecf0] p-4">
-            <h2 className="text-sm font-semibold text-[#1d2939]">Suggested follow-ups</h2>
-            <div className="mt-3 space-y-2">
-              {[
-                'Show the source document for this answer.',
-                'Which department issued this order?',
-                'Are there any amendments or superseding orders?',
-              ].map((question) => (
-                <button
-                  key={question}
-                  type="button"
-                  onClick={() => sendMessage(question)}
-                  className="w-full rounded-lg bg-[#f8fafc] px-3 py-2 text-left text-xs leading-snug text-[#475467] hover:bg-purple-50 hover:text-purple-800 transition-colors"
-                >
-                  {question}
-                </button>
-              ))}
-            </div>
-          </section>
-          <p className="px-1 text-[10px] leading-relaxed text-[#98a2b3]">
-            Responses are grounded only in approved public records.
-          </p>
-        </aside>
+            </section>
+
+            <p className="px-1 text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
+              Responses are sovereignly grounded only in approved Uttarakhand administrative records.
+            </p>
+          </aside>
         </div>
       )}
 
       {/* ── DOCKED BOTTOM INPUT (ONLY WHEN CHAT ACTIVE) ─────────────── */}
       {hasMessages && (
-        <div className="p-3 sm:p-4 border-t border-[#eaecf0] bg-white">
-          <div className="max-w-3xl w-full mx-auto bg-white rounded-2xl border border-[#dfe3ea] shadow-[0_8px_24px_rgba(16,24,40,0.06)] p-3 focus-within:border-purple-300 focus-within:shadow-[0_8px_26px_rgba(124,58,237,0.1)] transition-all">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-gray-400 shrink-0" />
+        <div className="p-3 sm:p-4 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0c111c] transition-colors">
+          <div className="max-w-3xl w-full mx-auto bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md p-3 focus-within:border-purple-400 dark:focus-within:border-purple-600 focus-within:shadow-lg transition-all">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
               <textarea
                 rows={1}
                 value={input}
@@ -874,43 +896,44 @@ export default function ChatWindow({
                 onKeyDown={handleKeyDown}
                 placeholder={composerPlaceholder}
                 disabled={isLoading}
-                className="w-full bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none resize-none pt-0.5"
+                className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none resize-none pt-0.5"
               />
             </div>
 
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 flex-wrap gap-2">
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onOpenUpload}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                   title="Upload order PDF"
                 >
-                  <Paperclip className="w-3 h-3 text-gray-400" />
+                  <Paperclip className="w-3 h-3 text-slate-400" />
                   <span>Attach</span>
                 </button>
+
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setDeptMenuOpen(!deptMenuOpen)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                   >
                     <span className="max-w-[120px] truncate">{currentDeptLabel}</span>
-                    <ChevronDown className="w-3 h-3 text-gray-400" />
+                    <ChevronDown className="w-3 h-3 text-slate-400" />
                   </button>
 
                   {deptMenuOpen && (
-                    <div className="absolute left-0 bottom-full mb-1 w-60 bg-white rounded-xl border border-gray-100 shadow-xl py-1 z-30 max-h-52 overflow-y-auto">
+                    <div className="absolute left-0 bottom-full mb-1 w-60 bg-white dark:bg-[#131926] rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl py-1 z-30 max-h-52 overflow-y-auto">
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedDept('ALL');
                           setDeptMenuOpen(false);
                         }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-purple-50 flex items-center justify-between"
+                        className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 flex items-center justify-between"
                       >
                         <span>All Departments</span>
-                        {selectedDept === 'ALL' && <Check className="w-3 h-3 text-purple-600" />}
+                        {selectedDept === 'ALL' && <Check className="w-3 h-3 text-purple-600 dark:text-purple-400" />}
                       </button>
                       {departments.map((d) => (
                         <button
@@ -920,10 +943,10 @@ export default function ChatWindow({
                             setSelectedDept(d.id);
                             setDeptMenuOpen(false);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-purple-50 flex items-center justify-between"
+                          className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 flex items-center justify-between"
                         >
                           <span className="truncate pr-2">{d.label}</span>
-                          {selectedDept === d.id && <Check className="w-3 h-3 text-purple-600 shrink-0" />}
+                          {selectedDept === d.id && <Check className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />}
                         </button>
                       ))}
                     </div>
@@ -936,7 +959,7 @@ export default function ChatWindow({
                   <div
                     onClick={() => setCitationEnabled(!citationEnabled)}
                     className={`w-7 h-4 rounded-full transition-colors relative flex items-center p-0.5 ${
-                      citationEnabled ? 'bg-purple-600' : 'bg-gray-200'
+                      citationEnabled ? 'bg-purple-600' : 'bg-slate-200 dark:bg-slate-700'
                     }`}
                   >
                     <div
@@ -945,7 +968,7 @@ export default function ChatWindow({
                       }`}
                     />
                   </div>
-                  <span className="text-xs text-gray-500 font-medium">Citation</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Citation</span>
                 </label>
 
                 <VoiceControls voice={voice} hasAnswer={!!lastAnswer.text} />
@@ -954,8 +977,8 @@ export default function ChatWindow({
                   type="button"
                   onClick={() => sendMessage(input)}
                   disabled={isLoading || !input.trim()}
-                  className="p-1.5 rounded-lg bg-[#292c33] text-white hover:bg-[#17191d] active:scale-95 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
-                  title="Send query"
+                  className="p-1.5 rounded-lg bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 active:scale-95 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all"
+                  title="Send query (Enter)"
                 >
                   <ArrowUp className="w-3.5 h-3.5" />
                 </button>

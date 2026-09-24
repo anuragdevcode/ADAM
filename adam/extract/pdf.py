@@ -39,68 +39,77 @@ class PdfExtractor:
             raise ValueError(f"Failed to count PDF pages: {e}") from e
 
     @staticmethod
-    def render_page_image(pdf_bytes: bytes, page_number: int, dpi: int = 300) -> bytes:
+    def render_page_image(pdf_bytes: bytes, page_number: int, dpi: int = 300, doc: Optional[Any] = None) -> bytes:
         """Render a single page to PNG bytes for citation display. page_number is 1-indexed."""
+        should_close = False
         try:
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            if doc is None:
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                should_close = True
             page_idx = page_number - 1
             if page_idx < 0 or page_idx >= len(doc):
-                doc.close()
                 raise ValueError(f"Page {page_number} out of range (PDF has {len(doc)} pages)")
             page = doc[page_idx]
             pix = page.get_pixmap(dpi=dpi)
-            png_bytes = pix.tobytes("png")
-            doc.close()
-            return png_bytes
+            return pix.tobytes("png")
         except ValueError:
             raise
         except Exception as e:
             raise ValueError(f"Failed to render page {page_number} to PNG: {e}") from e
+        finally:
+            if should_close and doc is not None:
+                doc.close()
 
     @classmethod
-    def extract_pages(cls, pdf_bytes: bytes) -> List[ExtractedPage]:
+    def extract_pages(cls, pdf_bytes: bytes, doc: Optional[Any] = None) -> List[ExtractedPage]:
         """Extract all pages from PDF bytes, preserving layout and isolating tables."""
         pages: List[ExtractedPage] = []
+        should_close = False
+
+        if doc is None:
+            try:
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                should_close = True
+            except Exception as e:
+                raise ValueError(f"Failed to open PDF stream with PyMuPDF: {e}") from e
 
         try:
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        except Exception as e:
-            raise ValueError(f"Failed to open PDF stream with PyMuPDF: {e}") from e
+            for page_idx in range(len(doc)):
+                page_num = page_idx + 1
+                page = doc[page_idx]
 
-        for page_idx in range(len(doc)):
-            page_num = page_idx + 1
-            page = doc[page_idx]
+                # 1. Raw and layout-aware text extraction
+                raw_text = page.get_text("text") or ""
+                clean_text = cls._clean_text(raw_text)
 
-            # 1. Raw and layout-aware text extraction
-            raw_text = page.get_text("text") or ""
-            clean_text = cls._clean_text(raw_text)
+                # 2. Check for scanned / bitmap page
+                is_scanned, scan_score = cls._detect_scan(page, len(clean_text.strip()))
 
-            # 2. Check for scanned / bitmap page
-            is_scanned, scan_score = cls._detect_scan(page, len(clean_text.strip()))
+                # 3. Detect language (Hindi / English / Bilingual)
+                detected_lang = cls.detect_language(clean_text)
 
-            # 3. Detect language (Hindi / English / Bilingual)
-            detected_lang = cls.detect_language(clean_text)
+                # 4. Extract tables from page (especially annexures)
+                tables = cls._extract_tables(page)
 
-            # 4. Extract tables from page (especially annexures)
-            tables = cls._extract_tables(page)
+                # Calculate word count
+                word_count = len(clean_text.split())
 
-            # Calculate word count
-            word_count = len(clean_text.split())
-
-            pages.append(
-                ExtractedPage(
-                    page_number=page_num,
-                    clean_text=clean_text,
-                    raw_text=raw_text,
-                    is_scanned=is_scanned,
-                    scan_quality_score=scan_score,
-                    detected_language=detected_lang,
-                    tables=tables,
-                    word_count=word_count,
+                pages.append(
+                    ExtractedPage(
+                        page_number=page_num,
+                        clean_text=clean_text,
+                        raw_text=raw_text,
+                        is_scanned=is_scanned,
+                        scan_quality_score=scan_score,
+                        detected_language=detected_lang,
+                        tables=tables,
+                        word_count=word_count,
+                    )
                 )
-            )
 
-        doc.close()
+        finally:
+            if should_close and doc is not None:
+                doc.close()
         return pages
 
     @classmethod

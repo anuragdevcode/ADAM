@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import type {
   OperationalStatusEvent,
   StateTransitionTrailItem,
@@ -122,7 +122,7 @@ function getStateInfo(stateName: string) {
   };
 }
 
-export default function ExecutionStatus({
+function ExecutionStatusComponent({
   events = [],
   stateHistory = [],
   perStageLatency = {},
@@ -279,17 +279,17 @@ export default function ExecutionStatus({
 
   // Completed or stopped state badge
   let badgeTitle = 'Grounded Response';
-  let badgeColor = 'bg-purple-50/80 text-purple-800 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40';
+  let badgeColor = 'bg-purple-100/90 text-purple-950 border-purple-300 font-semibold hover:bg-purple-200/90 dark:bg-purple-900/60 dark:text-purple-100 dark:border-purple-600 dark:hover:bg-purple-900/80 shadow-xs';
 
   if (hasError || (lastEvent && lastEvent.status === 'failed')) {
     badgeTitle = 'Pipeline Interrupted';
-    badgeColor = 'bg-red-50/80 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-900/40';
+    badgeColor = 'bg-red-100/90 text-red-950 border-red-300 font-semibold hover:bg-red-200/90 dark:bg-red-900/60 dark:text-red-100 dark:border-red-600 shadow-xs';
   } else if (isAbstained) {
     badgeTitle = 'Repository Boundary Abstained';
-    badgeColor = 'bg-amber-50/80 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40';
+    badgeColor = 'bg-amber-100/90 text-amber-950 border-amber-300 font-semibold hover:bg-amber-200/90 dark:bg-amber-900/60 dark:text-amber-100 dark:border-amber-600 shadow-xs';
   } else if (isAgentic && plan) {
     badgeTitle = `Reasoning Plan: ${plan.complexity.replace(/_/g, ' ')} (${plan.steps.length} steps)`;
-    badgeColor = 'bg-indigo-50/80 text-indigo-800 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/40';
+    badgeColor = 'bg-indigo-100/90 text-indigo-950 border-indigo-300 font-semibold hover:bg-indigo-200/90 dark:bg-indigo-900/60 dark:text-indigo-100 dark:border-indigo-600 shadow-xs';
   } else if (citationCount != null && citationCount > 0) {
     badgeTitle = `Grounded in ${citationCount} official ${citationCount === 1 ? 'source' : 'sources'}`;
   } else if (selectedCount != null && selectedCount > 0) {
@@ -303,27 +303,27 @@ export default function ExecutionStatus({
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`inline-flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border transition-colors hover:brightness-95 select-none focus:outline-none focus:ring-1 focus:ring-purple-400 ${badgeColor}`}
+          className={`inline-flex items-center gap-2 px-2.5 py-1 text-xs rounded-lg border transition-colors select-none focus:outline-none focus:ring-1 focus:ring-purple-500 ${badgeColor}`}
           aria-expanded={isExpanded}
           title="Click to inspect the state-transition reasoning trail and per-stage latency"
         >
           {hasError ? (
-            <XCircle className="w-3.5 h-3.5 text-red-500" />
+            <XCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
           ) : isAbstained ? (
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
           ) : (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
           )}
 
-          <span className="font-medium">{badgeTitle}</span>
+          <span className="font-semibold">{badgeTitle}</span>
 
           {totalCalculatedLatency > 0 && (
-            <span className="text-[10px] opacity-75 font-mono border-l border-current/20 pl-1.5 ml-0.5">
+            <span className="text-[11px] font-bold font-mono border-l border-current/30 pl-1.5 ml-0.5">
               {totalCalculatedLatency > 1000 ? `${(totalCalculatedLatency / 1000).toFixed(2)}s` : `${Math.round(totalCalculatedLatency)}ms`}
             </span>
           )}
 
-          <span className="flex items-center gap-0.5 text-[11px] opacity-90 ml-1 font-semibold underline decoration-dotted underline-offset-2">
+          <span className="flex items-center gap-0.5 text-[11px] ml-1 font-bold underline decoration-dotted underline-offset-2">
             {isExpanded ? 'Hide reasoning trail' : 'Show reasoning trail'}
             {isExpanded ? (
               <ChevronUp className="w-3 h-3 ml-0.5" />
@@ -334,8 +334,8 @@ export default function ExecutionStatus({
         </button>
 
         {hasCalculations && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-50/80 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/40">
-            <Calculator className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-100/90 text-emerald-950 border border-emerald-300 dark:bg-emerald-900/60 dark:text-emerald-100 dark:border-emerald-600 shadow-xs">
+            <Calculator className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
             <span>{computationResults.length} Verified {computationResults.length === 1 ? 'Calculation' : 'Calculations'}</span>
           </span>
         )}
@@ -437,11 +437,25 @@ export default function ExecutionStatus({
               </div>
               <div
                 className="text-xs font-semibold truncate font-mono text-slate-800 dark:text-slate-100 mt-0.5"
-                title={bottleneckStage ? `${getStateInfo(bottleneckStage.stage).label || bottleneckStage.stage} (${Math.round(bottleneckStage.duration)}ms)` : 'Optimal execution'}
+                title={
+                  bottleneckStage
+                    ? `${getStateInfo(bottleneckStage.stage).label || bottleneckStage.stage}: ${
+                        bottleneckStage.duration >= 1000
+                          ? `${(bottleneckStage.duration / 1000).toFixed(2)}s`
+                          : `${Math.round(bottleneckStage.duration)}ms`
+                      }${
+                        bottleneckStage.stage === 'GENERATE_OR_ABSTAIN' || bottleneckStage.stage === 'generation'
+                          ? ' (On-device local LLM generation. Cached queries resolve in < 1ms)'
+                          : ''
+                      }`
+                    : 'Optimal execution'
+                }
               >
                 {bottleneckStage ? (
                   bottleneckStage.duration < 5 ? (
                     '< 5ms (Optimal)'
+                  ) : bottleneckStage.duration >= 1000 ? (
+                    `${(bottleneckStage.duration / 1000).toFixed(2)}s (${STAGE_SHORT_NAMES[bottleneckStage.stage] || bottleneckStage.stage})`
                   ) : (
                     `${bottleneckStage.duration.toFixed(0)}ms (${STAGE_SHORT_NAMES[bottleneckStage.stage] || bottleneckStage.stage})`
                   )
@@ -902,3 +916,5 @@ export default function ExecutionStatus({
     </div>
   );
 }
+
+export default memo(ExecutionStatusComponent);

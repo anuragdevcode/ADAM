@@ -10,11 +10,12 @@ Per Phase 03 specification:
 import hashlib
 import math
 import re
+from functools import lru_cache
 from typing import List, Dict, Any, Optional, Tuple, Set
 
 import numpy as np
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from adam.db.models import Document, DocumentVersion, DocumentChunk
 from adam.rag.acl import AclEnforcer
@@ -187,10 +188,15 @@ class MultilingualSemanticVectorizer:
 
     @classmethod
     def embed_text(cls, text: str) -> List[float]:
-        """Compute 128-dimensional dense vector embedding for text."""
+        """Compute 128-dimensional dense vector embedding for text (LRU cached)."""
         if not text:
             return [0.0] * cls.DIMENSION
+        return list(cls._embed_text_cached(text))
 
+    @classmethod
+    @lru_cache(maxsize=2048)
+    def _embed_text_cached(cls, text: str) -> Tuple[float, ...]:
+        """Internal cached vector embedding computation."""
         vec = np.zeros(cls.DIMENSION, dtype=np.float32)
         words = _tokenize(text)
 
@@ -219,7 +225,7 @@ class MultilingualSemanticVectorizer:
         norm = np.linalg.norm(vec)
         if norm > 1e-6:
             vec = vec / norm
-        return vec.tolist()
+        return tuple(vec.tolist())
 
     @classmethod
     def cosine_similarity(cls, vec1: List[float], vec2: List[float]) -> float:
@@ -422,6 +428,9 @@ class HybridRetriever:
         base_query = (
             self.session.query(DocumentChunk, Document)
             .join(Document, DocumentChunk.document_id == Document.id)
+            .options(
+                joinedload(DocumentChunk.version).joinedload(DocumentVersion.attributes)
+            )
             .filter(
                 Document.lifecycle_status == LifecycleStatus.ACTIVE.value,
                 DocumentChunk.review_status.in_(approved_statuses),
@@ -448,7 +457,7 @@ class HybridRetriever:
             # Only filter doc_type if GO number is not specified
             if parsed_query.doc_type:
                 dt_query = query.filter(DocumentChunk.doc_type == parsed_query.doc_type)
-                if dt_query.count() > 0:
+                if dt_query.first() is not None:
                     query = dt_query
 
         # Date filtering: check order_date, effective_from, or date within range
@@ -460,7 +469,7 @@ class HybridRetriever:
                     DocumentChunk.effective_to == parsed_query.exact_date,
                 )
             )
-            if date_q.count() > 0:
+            if date_q.first() is not None:
                 query = date_q
         else:
             if parsed_query.date_from and parsed_query.date_to:
@@ -470,7 +479,7 @@ class HybridRetriever:
                         DocumentChunk.effective_from.between(parsed_query.date_from, parsed_query.date_to),
                     )
                 )
-                if range_q.count() > 0:
+                if range_q.first() is not None:
                     query = range_q
 
         # PostgreSQL Optimization: For large collections, apply full-text index acceleration
@@ -484,7 +493,7 @@ class HybridRetriever:
                             func.plainto_tsquery("simple", q_clean)
                         )
                     )
-                    if ts_query.count() >= top_k:
+                    if len(ts_query.limit(top_k).all()) >= top_k:
                         query = ts_query
                 except Exception:
                     pass

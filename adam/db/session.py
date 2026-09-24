@@ -16,10 +16,17 @@ _SESSION_FACTORIES: dict[str, sessionmaker] = {}
 
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
-    """Enable foreign key constraints in SQLite."""
+    """Enable foreign key constraints and performance tuning in SQLite."""
     if dbapi_connection.__class__.__module__.startswith("sqlite"):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        try:
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
+            cursor.execute("PRAGMA temp_store=MEMORY")
+        except Exception:
+            pass
         cursor.close()
 
 
@@ -27,10 +34,19 @@ def get_engine(db_url: Optional[str] = None) -> Engine:
     """Get or create SQLAlchemy Engine for the given URL (or environment default)."""
     url = db_url or get_database_url()
     if url not in _ENGINES:
+        kwargs: dict = {"echo": False, "future": True}
+        if not url.startswith("sqlite"):
+            kwargs.update({
+                "pool_size": 20,
+                "max_overflow": 10,
+                "pool_pre_ping": True,
+                "pool_recycle": 3600,
+            })
+        else:
+            kwargs["connect_args"] = {"timeout": 30.0, "check_same_thread": False}
         engine = create_engine(
             url,
-            echo=False,
-            future=True,
+            **kwargs,
         )
         # Automatically ensure schema tables and versioned migrations exist
         from adam.db.models import Base

@@ -67,28 +67,28 @@ export default function SystemIntrospectionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl border border-gray-100 dark:border-zinc-800 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white">
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white dark:from-zinc-900 dark:to-zinc-900/80">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
               <Activity className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-gray-900">
+                <h2 className="text-base font-bold text-gray-900 dark:text-zinc-100">
                   System Introspection & Self-Model
                 </h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold uppercase">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold uppercase">
                   v{snapshot?.system_info?.version || '1.0.0'}
                 </span>
                 {isAirGapped && (
-                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold uppercase">
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 font-semibold uppercase">
                     <ShieldAlert className="w-3 h-3" /> Air-Gapped Active
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-zinc-400">
                 Authoritative ground-truth state across runtime, tools, data catalogs, and execution audits
               </p>
             </div>
@@ -98,14 +98,14 @@ export default function SystemIntrospectionModal({
             <button
               onClick={loadData}
               disabled={loading}
-              className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
               title="Refresh telemetry"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-purple-600' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
               title="Close"
             >
               <X className="w-5 h-5" />
@@ -114,13 +114,13 @@ export default function SystemIntrospectionModal({
         </div>
 
         {/* Tab Navigation */}
-        <div className="px-6 pt-2 border-b border-gray-100 flex items-center gap-1 bg-white select-none">
+        <div className="px-6 pt-2 border-b border-gray-100 dark:border-zinc-800 flex items-center gap-1 bg-white dark:bg-zinc-900 select-none">
           <button
             onClick={() => setActiveTab('overview')}
             className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 ${
               activeTab === 'overview'
-                ? 'text-purple-600 border-purple-600 bg-purple-50/50'
-                : 'text-gray-500 border-transparent hover:text-gray-800'
+                ? 'text-purple-600 dark:text-purple-400 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-950/30'
+                : 'text-gray-500 dark:text-zinc-400 border-transparent hover:text-gray-800 dark:hover:text-zinc-200'
             }`}
           >
             Overview
@@ -129,8 +129,8 @@ export default function SystemIntrospectionModal({
             onClick={() => setActiveTab('model')}
             className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 ${
               activeTab === 'model'
-                ? 'text-purple-600 border-purple-600 bg-purple-50/50'
-                : 'text-gray-500 border-transparent hover:text-gray-800'
+                ? 'text-purple-600 dark:text-purple-400 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-950/30'
+                : 'text-gray-500 dark:text-zinc-400 border-transparent hover:text-gray-800 dark:hover:text-zinc-200'
             }`}
           >
             Active Model & Harness
@@ -139,8 +139,8 @@ export default function SystemIntrospectionModal({
             onClick={() => setActiveTab('tools')}
             className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 ${
               activeTab === 'tools'
-                ? 'text-purple-600 border-purple-600 bg-purple-50/50'
-                : 'text-gray-500 border-transparent hover:text-gray-800'
+                ? 'text-purple-600 dark:text-purple-400 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-950/30'
+                : 'text-gray-500 dark:text-zinc-400 border-transparent hover:text-gray-800 dark:hover:text-zinc-200'
             }`}
           >
             Tools & Guardrails
@@ -149,8 +149,8 @@ export default function SystemIntrospectionModal({
             onClick={() => setActiveTab('sources')}
             className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 ${
               activeTab === 'sources'
-                ? 'text-purple-600 border-purple-600 bg-purple-50/50'
-                : 'text-gray-500 border-transparent hover:text-gray-800'
+                ? 'text-purple-600 dark:text-purple-400 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-950/30'
+                : 'text-gray-500 dark:text-zinc-400 border-transparent hover:text-gray-800 dark:hover:text-zinc-200'
             }`}
           >
             Data Sources
@@ -159,8 +159,8 @@ export default function SystemIntrospectionModal({
             onClick={() => setActiveTab('execution')}
             className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 ${
               activeTab === 'execution'
-                ? 'text-purple-600 border-purple-600 bg-purple-50/50'
-                : 'text-gray-500 border-transparent hover:text-gray-800'
+                ? 'text-purple-600 dark:text-purple-400 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-950/30'
+                : 'text-gray-500 dark:text-zinc-400 border-transparent hover:text-gray-800 dark:hover:text-zinc-200'
             }`}
           >
             Execution Diagnostics
@@ -168,14 +168,14 @@ export default function SystemIntrospectionModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 p-6 overflow-y-auto bg-[#fafafa]">
+        <div className="flex-1 p-6 overflow-y-auto bg-[#fafafa] dark:bg-zinc-950/60">
           {loading && !snapshot ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400 dark:text-zinc-500">
               <RefreshCw className="w-8 h-8 animate-spin text-purple-600" />
               <p className="text-xs">Querying authoritative system singletons and telemetry...</p>
             </div>
           ) : !snapshot ? (
-            <div className="text-center py-16 text-gray-500 text-xs">
+            <div className="text-center py-16 text-gray-500 dark:text-zinc-400 text-xs">
               Unable to load system snapshot.
             </div>
           ) : (
@@ -185,90 +185,90 @@ export default function SystemIntrospectionModal({
                 <div className="space-y-4">
                   {/* Top Summary Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3.5 rounded-xl bg-white border border-gray-200/80 shadow-xs">
-                      <div className="flex items-center gap-2 text-gray-400 text-xs mb-1 font-medium">
-                        <Cpu className="w-4 h-4 text-purple-600" />
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs">
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-zinc-500 text-xs mb-1 font-medium">
+                        <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                         <span>Active Model</span>
                       </div>
-                      <p className="text-sm font-bold text-gray-900 truncate">
+                      <p className="text-sm font-bold text-gray-900 dark:text-zinc-100 truncate">
                         {snapshot.active_model.name}
                       </p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">
                         {snapshot.active_model.serving_runtime.toUpperCase()} • {snapshot.active_model.quantization}
                       </p>
                     </div>
 
-                    <div className="p-3.5 rounded-xl bg-white border border-gray-200/80 shadow-xs">
-                      <div className="flex items-center gap-2 text-gray-400 text-xs mb-1 font-medium">
-                        <Shield className="w-4 h-4 text-emerald-600" />
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs">
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-zinc-500 text-xs mb-1 font-medium">
+                        <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         <span>Tool Guardrails</span>
                       </div>
-                      <p className="text-sm font-bold text-emerald-700">
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
                         {snapshot.tool_capabilities.allowed_tools.length} Read-Only Tools
                       </p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">
                         {snapshot.tool_capabilities.forbidden_tools.length} Forbidden Limits
                       </p>
                     </div>
 
-                    <div className="p-3.5 rounded-xl bg-white border border-gray-200/80 shadow-xs">
-                      <div className="flex items-center gap-2 text-gray-400 text-xs mb-1 font-medium">
-                        <Database className="w-4 h-4 text-blue-600" />
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs">
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-zinc-500 text-xs mb-1 font-medium">
+                        <Database className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         <span>Data Sources</span>
                       </div>
-                      <p className="text-sm font-bold text-gray-900">
+                      <p className="text-sm font-bold text-gray-900 dark:text-zinc-100">
                         {snapshot.data_sources.total_sources} Sources
                       </p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">
                         {snapshot.data_sources.total_documents} Documents Indexed
                       </p>
                     </div>
 
-                    <div className="p-3.5 rounded-xl bg-white border border-gray-200/80 shadow-xs">
-                      <div className="flex items-center gap-2 text-gray-400 text-xs mb-1 font-medium">
-                        <Activity className="w-4 h-4 text-amber-600" />
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs">
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-zinc-500 text-xs mb-1 font-medium">
+                        <Activity className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                         <span>Worker Coordinator</span>
                       </div>
-                      <p className="text-sm font-bold text-gray-900">
+                      <p className="text-sm font-bold text-gray-900 dark:text-zinc-100">
                         {snapshot.worker_concurrency.is_busy ? (
-                          <span className="text-amber-600 font-semibold">BUSY</span>
+                          <span className="text-amber-600 dark:text-amber-400 font-semibold">BUSY</span>
                         ) : (
-                          <span className="text-emerald-600 font-semibold">IDLE / READY</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">IDLE / READY</span>
                         )}
                       </p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">
                         &gt;= 2GB macOS Headroom Locked
                       </p>
                     </div>
                   </div>
 
                   {/* System Identity Banner */}
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-2">
-                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-2">
+                    <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider">
                       Authoritative System Identity
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <span className="text-gray-400">Jurisdiction:</span>
-                        <p className="font-medium text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Jurisdiction:</span>
+                        <p className="font-medium text-gray-800 dark:text-zinc-200">
                           {snapshot.system_info.jurisdiction}
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Operational Environment:</span>
-                        <p className="font-medium text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Operational Environment:</span>
+                        <p className="font-medium text-gray-800 dark:text-zinc-200">
                           {snapshot.system_info.environment}
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Active Clearance Scope:</span>
-                        <p className="font-medium text-purple-700">
+                        <span className="text-gray-400 dark:text-zinc-500">Active Clearance Scope:</span>
+                        <p className="font-medium text-purple-700 dark:text-purple-300">
                           {clearanceLevel} Clearance
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Data Sovereignty Status:</span>
-                        <p className="font-medium text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Data Sovereignty Status:</span>
+                        <p className="font-medium text-gray-800 dark:text-zinc-200">
                           {isAirGapped ? 'Air-Gapped (Cloud models prohibited)' : 'Local + Cloud Permitted'}
                         </p>
                       </div>
@@ -277,29 +277,29 @@ export default function SystemIntrospectionModal({
 
                   {/* Quick Last Execution Summary */}
                   {snapshot.last_execution && (
-                    <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-2">
+                    <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-2">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                        <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider">
                           Last Turn Diagnostics
                         </h3>
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
                             snapshot.last_execution.was_refused
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                              : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
                           }`}
                         >
                           {snapshot.last_execution.was_refused ? 'ABSTAINED' : 'COMPLETED'}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-600 italic truncate">
+                      <p className="text-xs text-gray-600 dark:text-zinc-300 italic truncate">
                         &quot;{snapshot.last_execution.query_text_redacted}&quot;
                       </p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-zinc-400">
                         <span>Latency: <strong>{snapshot.last_execution.total_latency_ms} ms</strong></span>
                         <span>Tokens: <strong>{snapshot.last_execution.prompt_tokens + snapshot.last_execution.completion_tokens}</strong></span>
                         {snapshot.last_execution.refusal_reason && (
-                          <span className="text-amber-700 truncate">
+                          <span className="text-amber-700 dark:text-amber-400 truncate">
                             Cause: {snapshot.last_execution.refusal_reason}
                           </span>
                         )}
@@ -312,76 +312,76 @@ export default function SystemIntrospectionModal({
               {/* TAB 2: MODEL & HARNESS */}
               {activeTab === 'model' && (
                 <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-3">
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                        <Cpu className="w-4 h-4 text-purple-600" />
+                      <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                        <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                         Model Specifications
                       </h3>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-mono font-bold">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-mono font-bold">
                         {snapshot.active_model.id}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                       <div>
-                        <span className="text-gray-400">Architecture Family:</span>
-                        <p className="font-semibold text-gray-800">{snapshot.active_model.family}</p>
+                        <span className="text-gray-400 dark:text-zinc-500">Architecture Family:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">{snapshot.active_model.family}</p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Serving Runtime:</span>
-                        <p className="font-semibold text-gray-800">{snapshot.active_model.serving_runtime}</p>
+                        <span className="text-gray-400 dark:text-zinc-500">Serving Runtime:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">{snapshot.active_model.serving_runtime}</p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Quantization:</span>
-                        <p className="font-semibold text-gray-800">{snapshot.active_model.quantization}</p>
+                        <span className="text-gray-400 dark:text-zinc-500">Quantization:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">{snapshot.active_model.quantization}</p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Context Window:</span>
-                        <p className="font-semibold text-gray-800">{snapshot.active_model.context_window.toLocaleString()} tokens</p>
+                        <span className="text-gray-400 dark:text-zinc-500">Context Window:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">{snapshot.active_model.context_window.toLocaleString()} tokens</p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Memory Footprint:</span>
-                        <p className="font-semibold text-gray-800">{snapshot.active_model.memory_footprint_mb} MB</p>
+                        <span className="text-gray-400 dark:text-zinc-500">Memory Footprint:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">{snapshot.active_model.memory_footprint_mb} MB</p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Reasoning Tokens:</span>
-                        <p className="font-semibold text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Reasoning Tokens:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">
                           {snapshot.active_model.supports_reasoning ? 'Supported (<think>)' : 'Not enabled'}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-3">
-                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                      <Gauge className="w-4 h-4 text-purple-600" />
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+                    <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                      <Gauge className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                       Active Harness Profile & Sampling Bounds
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                       <div>
-                        <span className="text-gray-400">Harness Profile:</span>
-                        <p className="font-semibold text-gray-800">{snapshot.active_harness.profile_name}</p>
+                        <span className="text-gray-400 dark:text-zinc-500">Harness Profile:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">{snapshot.active_harness.profile_name}</p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Temperature Bounds:</span>
-                        <p className="font-semibold text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Temperature Bounds:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">
                           [{snapshot.active_harness.temperature_range[0]} - {snapshot.active_harness.temperature_range[1]}] (Strictly Governed)
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Max Tokens Budget:</span>
-                        <p className="font-semibold text-gray-800">{snapshot.active_harness.max_tokens_budget}</p>
+                        <span className="text-gray-400 dark:text-zinc-500">Max Tokens Budget:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">{snapshot.active_harness.max_tokens_budget}</p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Reasoning Budget:</span>
-                        <p className="font-semibold text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Reasoning Budget:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">
                           {snapshot.active_harness.thinking_enabled ? `${snapshot.active_harness.thinking_budget} tokens` : '0 tokens'}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-gray-400">Stop Sequences:</span>
-                        <p className="font-mono text-[11px] text-gray-700 truncate">
+                        <span className="text-gray-400 dark:text-zinc-500">Stop Sequences:</span>
+                        <p className="font-mono text-[11px] text-gray-700 dark:text-zinc-300 truncate">
                           {snapshot.active_harness.stop_sequences.join(', ')}
                         </p>
                       </div>
@@ -394,30 +394,30 @@ export default function SystemIntrospectionModal({
               {activeTab === 'tools' && (
                 <div className="space-y-4">
                   {/* Allowed Tools */}
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 uppercase tracking-wider">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                       Authorized Read-Only Tools ({snapshot.tool_capabilities.allowed_tools.length})
                     </div>
                     <div className="grid grid-cols-1 gap-2.5">
                       {snapshot.tool_capabilities.allowed_tools.map((tool) => (
                         <div
                           key={tool.name}
-                          className="p-3 rounded-lg border border-emerald-100 bg-emerald-50/40 text-xs"
+                          className="p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-xs"
                         >
-                          <div className="flex items-center justify-between font-mono font-bold text-emerald-900">
+                          <div className="flex items-center justify-between font-mono font-bold text-emerald-900 dark:text-emerald-300">
                             <span>{tool.name}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-sans font-semibold">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-sans font-semibold">
                               READ-ONLY
                             </span>
                           </div>
-                          <p className="text-gray-600 mt-1 text-[11px]">{tool.description}</p>
+                          <p className="text-gray-600 dark:text-zinc-400 mt-1 text-[11px]">{tool.description}</p>
                           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                            <span className="text-[10px] text-gray-400">Parameters:</span>
+                            <span className="text-[10px] text-gray-400 dark:text-zinc-500">Parameters:</span>
                             {tool.parameters.map((p) => (
                               <span
                                 key={p}
-                                className="text-[10px] px-1.5 py-0.2 rounded bg-white border border-emerald-200 text-emerald-800 font-mono"
+                                className="text-[10px] px-1.5 py-0.2 rounded bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 font-mono"
                               >
                                 {p}
                               </span>
@@ -429,19 +429,19 @@ export default function SystemIntrospectionModal({
                   </div>
 
                   {/* Forbidden Capabilities */}
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-red-800 uppercase tracking-wider">
-                      <Ban className="w-4 h-4 text-red-600" />
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-red-800 dark:text-red-400 uppercase tracking-wider">
+                      <Ban className="w-4 h-4 text-red-600 dark:text-red-400" />
                       Explicit Forbidden Sandbox Limits ({snapshot.tool_capabilities.forbidden_tools.length})
                     </div>
-                    <p className="text-[11px] text-gray-500">
+                    <p className="text-[11px] text-gray-500 dark:text-zinc-400">
                       These operations are hardcoded as prohibited. The agent cannot call, construct, or execute any of these capabilities under any circumstance:
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {snapshot.tool_capabilities.forbidden_tools.map((f) => (
                         <span
                           key={f}
-                          className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200 font-mono font-medium"
+                          className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/60 font-mono font-medium"
                         >
                           <Lock className="w-2.5 h-2.5" />
                           {f}
@@ -451,11 +451,11 @@ export default function SystemIntrospectionModal({
                   </div>
 
                   {/* Governance Invariants */}
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-2">
-                    <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-2">
+                    <h4 className="text-xs font-bold text-gray-800 dark:text-zinc-200 uppercase tracking-wider">
                       Core Governance Invariants
                     </h4>
-                    <ul className="list-disc list-inside space-y-1 text-xs text-gray-600">
+                    <ul className="list-disc list-inside space-y-1 text-xs text-gray-600 dark:text-zinc-400">
                       {snapshot.tool_capabilities.guardrail_invariants.map((inv, idx) => (
                         <li key={idx}>{inv}</li>
                       ))}
@@ -468,33 +468,33 @@ export default function SystemIntrospectionModal({
               {activeTab === 'sources' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs text-center">
-                      <p className="text-2xl font-bold text-gray-900">{snapshot.data_sources.total_sources}</p>
-                      <p className="text-xs text-gray-500 mt-1">Approved Sources</p>
+                    <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs text-center">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-zinc-100">{snapshot.data_sources.total_sources}</p>
+                      <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">Approved Sources</p>
                     </div>
-                    <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs text-center">
-                      <p className="text-2xl font-bold text-gray-900">{snapshot.data_sources.total_documents}</p>
-                      <p className="text-xs text-gray-500 mt-1">Total Indexed Documents</p>
+                    <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs text-center">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-zinc-100">{snapshot.data_sources.total_documents}</p>
+                      <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">Total Indexed Documents</p>
                     </div>
-                    <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs text-center">
-                      <p className="text-2xl font-bold text-gray-900">{snapshot.data_sources.total_chunks}</p>
-                      <p className="text-xs text-gray-500 mt-1">Semantic Chunks</p>
+                    <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs text-center">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-zinc-100">{snapshot.data_sources.total_chunks}</p>
+                      <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">Semantic Chunks</p>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-3">
-                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                      <Server className="w-4 h-4 text-purple-600" />
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+                    <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                      <Server className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                       Approved System Connectors
                     </h3>
                     <div className="space-y-2 text-xs">
                       {snapshot.data_sources.approved_connectors.map((conn) => (
                         <div
                           key={conn}
-                          className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-200/60"
+                          className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700/60"
                         >
-                          <span className="font-medium text-gray-800">{conn}</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">
+                          <span className="font-medium text-gray-800 dark:text-zinc-200">{conn}</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold">
                             ACTIVE
                           </span>
                         </div>
@@ -502,8 +502,8 @@ export default function SystemIntrospectionModal({
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-2">
-                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-2">
+                    <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider">
                       Represented Departments
                     </h3>
                     <div className="flex flex-wrap gap-1.5">
@@ -511,13 +511,13 @@ export default function SystemIntrospectionModal({
                         snapshot.data_sources.registered_departments.map((dept) => (
                           <span
                             key={dept}
-                            className="text-[11px] px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 font-medium"
+                            className="text-[11px] px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-medium"
                           >
                             {dept}
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-gray-400 dark:text-zinc-500">
                           Finance & Treasury, Rural Development, Gazette, Audit, GAD
                         </span>
                       )}
@@ -530,17 +530,17 @@ export default function SystemIntrospectionModal({
               {activeTab === 'execution' && (
                 <div className="space-y-4">
                   {/* Heavy Worker Lock Status */}
-                  <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-2">
+                  <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-2">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-amber-600" />
+                      <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                         Heavy Worker Coordinator & Concurrency
                       </h3>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded font-bold ${
                           snapshot.worker_concurrency.is_busy
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                            : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
                         }`}
                       >
                         {snapshot.worker_concurrency.is_busy ? 'BUSY' : 'IDLE'}
@@ -548,26 +548,26 @@ export default function SystemIntrospectionModal({
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       <div>
-                        <span className="text-gray-400">Active Heavy Task:</span>
-                        <p className="font-semibold text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Active Heavy Task:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">
                           {snapshot.worker_concurrency.active_task || 'None'}
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Task Elapsed:</span>
-                        <p className="font-semibold text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Task Elapsed:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">
                           {snapshot.worker_concurrency.elapsed_seconds}s
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Mutual Exclusion:</span>
-                        <p className="font-semibold text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Mutual Exclusion:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">
                           {snapshot.worker_concurrency.mutual_exclusion_enforced ? 'ENFORCED' : 'OFF'}
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-400">Ingestion Jobs:</span>
-                        <p className="font-semibold text-gray-800">
+                        <span className="text-gray-400 dark:text-zinc-500">Ingestion Jobs:</span>
+                        <p className="font-semibold text-gray-800 dark:text-zinc-200">
                           {snapshot.worker_concurrency.active_ingestion_jobs} active
                         </p>
                       </div>
@@ -576,34 +576,34 @@ export default function SystemIntrospectionModal({
 
                   {/* Last Execution Breakdown */}
                   {snapshot.last_execution ? (
-                    <div className="p-4 rounded-xl bg-white border border-gray-200/80 shadow-xs space-y-3">
+                    <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 shadow-xs space-y-3">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-purple-600" />
+                        <h3 className="text-xs font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                           Last Request Execution Audit
                         </h3>
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
                             snapshot.last_execution.was_refused
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                              : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
                           }`}
                         >
                           {snapshot.last_execution.was_refused ? 'ABSTAINED' : 'SUCCESS'}
                         </span>
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200/60 text-xs">
-                        <span className="text-gray-400 text-[10px] uppercase font-bold">Query:</span>
-                        <p className="font-medium text-gray-800 mt-0.5">
+                      <div className="p-2.5 rounded-lg bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700/60 text-xs">
+                        <span className="text-gray-400 dark:text-zinc-500 text-[10px] uppercase font-bold">Query:</span>
+                        <p className="font-medium text-gray-800 dark:text-zinc-200 mt-0.5">
                           {snapshot.last_execution.query_text_redacted}
                         </p>
                       </div>
 
                       {snapshot.last_execution.refusal_reason && (
-                        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+                        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 space-y-1">
                           <div className="flex items-center gap-1.5 font-bold">
-                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                             Abstention / Refusal Diagnosis
                           </div>
                           <p>{snapshot.last_execution.refusal_reason}</p>
@@ -613,7 +613,7 @@ export default function SystemIntrospectionModal({
                       {/* Stage-by-Stage Latency Waterfall */}
                       {Object.keys(snapshot.last_execution.per_stage_latency_ms).length > 0 && (
                         <div className="space-y-1.5 pt-1">
-                          <h4 className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                          <h4 className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider">
                             Per-Stage Latencies (Total: {snapshot.last_execution.total_latency_ms} ms)
                           </h4>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -621,12 +621,12 @@ export default function SystemIntrospectionModal({
                               ([stage, dur]) => (
                                 <div
                                   key={stage}
-                                  className="p-2 rounded-lg bg-gray-50 border border-gray-200/60 text-xs"
+                                  className="p-2 rounded-lg bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700/60 text-xs"
                                 >
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold truncate">
+                                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 uppercase font-semibold truncate">
                                     {stage.replace(/_/g, ' ')}
                                   </p>
-                                  <p className="font-bold text-gray-800 mt-0.5">{dur} ms</p>
+                                  <p className="font-bold text-gray-800 dark:text-zinc-200 mt-0.5">{dur} ms</p>
                                 </div>
                               )
                             )}
@@ -634,29 +634,29 @@ export default function SystemIntrospectionModal({
                         </div>
                       )}
 
-                      <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pt-2 border-t border-gray-100">
+                      <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 dark:text-zinc-400 pt-2 border-t border-gray-100 dark:border-zinc-800">
                         <div>
-                          <span className="text-gray-400">Tokens:</span>
-                          <p className="font-semibold">
+                          <span className="text-gray-400 dark:text-zinc-500">Tokens:</span>
+                          <p className="font-semibold text-gray-800 dark:text-zinc-200">
                             P: {snapshot.last_execution.prompt_tokens} / C: {snapshot.last_execution.completion_tokens}
                           </p>
                         </div>
                         <div>
-                          <span className="text-gray-400">Validation Passed:</span>
-                          <p className="font-semibold">
+                          <span className="text-gray-400 dark:text-zinc-500">Validation Passed:</span>
+                          <p className="font-semibold text-gray-800 dark:text-zinc-200">
                             {snapshot.last_execution.validation_passed ? 'YES' : 'NO'}
                           </p>
                         </div>
                         <div>
-                          <span className="text-gray-400">Intent Classified:</span>
-                          <p className="font-semibold truncate">
+                          <span className="text-gray-400 dark:text-zinc-500">Intent Classified:</span>
+                          <p className="font-semibold text-gray-800 dark:text-zinc-200 truncate">
                             {snapshot.last_execution.detected_intent || 'STANDARD'}
                           </p>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-8 text-center bg-white rounded-xl border border-gray-200/80 text-gray-400 text-xs">
+                    <div className="p-8 text-center bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 text-gray-400 dark:text-zinc-500 text-xs">
                       No previous execution recorded in this session.
                     </div>
                   )}
@@ -667,11 +667,11 @@ export default function SystemIntrospectionModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between bg-white text-xs text-gray-400">
+        <div className="px-6 py-3 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 text-xs text-gray-400 dark:text-zinc-500">
           <span>System Time: {snapshot?.system_info?.current_time_utc ? new Date(snapshot.system_info.current_time_utc).toLocaleTimeString() : 'N/A'}</span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-gray-900 hover:bg-black text-white font-semibold transition-colors shadow-xs"
+            className="px-4 py-1.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold transition-colors shadow-xs"
           >
             Close
           </button>

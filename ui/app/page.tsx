@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import IconRail, { type NavTab } from '@/components/IconRail';
 import ChatWindow from '@/components/ChatWindow';
 import ConversationHistory from '@/components/ConversationHistory';
@@ -9,14 +9,30 @@ import PrecedentsView from '@/components/PrecedentsView';
 import AuditView from '@/components/AuditView';
 import SourcesView from '@/components/SourcesView';
 import ReviewView from '@/components/ReviewView';
-import SettingsModal from '@/components/SettingsModal';
-import ApiKeyModal from '@/components/ApiKeyModal';
-import AddProviderModal from '@/components/AddProviderModal';
-import SystemIntrospectionModal from '@/components/SystemIntrospectionModal';
-import AdvancedSettingsModal from '@/components/AdvancedSettingsModal';
-import { Sparkles, ChevronDown, Search, Plus, Check, Shield, ShieldAlert, Lock, Key, Cloud, Globe, Activity, SlidersHorizontal } from 'lucide-react';
+import UnifiedSettingsModal, { type SettingsTabId } from '@/components/UnifiedSettingsModal';
+import CommandPalette from '@/components/CommandPalette';
+import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal';
+import { useToast } from '@/components/ToastProvider';
+import {
+  Sparkles,
+  ChevronDown,
+  Search,
+  Plus,
+  Check,
+  ShieldAlert,
+  Key,
+  Cloud,
+  Globe,
+} from 'lucide-react';
 import type { DepartmentItem, ModelInfo } from '@/lib/types';
-import { fetchModels, fetchVocabularies, getStoredGeminiApiKey, setStoredGeminiApiKey, clearStoredGeminiApiKey, triggerModelDiscovery } from '@/lib/api';
+import {
+  fetchModels,
+  fetchVocabularies,
+  getStoredGeminiApiKey,
+  setStoredGeminiApiKey,
+  clearStoredGeminiApiKey,
+  triggerModelDiscovery,
+} from '@/lib/api';
 
 const DEFAULT_OFFICER_ID = 'officer_dev_001';
 
@@ -25,8 +41,9 @@ export default function HomePage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [introspectionOpen, setIntrospectionOpen] = useState(false);
-  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>('general');
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
   // Officer Identity & Clearance State
   const [officerUserId, setOfficerUserId] = useState(DEFAULT_OFFICER_ID);
@@ -38,17 +55,21 @@ export default function HomePage() {
   const [selectedModel, setSelectedModel] = useState<ModelInfo | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
-  const [searchFilter, setSearchFilter] = useState('');
+  const searchFilter = '';
   const modelMenuRef = useRef<HTMLDivElement>(null);
 
   // Gemini API Key & Cloud Models
   const [geminiApiKey, setGeminiApiKey] = useState<string | null>(null);
-  const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
-  const [addProviderModalOpen, setAddProviderModalOpen] = useState(false);
 
+  const handleOpenSettings = (tab: SettingsTabId = 'general') => {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  };
+
+  const { toast } = useToast();
   const isAirGapped = clearanceLevel === 'RESTRICTED' || clearanceLevel === 'CONFIDENTIAL';
 
-  // Dismiss the model menu on outside click / Escape.
+  // Dismiss model menu on outside click or Escape
   useEffect(() => {
     if (!modelDropdownOpen) return;
     const onPointer = (e: MouseEvent) => {
@@ -83,7 +104,6 @@ export default function HomePage() {
         );
         const storedModelId = typeof window !== 'undefined' ? localStorage.getItem('adam_selected_model_id') : null;
         setSelectedModel((current) => {
-          // If air-gapped is active, current cloud model must be replaced
           if (isAirGapped && current?.is_cloud) {
             return supportedInstalled.find((m) => !m.is_cloud && m.is_primary) || supportedInstalled.find((m) => !m.is_cloud) || null;
           }
@@ -109,15 +129,75 @@ export default function HomePage() {
     return () => window.clearInterval(modelRefresh);
   }, [clearanceLevel, isAirGapped]);
 
-  const handleNewThread = () => {
+  const handleNewThread = useCallback(() => {
     setActiveNavTab('home');
     setActiveSessionId(null);
     setIsHistoryOpen(false);
-  };
+    toast.info('Started a new conversation thread');
+  }, [toast]);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K or Ctrl+K -> Command Palette
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      // Cmd+N or Ctrl+N -> New Thread
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNewThread();
+        return;
+      }
+
+      // Cmd+/ or Ctrl+/ -> Shortcuts Cheat-sheet
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        setShortcutsModalOpen((prev) => !prev);
+        return;
+      }
+
+      // Cmd+, or Ctrl+, -> Settings & Governance
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        handleOpenSettings('general');
+        return;
+      }
+
+      // Navigation shortcuts Cmd+1 to Cmd+6
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === '1') {
+          e.preventDefault();
+          setActiveNavTab('home');
+        } else if (e.key === '2') {
+          e.preventDefault();
+          setActiveNavTab('docs');
+        } else if (e.key === '3') {
+          e.preventDefault();
+          setActiveNavTab('network');
+        } else if (e.key === '4') {
+          e.preventDefault();
+          setActiveNavTab('audit');
+        } else if (e.key === '5') {
+          e.preventDefault();
+          setActiveNavTab('database');
+        } else if (e.key === '6') {
+          e.preventDefault();
+          setActiveNavTab('review');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNewThread]);
 
   return (
-    <main className="w-screen h-screen min-h-[600px] bg-[#f8fafc] overflow-hidden">
-      <div className="w-full h-full bg-white flex overflow-hidden relative">
+    <main className="w-screen h-screen min-h-[600px] bg-[#f8fafc] dark:bg-[#090d16] text-[#0f172a] dark:text-[#f1f5f9] overflow-hidden select-none">
+      <div className="w-full h-full bg-white dark:bg-[#0d121e] flex overflow-hidden relative">
         {/* Left Navigation Rail */}
         <IconRail
           activeTab={activeNavTab}
@@ -127,7 +207,8 @@ export default function HomePage() {
           }}
           onToggleHistory={() => setIsHistoryOpen((v) => !v)}
           isHistoryOpen={isHistoryOpen}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => handleOpenSettings('general')}
+          onOpenShortcuts={() => setShortcutsModalOpen(true)}
           userName={officerUserId}
           clearanceLevel={clearanceLevel}
         />
@@ -148,265 +229,211 @@ export default function HomePage() {
         )}
 
         {/* Main Application Area */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
+        <div className="flex-1 flex flex-col h-full overflow-hidden select-auto min-w-0">
           {/* Top Header Bar */}
-          <header className="h-[68px] px-4 sm:px-6 border-b border-[#eaecf0] flex items-center justify-between bg-white shrink-0 z-10">
-            {/* Installed artifacts are selectable; unavailable artifacts remain visible but frozen. */}
+          <header className="h-[64px] px-4 sm:px-6 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-[#0d121e] shrink-0 z-10">
+            {/* Left: Model Selector Pill */}
             <div ref={modelMenuRef} className="relative">
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen((open) => !open)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:border-purple-200 hover:bg-purple-50/40 text-xs font-medium text-gray-700 shadow-sm transition-all"
-                title="Select an installed model"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-300 dark:hover:border-purple-600/60 hover:bg-purple-50/30 dark:hover:bg-purple-950/20 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-xs transition-all"
+                title="Select active inference runtime or cloud model"
               >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                 <span className="font-semibold">{selectedModel?.name || 'ADAM model'}</span>
                 {selectedModel?.quantization && (
-                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-[10px] font-mono text-gray-500">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-500 dark:text-slate-400">
                     {selectedModel.quantization}
                   </span>
                 )}
-                <ChevronDown className="w-3 h-3 text-gray-400" />
+                {selectedModel?.is_cloud ? (
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[9px] font-semibold border border-indigo-200 dark:border-indigo-800">
+                    Cloud
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[9px] font-semibold border border-emerald-200 dark:border-emerald-800">
+                    Local
+                  </span>
+                )}
+                <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
               </button>
+
+              {/* Model Dropdown Menu */}
               {modelDropdownOpen && (
-                <div className="absolute left-0 top-full mt-2 w-80 bg-white rounded-2xl border border-[#eaecf0] shadow-[0_16px_36px_rgba(16,24,40,0.12)] py-1.5 z-30">
-                  <div className="px-3 py-1 text-[10px] uppercase tracking-wider font-semibold text-gray-400">
-                    Model inventory
+                <div className="absolute left-0 top-full mt-2 w-84 bg-white dark:bg-[#131926] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl py-2 z-30 divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="px-3.5 py-1 text-[10px] uppercase tracking-wider font-semibold text-slate-400 dark:text-slate-500">
+                    Available Runtimes &amp; Models
                   </div>
-                  {/* Render models grouped by display_group (LOCAL / REMOTE) */}
-                  {(() => {
-                    let lastGroup: string | null = null;
-                    return models.map((model) => {
-                      const isCloudRestricted = isAirGapped && model.is_cloud;
-                      const isSelectable = Boolean(
-                        model.is_installed &&
-                        !model.requires_legal_review &&
-                        model.is_supported !== false &&
-                        !isCloudRestricted,
-                      );
-                      const currentGroup = model.display_group || (model.is_cloud ? 'REMOTE' : 'LOCAL');
-                      const showGroupHeader = currentGroup !== lastGroup;
-                      lastGroup = currentGroup;
 
-                      // Attestation badge helper
-                      const attestationBadge = model.attestation_status ? (
-                        model.attestation_status === 'approved' ? (
-                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
-                            ✓ Ready
-                          </span>
-                        ) : model.attestation_status === 'limited' ? (
-                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold">
-                            ⚠ Limited
-                          </span>
-                        ) : model.attestation_status === 'checking' ? (
-                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 font-semibold">
-                            ⟳ Checking
-                          </span>
-                        ) : model.attestation_status === 'unavailable' ? (
-                          <span className="inline-flex items-center text-[9px] px-1 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 font-semibold">
-                            ✗ Unavailable
-                          </span>
-                        ) : null
-                      ) : null;
+                  <div className="py-1 max-h-72 overflow-y-auto">
+                    {(() => {
+                      let lastGroup: string | null = null;
+                      return models.map((model) => {
+                        const isCloudRestricted = isAirGapped && model.is_cloud;
+                        const isSelectable = Boolean(
+                          model.is_installed &&
+                            !model.requires_legal_review &&
+                            model.is_supported !== false &&
+                            !isCloudRestricted,
+                        );
+                        const currentGroup = model.display_group || (model.is_cloud ? 'REMOTE' : 'LOCAL');
+                        const showGroupHeader = currentGroup !== lastGroup;
+                        lastGroup = currentGroup;
 
-                      return (
-                        <div key={model.id}>
-                          {showGroupHeader && (
-                            <div className="px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-gray-400">
-                              {currentGroup === 'LOCAL' ? 'Local' : 'Remote'}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            disabled={!isSelectable}
-                            onClick={() => {
-                              if (!isSelectable) return;
-                              setSelectedModel(model);
-                              if (typeof window !== 'undefined') {
-                                localStorage.setItem('adam_selected_model_id', model.id);
-                              }
-                              setModelDropdownOpen(false);
-                            }}
-                            title={
-                              isCloudRestricted
-                                ? `Cloud models are disabled for ${clearanceLevel} clearance under air-gapped data sovereignty policy`
-                                : isSelectable
-                                ? `Use ${model.name}`
-                                : model.unavailable_reason || 'Not supported / pending review'
-                            }
-                            className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
-                              isSelectable
-                                ? 'hover:bg-purple-50 text-gray-700 cursor-pointer'
-                                : 'opacity-40 cursor-not-allowed bg-gray-50/80 text-gray-400 select-none'
-                            }`}
-                          >
-                            <div className="min-w-0 pr-2">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <p className="font-medium truncate">{model.name}</p>
-                                {isCloudRestricted ? (
-                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 font-semibold uppercase">
-                                    <ShieldAlert className="w-2.5 h-2.5" /> Air-Gapped: Cloud Blocked
-                                  </span>
-                                ) : model.is_cloud ? (
-                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold uppercase">
-                                    <Cloud className="w-2.5 h-2.5" /> Cloud
-                                  </span>
-                                ) : null}
-                                {model.requires_legal_review ? (
-                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold uppercase">
-                                    <Lock className="w-2.5 h-2.5" /> Frozen • Legal Review
-                                  </span>
-                                ) : !model.is_installed && !isCloudRestricted ? (
-                                  <span className="text-[9px] uppercase text-gray-400">
-                                    {model.is_cloud ? 'Key required' : 'Not installed'}
-                                  </span>
-                                ) : null}
-                                {attestationBadge}
+                        return (
+                          <div key={model.id}>
+                            {showGroupHeader && (
+                              <div className="px-3.5 pt-2 pb-0.5 text-[9px] uppercase tracking-widest font-semibold text-slate-400 dark:text-slate-500">
+                                {currentGroup === 'LOCAL' ? 'Local Sovereign Models' : 'Remote APIs'}
                               </div>
-                              <p className="text-[10px] text-gray-400 mt-0.5">
-                                {isCloudRestricted
-                                  ? `Cloud disabled under Air-Gapped Data Sovereignty Policy (${clearanceLevel})`
-                                  : isSelectable
-                                  ? (model.provider_display
-                                      ? `${model.provider_display} • ${model.is_cloud ? 'Active' : model.quantization}`
-                                      : model.is_cloud ? 'Google Gemini Cloud • Active' : `${model.quantization} • ready locally`)
-                                  : model.unavailable_reason}
-                              </p>
-                            </div>
-                            {selectedModel?.id === model.id && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
-                          </button>
-                        </div>
-                      );
-                    });
-                  })()}
-
-                  <div className="my-1.5 border-t border-[#eaecf0]" />
-
-                  {/* Add / Configure Gemini Key button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModelDropdownOpen(false);
-                      setApiKeyModalOpen(true);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-purple-50 text-purple-900 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Key className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                      <span className="font-semibold">
-                        {geminiApiKey ? 'Configure Gemini API Key' : '+ Add Gemini API Key'}
-                      </span>
-                    </div>
-                    {geminiApiKey ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-purple-700 bg-purple-100/60 px-1.5 py-0.5 rounded font-medium">
-                        Voice & Models
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Refresh Models button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void triggerModelDiscovery().then((result) => {
-                        if (result && result.discovered_count > 0) {
-                          const activeKey = getStoredGeminiApiKey();
-                          void fetchModels(activeKey, clearanceLevel).then(setModels);
-                        }
+                            )}
+                            <button
+                              type="button"
+                              disabled={!isSelectable}
+                              onClick={() => {
+                                if (!isSelectable) return;
+                                setSelectedModel(model);
+                                if (typeof window !== 'undefined') {
+                                  localStorage.setItem('adam_selected_model_id', model.id);
+                                }
+                                toast.success(`Switched model to ${model.name}`);
+                                setModelDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3.5 py-2 text-xs flex items-center justify-between transition-colors ${
+                                isSelectable
+                                  ? 'hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-200 cursor-pointer'
+                                  : 'opacity-40 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/30 text-slate-400 select-none'
+                              }`}
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-medium truncate">{model.name}</p>
+                                  {isCloudRestricted ? (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 font-semibold uppercase">
+                                      <ShieldAlert className="w-2.5 h-2.5" /> Blocked
+                                    </span>
+                                  ) : model.is_cloud ? (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold uppercase">
+                                      <Cloud className="w-2.5 h-2.5" /> Cloud
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                  {isCloudRestricted
+                                    ? `Disabled under ${clearanceLevel} clearance`
+                                    : model.is_cloud
+                                    ? 'Google Gemini Cloud'
+                                    : `${model.quantization || 'Local'} • Sovereign Host`}
+                                </p>
+                              </div>
+                              {selectedModel?.id === model.id && (
+                                <Check className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                              )}
+                            </button>
+                          </div>
+                        );
                       });
-                      setModelDropdownOpen(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-50 text-gray-600 transition-colors"
-                  >
-                    <span className="text-gray-400 text-sm leading-none">⟳</span>
-                    <span className="font-medium">Refresh Models</span>
-                  </button>
+                    })()}
+                  </div>
 
-                  {/* Add Remote API button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModelDropdownOpen(false);
-                      setAddProviderModalOpen(true);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-purple-50 text-purple-700 transition-colors"
-                  >
-                    <Globe className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                    <span className="font-semibold">+ Add Remote API</span>
-                  </button>
+                  {/* Actions Section in Model Dropdown */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModelDropdownOpen(false);
+                        handleOpenSettings('providers');
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs flex items-center justify-between hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-900 dark:text-purple-300 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Key className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <span className="font-semibold">
+                          {geminiApiKey ? 'Configure Gemini Key' : '+ Add Gemini Key'}
+                        </span>
+                      </div>
+                      {geminiApiKey ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-mono">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-purple-700 dark:text-purple-400 bg-purple-100/60 dark:bg-purple-900/40 px-1.5 py-0.5 rounded font-medium">
+                          Cloud
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void triggerModelDiscovery().then((result) => {
+                          if (result && result.discovered_count > 0) {
+                            const activeKey = getStoredGeminiApiKey();
+                            void fetchModels(activeKey, clearanceLevel).then(setModels);
+                            toast.success(`Discovered ${result.discovered_count} new models`);
+                          } else {
+                            toast.info('Model inventory refreshed');
+                          }
+                        });
+                        setModelDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-600 dark:text-slate-300 transition-colors"
+                    >
+                      <span className="text-slate-400 text-sm leading-none">⟳</span>
+                      <span className="font-medium">Refresh Models</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModelDropdownOpen(false);
+                        handleOpenSettings('providers');
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs flex items-center gap-2 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-700 dark:text-purple-400 transition-colors"
+                    >
+                      <Globe className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                      <span className="font-semibold">+ Add Remote API</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Top-Right: Air-Gapped Indicator + Search Threads + Clearance Indicator + New Thread */}
+            {/* Middle/Right: Quick Search Cmd+K + Security Badges + New Thread */}
             <div className="flex items-center gap-2.5">
+              {/* Command Palette Search Trigger Button */}
+              <button
+                type="button"
+                onClick={() => setCommandPaletteOpen(true)}
+                className="hidden md:inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#131926] text-xs text-slate-500 dark:text-slate-400 hover:border-purple-300 dark:hover:border-purple-700 hover:bg-white dark:hover:bg-[#161d2d] transition-all"
+                title="Search commands, views, models, departments (⌘K)"
+              >
+                <Search className="w-3.5 h-3.5 text-slate-400" />
+                <span>Search commands…</span>
+                <kbd className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700">
+                  ⌘K
+                </kbd>
+              </button>
+
+              {/* Air-Gapped Indicator */}
               {isAirGapped && (
-                <div className="hidden lg:inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-medium">
-                  <ShieldAlert className="w-3 h-3 text-purple-600" />
-                  <span>Air-Gapped Sovereignty Active</span>
+                <div className="hidden lg:inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-medium">
+                  <ShieldAlert className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                  <span>Air-Gapped Active</span>
                 </div>
               )}
-
-              {/* Search Thread Filter */}
-              <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-[#fcfcfd] text-xs text-gray-600 focus-within:border-purple-300 focus-within:bg-white transition-all">
-                <Search className="w-3.5 h-3.5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search threads"
-                  value={searchFilter}
-                  onChange={(e) => {
-                    setSearchFilter(e.target.value);
-                    if (!isHistoryOpen) setIsHistoryOpen(true);
-                  }}
-                  className="bg-transparent outline-none w-28 text-xs placeholder-gray-400"
-                />
-              </div>
-
-              {/* Clearance Badge */}
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 transition-all"
-                title="Click to view or change officer clearance"
-              >
-                <Shield className="w-3.5 h-3.5 text-purple-600" />
-                <span>{clearanceLevel}</span>
-              </button>
-
-              {/* Self-Model / System Introspection Button */}
-              <button
-                type="button"
-                onClick={() => setIntrospectionOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:bg-purple-50 text-xs font-semibold text-gray-700 hover:text-purple-700 transition-all"
-                title="View System Introspection & Self-Model diagnostics"
-              >
-                <Activity className="w-3.5 h-3.5 text-purple-600" />
-                <span className="hidden sm:inline">Self-Model</span>
-              </button>
-
-              {/* Advanced Settings Button */}
-              <button
-                type="button"
-                onClick={() => setAdvancedSettingsOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#e4e7ec] bg-white hover:bg-purple-50 text-xs font-semibold text-gray-700 hover:text-purple-700 transition-all"
-                title="Open Advanced Settings & Profile Tuner"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />
-                <span className="hidden sm:inline">Advanced</span>
-              </button>
 
               {/* + New Thread Button */}
               <button
                 type="button"
                 onClick={handleNewThread}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#292c33] hover:bg-[#17191d] active:scale-[0.98] text-white text-xs font-semibold shadow-sm transition-all"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-purple-600 dark:hover:bg-purple-500 active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all"
+                title="Start a new thread (⌘N)"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>New Thread</span>
+                <span className="hidden xs:inline">New Thread</span>
+                <kbd className="hidden sm:inline-block ml-1 opacity-60 text-[10px] font-mono">⌘N</kbd>
               </button>
             </div>
           </header>
@@ -423,7 +450,7 @@ export default function HomePage() {
                 modelId={selectedModel?.id}
                 departments={departments}
                 onOpenUpload={() => setActiveNavTab('docs')}
-                onOpenApiKeyModal={() => setApiKeyModalOpen(true)}
+                onOpenApiKeyModal={() => handleOpenSettings('providers')}
                 onOpenModelSelector={() => setModelDropdownOpen(true)}
               />
             )}
@@ -447,10 +474,39 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Settings & Officer Clearance Governance Modal */}
-      <SettingsModal
+      {/* Global Command Palette */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onSelectNav={(tab) => {
+          setActiveNavTab(tab);
+          setIsHistoryOpen(false);
+        }}
+        onNewThread={handleNewThread}
+        models={models}
+        selectedModel={selectedModel}
+        onSelectModel={(model) => setSelectedModel(model)}
+        departments={departments}
+        selectedDept={departmentId}
+        onSelectDept={(dept) => setDepartmentId(dept)}
+        onOpenSettings={(tab) => handleOpenSettings(tab || 'general')}
+        onOpenApiKey={() => handleOpenSettings('providers')}
+        onOpenIntrospection={() => handleOpenSettings('telemetry')}
+        onOpenAdvancedSettings={() => handleOpenSettings('inference')}
+        onOpenShortcuts={() => setShortcutsModalOpen(true)}
+      />
+
+      {/* Keyboard Shortcuts Cheat-sheet Modal */}
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
+
+      {/* Single Authoritative Unified Settings Hub */}
+      <UnifiedSettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        initialTab={settingsTab}
         userId={officerUserId}
         onUpdateUserId={(id) => setOfficerUserId(id)}
         clearanceLevel={clearanceLevel}
@@ -458,67 +514,37 @@ export default function HomePage() {
         departmentId={departmentId}
         onUpdateDepartmentId={(dept) => setDepartmentId(dept)}
         departments={departments}
-      />
-
-      {/* Google Gemini API Key & Cloud Model Modal */}
-      <ApiKeyModal
-        isOpen={apiKeyModalOpen}
-        onClose={() => setApiKeyModalOpen(false)}
-        currentKey={geminiApiKey}
-        onKeySaved={(newKey) => {
-          setStoredGeminiApiKey(newKey);
-          setGeminiApiKey(newKey);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('adam_selected_model_id', 'gemini-3.6-flash');
-          }
-          void fetchModels(newKey).then((mList) => {
-            setModels(mList);
-            const geminiModel = mList.find((m) => m.id === 'gemini-3.6-flash');
-            if (geminiModel && geminiModel.is_installed) {
-              setSelectedModel(geminiModel);
-            }
-          });
-        }}
-        onKeyCleared={() => {
-          clearStoredGeminiApiKey();
-          setGeminiApiKey(null);
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('adam_selected_model_id');
-          }
-          void fetchModels(null).then((mList) => {
-            setModels(mList);
-            const primary = mList.find((m) => m.is_primary) || mList[0] || null;
-            setSelectedModel(primary);
-          });
-        }}
-      />
-
-      {/* Add Remote API Provider Modal */}
-      {addProviderModalOpen && (
-        <AddProviderModal
-          onClose={() => setAddProviderModalOpen(false)}
-          onRegistered={() => {
-            // Refresh the model list after a new provider is registered
-            const activeKey = getStoredGeminiApiKey();
-            void fetchModels(activeKey, clearanceLevel).then(setModels);
-          }}
-        />
-      )}
-
-      {/* System Introspection / Self-Model Modal */}
-      <SystemIntrospectionModal
-        isOpen={introspectionOpen}
-        onClose={() => setIntrospectionOpen(false)}
         sessionId={activeSessionId}
-        userId={officerUserId}
-        clearanceLevel={clearanceLevel}
-      />
-
-      {/* Advanced Settings & Profile Tuner Modal */}
-      <AdvancedSettingsModal
-        isOpen={advancedSettingsOpen}
-        onClose={() => setAdvancedSettingsOpen(false)}
-        userId={officerUserId}
+        geminiApiKey={geminiApiKey}
+        onUpdateGeminiApiKey={(newKey) => {
+          if (newKey) {
+            setStoredGeminiApiKey(newKey);
+            setGeminiApiKey(newKey);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('adam_selected_model_id', 'gemini-3.6-flash');
+            }
+            void fetchModels(newKey, clearanceLevel).then((mList) => {
+              setModels(mList);
+              const geminiModel = mList.find((m) => m.id === 'gemini-3.6-flash');
+              if (geminiModel && geminiModel.is_installed) {
+                setSelectedModel(geminiModel);
+              }
+            });
+            toast.success('Gemini API Key validated and configured');
+          } else {
+            clearStoredGeminiApiKey();
+            setGeminiApiKey(null);
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('adam_selected_model_id');
+            }
+            void fetchModels(null, clearanceLevel).then((mList) => {
+              setModels(mList);
+              const primary = mList.find((m) => m.is_primary) || mList[0] || null;
+              setSelectedModel(primary);
+            });
+            toast.info('Gemini API Key cleared. Defaulted to local models');
+          }
+        }}
       />
     </main>
   );

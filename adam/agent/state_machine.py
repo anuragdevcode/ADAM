@@ -219,6 +219,7 @@ class AgentStateMachine:
 
         # Apply AdvancedSettingsBundle overrides (if provided by the chat API)
         _retrieval_settings = None
+        _generation_settings = None
         if settings_bundle is not None:
             rs = getattr(settings_bundle, "retrieval", None)
             gs = getattr(settings_bundle, "generation", None)
@@ -228,6 +229,7 @@ class AgentStateMachine:
             if gs is not None:
                 temperature = getattr(gs, "temperature_rag", temperature)
                 max_tokens = getattr(gs, "max_tokens_rag", max_tokens)
+                _generation_settings = gs
 
         # Enforce Phase 04 temperature constraints [0.0, 0.2]
         if temperature < 0.0 or temperature > 0.2:
@@ -745,7 +747,7 @@ class AgentStateMachine:
                 harness_params = profile.resolve_parameters(
                     intent="introspection",
                     temperature=temperature if temperature > 0.0 else 0.1,
-                    max_tokens=max_tokens if max_tokens != 512 else 1024,
+                    max_tokens=max_tokens,
                 )
                 user_prompt = profile.format_introspection_prompt(query, snapshot_context)
                 system_prompt = profile.resolve_system_prompt("introspection")
@@ -901,10 +903,13 @@ class AgentStateMachine:
                     )
                     from adam.harness.routing import HarnessRouter
                     profile = HarnessRouter.resolve_profile(self.model_id)
+                    conv_max_tokens = 256 if max_tokens in (512, 1024) else min(max_tokens, 384)
+                    if _generation_settings is not None:
+                        conv_max_tokens = min(conv_max_tokens, getattr(_generation_settings, "max_tokens_conversational", conv_max_tokens))
                     harness_params = profile.resolve_parameters(
                         intent="conversational",
                         temperature=temperature if temperature > 0.0 else 0.2,
-                        max_tokens=max_tokens if max_tokens != 512 else 256,
+                        max_tokens=conv_max_tokens,
                     )
                     user_prompt = profile.format_conversational_prompt(query)
                     system_prompt = profile.resolve_system_prompt("conversational")
@@ -992,12 +997,22 @@ class AgentStateMachine:
                     # Format grounded prompt using model-specific harness profile
                     from adam.harness.routing import HarnessRouter
                     profile = HarnessRouter.resolve_profile(self.model_id)
-                    harness_params = profile.resolve_parameters(
-                        intent="rag",
-                        temperature=temperature if temperature > 0.0 else 0.2,
-                        max_tokens=max_tokens if max_tokens != 512 else 1024,
-                    )
-                    user_prompt = profile.format_rag_prompt(parsed_query.clean_query, packet)
+                    profile_kwargs = {
+                        "intent": "rag",
+                        "temperature": temperature if temperature > 0.0 else 0.2,
+                        "max_tokens": max_tokens,
+                    }
+                    if _generation_settings is not None:
+                        profile_kwargs["context_size"] = _generation_settings.context_size
+                        profile_kwargs["top_p"] = _generation_settings.top_p
+                        profile_kwargs["top_k"] = _generation_settings.top_k_sampling
+                        profile_kwargs["min_p"] = _generation_settings.min_p
+                        profile_kwargs["thinking_enabled"] = _generation_settings.thinking_enabled
+                        profile_kwargs["thinking_budget"] = _generation_settings.thinking_budget
+                    harness_params = profile.resolve_parameters(**profile_kwargs)
+
+                    max_passages = _generation_settings.max_rag_prompt_passages if _generation_settings is not None else 4
+                    user_prompt = profile.format_rag_prompt(parsed_query.clean_query, packet, max_passages=max_passages)
                     system_prompt = profile.resolve_system_prompt("rag")
 
                     effective_temp = min(temperature, 0.2) if isinstance(runtime, DeterministicModelRuntime) else temperature

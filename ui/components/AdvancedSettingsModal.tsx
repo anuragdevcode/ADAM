@@ -36,40 +36,40 @@ const PRESET_DISPLAY: Record<AdvancedSettingsPreset, {
     label: 'Precise',
     tagline: 'Strictest grounding, fastest latency, shortest answers',
     badge: 'High Grounding',
-    color: 'text-blue-700',
-    bg: 'bg-blue-50',
-    border: 'border-blue-200',
+    color: 'text-blue-700 dark:text-blue-400',
+    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    border: 'border-blue-200 dark:border-blue-900/50',
   },
   BALANCED: {
     label: 'Balanced',
     tagline: 'Default ADAM profile — optimal calibrated settings for governance',
     badge: 'Recommended Default',
-    color: 'text-purple-700',
-    bg: 'bg-purple-50',
-    border: 'border-purple-200',
+    color: 'text-purple-700 dark:text-purple-400',
+    bg: 'bg-purple-50 dark:bg-purple-950/30',
+    border: 'border-purple-200 dark:border-purple-900/50',
   },
   THOROUGH: {
     label: 'Thorough',
     tagline: 'Broader repository search, longer answers, more evidence passages',
     badge: 'Broad Search',
-    color: 'text-emerald-700',
-    bg: 'bg-emerald-50',
-    border: 'border-emerald-200',
+    color: 'text-emerald-700 dark:text-emerald-400',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    border: 'border-emerald-200 dark:border-emerald-900/50',
   },
   CUSTOM: {
     label: 'Custom',
     tagline: 'Individual user-defined parameter overrides',
     badge: 'Manual',
-    color: 'text-gray-700',
-    bg: 'bg-gray-50',
-    border: 'border-gray-200',
+    color: 'text-gray-700 dark:text-zinc-300',
+    bg: 'bg-gray-50 dark:bg-zinc-800/40',
+    border: 'border-gray-200 dark:border-zinc-800',
   },
 };
 
 const IMPACT_BADGE: Record<string, { label: string; cls: string }> = {
-  accuracy: { label: 'Accuracy', cls: 'bg-blue-50 text-blue-700' },
-  speed:    { label: 'Speed',    cls: 'bg-amber-50 text-amber-700' },
-  memory:   { label: 'Memory',   cls: 'bg-violet-50 text-violet-700' },
+  accuracy: { label: 'Accuracy', cls: 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300' },
+  speed:    { label: 'Speed',    cls: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300' },
+  memory:   { label: 'Memory',   cls: 'bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300' },
 };
 
 const ENV_PROFILES = [
@@ -106,7 +106,7 @@ function SettingSlider({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-semibold text-gray-800 truncate">{label}</span>
+          <span className="text-xs font-semibold text-gray-800 dark:text-zinc-200 truncate">{label}</span>
           <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold ${IMPACT_BADGE[impact]?.cls ?? ''}`}>
             {IMPACT_BADGE[impact]?.label}
           </span>
@@ -117,12 +117,12 @@ function SettingSlider({
               type="button"
               onClick={() => onChange(defaultValue)}
               title="Reset to default"
-              className="p-0.5 rounded text-gray-400 hover:text-purple-600 transition-colors"
+              className="p-0.5 rounded text-gray-400 dark:text-zinc-500 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
             >
               <RotateCcw className="w-3 h-3" />
             </button>
           )}
-          <span className="text-xs font-mono font-bold text-purple-700 min-w-[3rem] text-right">
+          <span className="text-xs font-mono font-bold text-purple-700 dark:text-purple-400 min-w-[3rem] text-right">
             {step < 1 ? value.toFixed(2) : value}
           </span>
         </div>
@@ -135,11 +135,11 @@ function SettingSlider({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(step < 1 ? round2(parseFloat(e.target.value)) : parseInt(e.target.value))}
-        className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-purple-600 disabled:opacity-40 disabled:cursor-default"
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-purple-600 bg-gray-200 dark:bg-zinc-700 disabled:opacity-40 disabled:cursor-default"
       />
-      <div className="flex justify-between text-[10px] text-gray-400">
+      <div className="flex justify-between text-[10px] text-gray-400 dark:text-zinc-500">
         <span>{step < 1 ? min.toFixed(1) : min}</span>
-        <span className="text-[10px] text-gray-400 text-center px-2 truncate">{description}</span>
+        <span className="text-[10px] text-gray-400 dark:text-zinc-500 text-center px-2 truncate">{description}</span>
         <span>{step < 1 ? max.toFixed(1) : max}</span>
       </div>
     </div>
@@ -154,17 +154,17 @@ function ToggleSetting({ label, description, value, impact, onChange }: {
     <div className="flex items-center justify-between gap-3 py-1">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-800">{label}</span>
+          <span className="text-xs font-semibold text-gray-800 dark:text-zinc-200">{label}</span>
           <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold ${IMPACT_BADGE[impact]?.cls ?? ''}`}>
             {IMPACT_BADGE[impact]?.label}
           </span>
         </div>
-        <p className="text-[10px] text-gray-500 mt-0.5">{description}</p>
+        <p className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">{description}</p>
       </div>
       <div
         onClick={() => onChange(!value)}
         className={`w-9 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer shrink-0 ${
-          value ? 'bg-purple-600' : 'bg-gray-200'
+          value ? 'bg-purple-600' : 'bg-gray-200 dark:bg-zinc-700'
         }`}
       >
         <div className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
@@ -268,17 +268,17 @@ export default function AdvancedSettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-[#18181b] rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-2xl max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
               <SlidersHorizontal className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-gray-800">Advanced Settings</h2>
-              <p className="text-[11px] text-gray-400">Inference · Retrieval · Performance · Voice</p>
+              <h2 className="text-sm font-semibold text-gray-800 dark:text-zinc-100">Advanced Settings</h2>
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500">Inference · Retrieval · Performance · Voice</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -287,22 +287,22 @@ export default function AdvancedSettingsModal({
                 {PRESET_DISPLAY[bundle.preset]?.label}
               </span>
             )}
-            <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100">
+            <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800">
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Tab bar */}
-        <div className="flex border-b border-gray-100 shrink-0 px-4 pt-2 gap-1 overflow-x-auto">
+        <div className="flex border-b border-gray-100 dark:border-zinc-800 shrink-0 px-4 pt-2 gap-1 overflow-x-auto bg-white dark:bg-zinc-900">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-semibold transition-all border-b-2 shrink-0 ${
                 activeTab === t.id
-                  ? 'border-purple-600 text-purple-700 bg-purple-50/60'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-purple-600 text-purple-700 dark:text-purple-400 bg-purple-50/60 dark:bg-purple-950/30'
+                  : 'border-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
               }`}
             >
               {t.icon} {t.label}
@@ -311,34 +311,34 @@ export default function AdvancedSettingsModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-zinc-900/40">
           {loading ? (
-            <div className="flex items-center justify-center h-40 text-gray-400 text-xs">Loading settings…</div>
+            <div className="flex items-center justify-center h-40 text-gray-400 dark:text-zinc-500 text-xs">Loading settings…</div>
           ) : !bundle ? (
-            <div className="flex items-center justify-center h-40 text-gray-400 text-xs">Could not load settings.</div>
+            <div className="flex items-center justify-center h-40 text-gray-400 dark:text-zinc-500 text-xs">Could not load settings.</div>
           ) : (
 
             /* ── Tab: Presets ── */
             activeTab === 'presets' ? (
               <div className="space-y-4">
                 {/* Recommended Configuration Guide Callout */}
-                <div className="p-4 rounded-2xl bg-purple-50/80 border border-purple-200/80 space-y-2">
+                <div className="p-4 rounded-2xl bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/50 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-purple-600 text-white tracking-wide">
                         RECOMMENDED CONFIGURATION
                       </span>
-                      <span className="text-xs font-bold text-purple-950">Optimal Settings Pre-Selected by Default</span>
+                      <span className="text-xs font-bold text-purple-950 dark:text-purple-200">Optimal Settings Pre-Selected by Default</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setActiveTab('guide')}
-                      className="text-[11px] font-semibold text-purple-700 hover:text-purple-950 underline cursor-pointer"
+                      className="text-[11px] font-semibold text-purple-700 dark:text-purple-400 hover:text-purple-950 dark:hover:text-purple-200 underline cursor-pointer"
                     >
                       Read Full Guide
                     </button>
                   </div>
-                  <p className="text-[11px] text-purple-900 leading-relaxed">
+                  <p className="text-[11px] text-purple-900 dark:text-purple-300 leading-relaxed">
                     ADAM picks the most optimal settings by default via the <strong>Balanced</strong> preset. For Qwen models, <strong>Thinking Mode is enabled by default and must never be toggled off</strong> to ensure rigorous administrative deduction across Uttarakhand Government Orders and service rules.
                   </p>
                 </div>
@@ -353,22 +353,22 @@ export default function AdvancedSettingsModal({
                         onClick={() => preset !== 'CUSTOM' ? applyPreset(preset) : undefined}
                         className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                           isActive
-                            ? `${pd.border} ${pd.bg} shadow-sm ring-1 ring-purple-200`
-                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                            ? `${pd.border} ${pd.bg} shadow-sm ring-1 ring-purple-200 dark:ring-purple-900/40`
+                            : 'border-gray-200 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'
                         } ${preset === 'CUSTOM' ? 'cursor-default opacity-80' : ''}`}
                       >
                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <span className={`text-sm font-bold ${isActive ? pd.color : 'text-gray-800'}`}>{pd.label}</span>
+                          <span className={`text-sm font-bold ${isActive ? pd.color : 'text-gray-800 dark:text-zinc-200'}`}>{pd.label}</span>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 font-medium">
                               {pd.badge}
                             </span>
-                            {isActive && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
+                            {isActive && <Check className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />}
                           </div>
                         </div>
-                        <p className="text-[10px] text-gray-500 leading-tight">{pd.tagline}</p>
+                        <p className="text-[10px] text-gray-500 dark:text-zinc-400 leading-tight">{pd.tagline}</p>
                         {preset !== 'CUSTOM' && presets && (
-                          <div className="mt-2.5 pt-2 border-t border-gray-200/60 grid grid-cols-2 gap-1 text-[9px] text-gray-600">
+                          <div className="mt-2.5 pt-2 border-t border-gray-200/60 dark:border-zinc-800 grid grid-cols-2 gap-1 text-[9px] text-gray-600 dark:text-zinc-400">
                             <span>Top-K: <strong>{presets[preset].retrieval.top_k}</strong></span>
                             <span>Max tokens: <strong>{presets[preset].generation.max_tokens_rag}</strong></span>
                             <span>Temp (RAG): <strong>{presets[preset].generation.temperature_rag}</strong></span>
@@ -381,9 +381,9 @@ export default function AdvancedSettingsModal({
                 </div>
 
                 {/* Governance notice */}
-                <div className="flex gap-2.5 p-3.5 rounded-2xl bg-gray-50 border border-gray-200/80">
-                  <Info className="w-4 h-4 text-gray-500 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-gray-600 leading-relaxed">
+                <div className="flex gap-2.5 p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800">
+                  <Info className="w-4 h-4 text-gray-500 dark:text-zinc-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-gray-600 dark:text-zinc-400 leading-relaxed">
                     <strong>Phase 04 Governance Compliance:</strong> RAG temperature is strictly bounded to [0.0, 0.2] across all presets. Cryptographic keys, storage paths, and classified session TTLs remain protected and are excluded from user adjustment.
                   </p>
                 </div>
@@ -392,20 +392,20 @@ export default function AdvancedSettingsModal({
             /* ── Tab: Generation ── */
             ) : activeTab === 'generation' ? (
               <div className="space-y-5">
-                <p className="text-[11px] text-gray-500">Controls inference parameters passed to the model harness. Settings apply to every chat query in this session.</p>
+                <p className="text-[11px] text-gray-500 dark:text-zinc-400">Controls inference parameters passed to the model harness. Settings apply to every chat query in this session.</p>
 
                 <div className="space-y-4">
                   {/* Qwen Thinking Mode - Prominent Section */}
-                  <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-3">
+                  <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-purple-950">Thinking Mode (Qwen models)</h4>
+                        <h4 className="text-xs font-bold text-purple-950 dark:text-purple-200">Thinking Mode (Qwen models)</h4>
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-600 text-white">
                           RECOMMENDED ON
                         </span>
                       </div>
                     </div>
-                    <p className="text-[10px] text-purple-900 leading-relaxed">
+                    <p className="text-[10px] text-purple-900 dark:text-purple-300 leading-relaxed">
                       <strong>Rule:</strong> Never toggle off thinking mode for Qwen. Qwen utilizes internal chain-of-thought tokens to cross-reference dates, resolve conflicting Government Orders, and calculate statutory allowances before formulating answers.
                     </p>
                     <ToggleSetting
@@ -414,8 +414,8 @@ export default function AdvancedSettingsModal({
                       onChange={v => patchBundle(b => { b.generation.thinking_enabled = v; })}
                     />
                     {!g!.thinking_enabled && (
-                      <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[10px] text-amber-800 font-medium">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-[10px] text-amber-800 dark:text-amber-200 font-medium">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                         <span>Warning: Thinking mode is disabled. Disabling thinking mode for Qwen is strongly discouraged as it significantly impairs statutory reasoning over state records.</span>
                       </div>
                     )}
@@ -429,8 +429,8 @@ export default function AdvancedSettingsModal({
                     )}
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
-                    <h4 className="text-xs font-semibold text-gray-700">Governed RAG (citation-grounded)</h4>
+                  <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-4">
+                    <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Governed RAG (citation-grounded)</h4>
                     {dg && <SettingSlider
                       label="RAG Temperature" description="Phase 04 bounded [0.0–0.2]"
                       value={g!.temperature_rag} defaultValue={dg.temperature_rag}
@@ -451,8 +451,8 @@ export default function AdvancedSettingsModal({
                     />}
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
-                    <h4 className="text-xs font-semibold text-gray-700">Conversational / General</h4>
+                  <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-4">
+                    <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Conversational / General</h4>
                     {dg && <SettingSlider
                       label="Conversational Creativity" description="Applies to greetings & general turns only"
                       value={g!.temperature_conversational} defaultValue={dg.temperature_conversational}
@@ -467,8 +467,8 @@ export default function AdvancedSettingsModal({
                     />}
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
-                    <h4 className="text-xs font-semibold text-gray-700">Sampling Parameters</h4>
+                  <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-4">
+                    <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Sampling Parameters</h4>
                     {dg && <SettingSlider
                       label="Top-P (Nucleus Sampling)" description="Probability mass threshold"
                       value={g!.top_p} defaultValue={dg.top_p}
@@ -500,10 +500,10 @@ export default function AdvancedSettingsModal({
             /* ── Tab: Retrieval ── */
             ) : activeTab === 'retrieval' ? (
               <div className="space-y-5">
-                <p className="text-[11px] text-gray-500">Controls the hybrid BM25 + vector retrieval pipeline. Changes take effect on the next query.</p>
+                <p className="text-[11px] text-gray-500 dark:text-zinc-400">Controls the hybrid BM25 + vector retrieval pipeline. Changes take effect on the next query.</p>
                 <div className="space-y-4">
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
-                    <h4 className="text-xs font-semibold text-gray-700">Candidate Fetch</h4>
+                  <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-4">
+                    <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Candidate Fetch</h4>
                     {dr && <SettingSlider
                       label="Retrieval Candidates (Top-K)" description="Passages fetched before reranking"
                       value={r!.top_k} defaultValue={dr.top_k}
@@ -517,9 +517,9 @@ export default function AdvancedSettingsModal({
                     />
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
-                    <h4 className="text-xs font-semibold text-gray-700">Hybrid Scoring Weights</h4>
-                    <p className="text-[10px] text-gray-400">BM25 + vector weights must sum to 1. Adjusting BM25 automatically adjusts vector.</p>
+                  <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-4">
+                    <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Hybrid Scoring Weights</h4>
+                    <p className="text-[10px] text-gray-400 dark:text-zinc-500">BM25 + vector weights must sum to 1. Adjusting BM25 automatically adjusts vector.</p>
                     {dr && <SettingSlider
                       label="BM25 Keyword Weight" description={`Vector weight = ${round2(1 - r!.bm25_weight)}`}
                       value={r!.bm25_weight} defaultValue={dr.bm25_weight}
@@ -534,8 +534,8 @@ export default function AdvancedSettingsModal({
                     />}
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
-                    <h4 className="text-xs font-semibold text-gray-700">Evidence Packet</h4>
+                  <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-4">
+                    <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Evidence Packet</h4>
                     {dr && <SettingSlider
                       label="Min Relevance Score" description="Hybrid score floor for evidence inclusion"
                       value={r!.min_score_threshold} defaultValue={dr.min_score_threshold}
@@ -557,16 +557,16 @@ export default function AdvancedSettingsModal({
                   </div>
 
                   {/* Chunking — read-only informational */}
-                  <div className="p-3 rounded-2xl bg-gray-50 border border-gray-200/60">
+                  <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-200/60 dark:border-zinc-800">
                     <div className="flex items-center gap-1.5 mb-2">
-                      <span className="text-xs font-semibold text-gray-600">Chunking Parameters</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-gray-200 text-gray-600 font-semibold">READ-ONLY</span>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-zinc-400">Chunking Parameters</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-gray-200 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 font-semibold">READ-ONLY</span>
                     </div>
-                    <p className="text-[10px] text-gray-500 mb-2">Applied at ingest time. Cannot change without re-ingesting all documents.</p>
-                    <div className="grid grid-cols-3 gap-2 text-[10px] text-gray-600">
-                      <div className="p-2 rounded-xl bg-white border border-gray-200"><div className="font-mono font-bold text-gray-800">350</div><div className="text-[9px] text-gray-500">Min tokens</div></div>
-                      <div className="p-2 rounded-xl bg-white border border-gray-200"><div className="font-mono font-bold text-gray-800">500</div><div className="text-[9px] text-gray-500">Target tokens</div></div>
-                      <div className="p-2 rounded-xl bg-white border border-gray-200"><div className="font-mono font-bold text-gray-800">12%</div><div className="text-[9px] text-gray-500">Overlap ratio</div></div>
+                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 mb-2">Applied at ingest time. Cannot change without re-ingesting all documents.</p>
+                    <div className="grid grid-cols-3 gap-2 text-[10px] text-gray-600 dark:text-zinc-400">
+                      <div className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700"><div className="font-mono font-bold text-gray-800 dark:text-zinc-200">350</div><div className="text-[9px] text-gray-500 dark:text-zinc-400">Min tokens</div></div>
+                      <div className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700"><div className="font-mono font-bold text-gray-800 dark:text-zinc-200">500</div><div className="text-[9px] text-gray-500 dark:text-zinc-400">Target tokens</div></div>
+                      <div className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700"><div className="font-mono font-bold text-gray-800 dark:text-zinc-200">12%</div><div className="text-[9px] text-gray-500 dark:text-zinc-400">Overlap ratio</div></div>
                     </div>
                   </div>
                 </div>
@@ -577,9 +577,9 @@ export default function AdvancedSettingsModal({
               <div className="space-y-5">
 
                 {/* Environment profile */}
-                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-3">
-                  <h4 className="text-xs font-semibold text-gray-700">Hardware Environment Profile</h4>
-                  <p className="text-[10px] text-gray-500">Controls concurrency limits and mutual exclusion between chat inference and background OCR/indexing.</p>
+                <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-3">
+                  <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Hardware Environment Profile</h4>
+                  <p className="text-[10px] text-gray-500 dark:text-zinc-400">Controls concurrency limits and mutual exclusion between chat inference and background OCR/indexing.</p>
                   <div className="space-y-2">
                     {ENV_PROFILES.map(ep => {
                       const isActive = p!.environment_profile === ep.value;
@@ -588,15 +588,15 @@ export default function AdvancedSettingsModal({
                           key={ep.value}
                           onClick={() => patchBundle(b => { b.performance.environment_profile = ep.value as PerformanceSettings['environment_profile']; })}
                           className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
-                            isActive ? 'border-purple-300 bg-purple-50/60 shadow-xs' : 'border-gray-200 hover:border-gray-300 bg-white'
+                            isActive ? 'border-purple-300 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/20 shadow-xs' : 'border-gray-200 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'
                           }`}
                         >
-                          <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${isActive ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-300'}`}>
+                          <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${isActive ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-300 dark:border-zinc-700'}`}>
                             {isActive && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <span className="text-xs font-semibold text-gray-800">{ep.label}</span>
-                            <p className="text-[10px] text-gray-500 mt-0.5">{ep.desc}</p>
+                            <span className="text-xs font-semibold text-gray-800 dark:text-zinc-200">{ep.label}</span>
+                            <p className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">{ep.desc}</p>
                           </div>
                         </div>
                       );
@@ -605,8 +605,8 @@ export default function AdvancedSettingsModal({
                 </div>
 
                 {/* Cache settings */}
-                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-4">
-                  <h4 className="text-xs font-semibold text-gray-700">Response Cache</h4>
+                <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-4">
+                  <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Response Cache</h4>
                   {dp && <SettingSlider
                     label="Cache TTL (seconds)" description="How long identical responses stay cached"
                     value={p!.cache_ttl_seconds} defaultValue={dp.cache_ttl_seconds}
@@ -622,12 +622,12 @@ export default function AdvancedSettingsModal({
                 </div>
 
                 {/* Voice */}
-                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 space-y-3">
-                  <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-3">
+                  <h4 className="text-xs font-semibold text-gray-700 dark:text-zinc-200 flex items-center gap-1.5">
                     <Mic2 className="w-3.5 h-3.5" /> Voice Defaults
                   </h4>
                   <div>
-                    <label className="text-[11px] font-medium text-gray-600 block mb-1.5">Default Voice Language (STT + TTS)</label>
+                    <label className="text-[11px] font-medium text-gray-600 dark:text-zinc-400 block mb-1.5">Default Voice Language (STT + TTS)</label>
                     <div className="grid grid-cols-3 gap-2">
                       {VOICE_LANGS.map(l => (
                         <button
@@ -636,8 +636,8 @@ export default function AdvancedSettingsModal({
                           onClick={() => patchBundle(b => { b.voice.default_voice_language = l.value as VoiceSettings['default_voice_language']; })}
                           className={`py-1.5 text-xs rounded-xl border text-center transition-all ${
                             v!.default_voice_language === l.value
-                              ? 'border-purple-400 bg-purple-50 text-purple-700 font-semibold'
-                              : 'border-gray-200 bg-white text-gray-600'
+                              ? 'border-purple-400 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold'
+                              : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300'
                           }`}
                         >
                           {l.label}
@@ -653,15 +653,15 @@ export default function AdvancedSettingsModal({
                 </div>
 
                 {/* Persistence opt-in */}
-                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
+                <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-semibold text-gray-800">Persist Settings</span>
-                      <p className="text-[10px] text-gray-500">Save encrypted to your user profile (opt-in per governance standard).</p>
+                      <span className="text-xs font-semibold text-gray-800 dark:text-zinc-200">Persist Settings</span>
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-400">Save encrypted to your user profile (opt-in per governance standard).</p>
                     </div>
                     <div
                       onClick={() => setOptIn(!optIn)}
-                      className={`w-9 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer ${optIn ? 'bg-purple-600' : 'bg-gray-200'}`}
+                      className={`w-9 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer ${optIn ? 'bg-purple-600' : 'bg-gray-200 dark:bg-zinc-700'}`}
                     >
                       <div className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform ${optIn ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
@@ -672,46 +672,46 @@ export default function AdvancedSettingsModal({
             /* ── Tab: Guide ── */
             ) : (
               <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 space-y-2">
+                <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 space-y-2">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-purple-700 shrink-0" />
-                    <h3 className="text-xs font-bold text-purple-950">Recommended Settings Baseline</h3>
+                    <CheckCircle2 className="w-4 h-4 text-purple-700 dark:text-purple-400 shrink-0" />
+                    <h3 className="text-xs font-bold text-purple-950 dark:text-purple-200">Recommended Settings Baseline</h3>
                   </div>
-                  <p className="text-[11px] text-purple-900 leading-relaxed">
+                  <p className="text-[11px] text-purple-900 dark:text-purple-300 leading-relaxed">
                     ADAM is designed to operate out-of-the-box with the most optimal, governance-calibrated settings. By default, the <strong>Balanced</strong> preset is active, selecting the highest-performing combination of precision, retrieval quality, and hardware stability.
                   </p>
                 </div>
 
-                <div className="space-y-3 text-xs text-gray-700">
-                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
-                    <h4 className="font-bold text-gray-800 text-xs flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 text-purple-600" />
+                <div className="space-y-3 text-xs text-gray-700 dark:text-zinc-300">
+                  <div className="p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-2">
+                    <h4 className="font-bold text-gray-800 dark:text-zinc-200 text-xs flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                       1. Never Toggle Off Thinking Mode for Qwen
                     </h4>
-                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                    <p className="text-[11px] text-gray-600 dark:text-zinc-400 leading-relaxed">
                       For all Qwen reasoning models, Thinking Mode is turned ON by default. Qwen requires this internal scratchpad to inspect date precedence, reconcile conflicting Government Orders, and evaluate departmental sanction limits. Turning off thinking mode removes these reasoning tokens and causes shallow or incomplete answers. Always keep Thinking Mode enabled.
                     </p>
                   </div>
 
-                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
-                    <h4 className="font-bold text-gray-800 text-xs">2. Default Preset (Balanced) is Recommended</h4>
-                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                  <div className="p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-2">
+                    <h4 className="font-bold text-gray-800 dark:text-zinc-200 text-xs">2. Default Preset (Balanced) is Recommended</h4>
+                    <p className="text-[11px] text-gray-600 dark:text-zinc-400 leading-relaxed">
                       The <strong>Balanced</strong> preset is the official recommended configuration for all daily administrative queries. It fetches 8 candidates, applies cross-encoder reranking, uses a strict RAG temperature of 0.0, and allocates up to 1024 completion tokens.
                     </p>
                   </div>
 
-                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
-                    <h4 className="font-bold text-gray-800 text-xs">3. When to Use Other Presets</h4>
-                    <ul className="list-disc list-inside text-[11px] text-gray-600 space-y-1 pl-1">
+                  <div className="p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-2">
+                    <h4 className="font-bold text-gray-800 dark:text-zinc-200 text-xs">3. When to Use Other Presets</h4>
+                    <ul className="list-disc list-inside text-[11px] text-gray-600 dark:text-zinc-400 space-y-1 pl-1">
                       <li><strong>Precise:</strong> Use when latency is critical and you only want brief, strictly bounded factual verification.</li>
                       <li><strong>Thorough:</strong> Use when conducting comprehensive statutory audits or preparing in-depth policy briefs across many historical gazettes.</li>
                       <li><strong>Custom:</strong> Use only when you have explicit operational or benchmark requirements.</li>
                     </ul>
                   </div>
 
-                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
-                    <h4 className="font-bold text-gray-800 text-xs">4. Governed Security Invariants</h4>
-                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                  <div className="p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 space-y-2">
+                    <h4 className="font-bold text-gray-800 dark:text-zinc-200 text-xs">4. Governed Security Invariants</h4>
+                    <p className="text-[11px] text-gray-600 dark:text-zinc-400 leading-relaxed">
                       RAG temperature is strictly bounded to [0.0, 0.2] to uphold Phase 04 anti-hallucination mandates. System API keys, signing secrets, and storage directories cannot be changed through this menu and remain secure.
                     </p>
                   </div>
@@ -722,19 +722,19 @@ export default function AdvancedSettingsModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-gray-100 bg-gray-50/70 flex items-center justify-between shrink-0">
+        <div className="px-6 py-3.5 border-t border-gray-100 dark:border-zinc-800 bg-gray-50/70 dark:bg-zinc-900 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors"
+              className="px-4 py-2 text-xs font-medium text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200 transition-colors"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 text-xs text-gray-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <RotateCcw className="w-3 h-3" />
               Reset to Defaults
@@ -744,7 +744,7 @@ export default function AdvancedSettingsModal({
             type="button"
             onClick={handleSave}
             disabled={saving || !bundle}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-xs font-semibold shadow-xs transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 dark:disabled:bg-purple-900/40 text-white text-xs font-semibold shadow-xs transition-all"
           >
             {savedOk ? <Check className="w-3.5 h-3.5" /> : saving ? <ChevronRight className="w-3.5 h-3.5 animate-pulse" /> : <Save className="w-3.5 h-3.5" />}
             <span>{savedOk ? 'Saved!' : saving ? 'Saving…' : 'Save & Apply'}</span>
