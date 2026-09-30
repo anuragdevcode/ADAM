@@ -82,5 +82,6 @@ ui/.git/
 **/*.md
 !/README.md
 !/SECURITY.md
+!docs/benchmarks/*.md
 
 

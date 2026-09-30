@@ -220,3 +220,124 @@ def compute_user_correction_rate(
     if total_chat_turns <= 0:
         return 0.0
     return round(min(1.0, correction_records_count / total_chat_turns), 4)
+
+
+def compute_wilson_ci(
+    k: int,
+    n: int,
+    confidence: float = 0.95,
+) -> Dict[str, float]:
+    """Compute Wilson score confidence interval for a binomial proportion.
+
+    Center = (p + z^2 / (2n)) / (1 + z^2 / n)
+    Margin = (z * sqrt(p(1-p)/n + z^2 / (4n^2))) / (1 + z^2 / n)
+    CI = [max(0.0, center - margin), min(1.0, center + margin)]
+
+    Args:
+        k: Number of successes.
+        n: Total number of trials.
+        confidence: Desired confidence level (default: 0.95).
+
+    Returns:
+        dict with estimate, ci_lower, ci_upper, k, n, confidence
+    """
+    if n <= 0:
+        return {
+            "estimate": 0.0,
+            "ci_lower": 0.0,
+            "ci_upper": 0.0,
+            "k": 0,
+            "n": 0,
+            "confidence": confidence,
+        }
+
+    # Standard normal quantile z
+    if abs(confidence - 0.99) < 0.005:
+        z = 2.57583
+    elif abs(confidence - 0.90) < 0.005:
+        z = 1.64485
+    else:
+        z = 1.95996  # default 95%
+
+    p = float(k) / float(n)
+    z_sq = z * z
+    denom = 1.0 + z_sq / float(n)
+    center = (p + z_sq / (2.0 * float(n))) / denom
+    margin = (z * math.sqrt((p * (1.0 - p) / float(n)) + (z_sq / (4.0 * float(n * n))))) / denom
+
+    ci_lower = max(0.0, center - margin)
+    ci_upper = min(1.0, center + margin)
+
+    return {
+        "estimate": round(p, 4),
+        "ci_lower": round(ci_lower, 4),
+        "ci_upper": round(ci_upper, 4),
+        "k": k,
+        "n": n,
+        "confidence": confidence,
+    }
+
+
+def compute_abstention_calibration(
+    predicted_probabilities: List[float],
+    ground_truth_abstain: List[bool],
+    num_bins: int = 10,
+) -> Dict[str, Any]:
+    """Compute Brier score and Expected Calibration Error (ECE) for abstention decisions.
+
+    Args:
+        predicted_probabilities: Predicted probability/confidence of abstaining in [0.0, 1.0].
+        ground_truth_abstain: True if query was unanswerable/out-of-domain and required abstention.
+        num_bins: Number of confidence bins for ECE calculation.
+
+    Returns:
+        dict with brier_score, expected_calibration_error, bin_details, sample_count.
+    """
+    if len(predicted_probabilities) != len(ground_truth_abstain):
+        raise ValueError("predicted_probabilities and ground_truth_abstain must have same length")
+    n = len(predicted_probabilities)
+    if n == 0:
+        return {
+            "brier_score": 0.0,
+            "expected_calibration_error": 0.0,
+            "bin_details": [],
+            "sample_count": 0,
+        }
+
+    brier = sum(
+        (prob - (1.0 if y else 0.0)) ** 2
+        for prob, y in zip(predicted_probabilities, ground_truth_abstain)
+    ) / float(n)
+
+    bin_boundaries = [i / float(num_bins) for i in range(num_bins + 1)]
+    ece = 0.0
+    bin_details = []
+
+    for i in range(num_bins):
+        low = bin_boundaries[i]
+        high = bin_boundaries[i + 1]
+
+        bin_indices = [
+            idx for idx, p in enumerate(predicted_probabilities)
+            if (low <= p < high) or (i == num_bins - 1 and low <= p <= high)
+        ]
+        bin_size = len(bin_indices)
+        if bin_size > 0:
+            bin_conf = sum(predicted_probabilities[idx] for idx in bin_indices) / float(bin_size)
+            bin_acc = sum(1.0 if ground_truth_abstain[idx] else 0.0 for idx in bin_indices) / float(bin_size)
+            abs_diff = abs(bin_acc - bin_conf)
+            ece += (bin_size / float(n)) * abs_diff
+            bin_details.append({
+                "bin_range": [round(low, 2), round(high, 2)],
+                "count": bin_size,
+                "confidence": round(bin_conf, 4),
+                "accuracy": round(bin_acc, 4),
+                "calibration_gap": round(abs_diff, 4),
+            })
+
+    return {
+        "brier_score": round(brier, 4),
+        "expected_calibration_error": round(ece, 4),
+        "bin_details": bin_details,
+        "sample_count": n,
+    }

@@ -173,6 +173,49 @@ ADMIN_BILINGUAL_MAP: Dict[str, List[str]] = {
     "operating": ["संचालन"],
     "standard": ["मानक"],
     "sop": ["मानक", "संचालन", "प्रक्रिया"],
+    "nanda": ["नन्दा", "नंदा"],
+    "gaura": ["गौरा"],
+    "ayushman": ["आयुष्मान"],
+    "scholarship": ["छात्रवृत्ति"],
+    "tubewell": ["नलकूप", "बोरिंग"],
+    "commutation": ["राशिकरण"],
+    "pension": ["पेंशन"],
+    "holiday": ["अवकाश"],
+    "holidays": ["अवकाश"],
+    "bhulekh": ["भूलेख"],
+    "income": ["आय"],
+    "ceiling": ["सीमा"],
+    "subsidy": ["अनुदान"],
+    "terai": ["तराई"],
+    "bhabar": ["भाबर"],
+    "meritorious": ["मेधावी"],
+    "student": ["छात्र"],
+    "students": ["छात्रों", "छात्र"],
+    "agricultural": ["कृषि"],
+    "land": ["भूमि"],
+    "नन्दा": ["nanda"],
+    "गौरा": ["gaura"],
+    "आयुष्मान": ["ayushman"],
+    "छात्रवृत्ति": ["scholarship"],
+    "नलकूप": ["tubewell"],
+    "राशिकरण": ["commutation"],
+    "पेंशन": ["pension"],
+    "भूलेख": ["bhulekh"],
+    "अनुदान": ["subsidy"],
+    "मेधावी": ["meritorious"],
+    # Hinglish & Romanized transliterations
+    "sarkari": ["government", "सरकारी"],
+    "karmchari": ["employee", "employees", "कर्मचारी"],
+    "karmchariyon": ["employees", "कर्मचारियों"],
+    "badhotari": ["revision", "increase", "बढ़ोतरी", "पुनरीक्षण"],
+    "vetan": ["salary", "pay", "वेतन"],
+    "pahadi": ["hill", "पर्वतीय", "पहाड़ी"],
+    "kshetron": ["districts", "tehsils", "areas", "क्षेत्रों"],
+    "dakhil": ["mutation", "दाखिल"],
+    "kharij": ["mutation", "खारिज"],
+    "zaroori": ["mandatory", "compulsory", "जरूरी"],
+    "dino": ["days", "दिनों"],
+    "din": ["days", "day", "दिन"],
 }
 
 
@@ -364,6 +407,12 @@ class HeuristicBoostReranker:
             if expanded_q_tokens & tokens_in_check:
                 boost += 0.15
 
+            # Substantive content overlap bonus (rewards passages containing matching query terms)
+            content_tokens = set(_tokenize(p_text))
+            content_overlap = expanded_q_tokens & content_tokens
+            if content_overlap:
+                boost += min(len(content_overlap) * 0.03, 0.15)
+
             # GO number match bonus
             if p.go_number and p.go_number.lower() in q_lower:
                 boost += 0.30
@@ -460,12 +509,17 @@ class HybridRetriever:
 
     def retrieve(
         self,
-        parsed_query: ParsedQuery,
+        parsed_query: Any,
         user_context: Optional[UserContext] = None,
         top_k: int = 10,
         enable_rerank: bool = True,
+        session: Optional[Session] = None,
     ) -> List[EvidencePassage]:
         """Execute hybrid search over authorized chunks matching explicit query filters."""
+        if isinstance(parsed_query, str):
+            from adam.rag.query import QueryUnderstanding
+            parsed_query = QueryUnderstanding.parse(parsed_query)
+
         # Early refusal on queries with external jurisdictions or known unsupported topics
         if parsed_query.is_out_of_jurisdiction or parsed_query.has_unsupported_topic:
             return []
@@ -609,7 +663,7 @@ class HybridRetriever:
                 candidates = list(candidate_map.values())
         else:
             # On SQLite / fallback: bound candidate retrieval to avoid O(corpus) memory saturation (R1)
-            fetch_k = max(top_k * 10, 100)
+            fetch_k = max(top_k * 25, 300)
             candidates = query.limit(fetch_k).all()
 
         if not candidates:
@@ -697,7 +751,7 @@ class HybridRetriever:
             # candidate chunk must match at least one topic specifier (or match explicit GO number)
             # to prevent category word false positives (e.g. "bicycle allowance" matching DA).
             if topic_specifiers and not has_go_match:
-                if len(matched_specifiers) == 0:
+                if len(matched_specifiers) == 0 and vec_val < 0.45:
                     continue
 
             if substantive_q_terms and not has_go_match and len(matched_substantive) == 0 and vec_val < self._vector_min_similarity:
