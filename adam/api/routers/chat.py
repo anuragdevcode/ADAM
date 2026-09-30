@@ -1,23 +1,27 @@
-"""Streaming SSE chat endpoint supporting model selection and department scoping."""
-
 import asyncio
 import json
+import os
 import re
 import uuid
 from typing import AsyncGenerator, Optional
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from adam.agent.state_machine import AgentStateMachine
 from adam.api.deps import get_db, get_user_context
+from adam.config import MAX_CONCURRENT_GENERATIONS
 from adam.model.registry import ModelRegistry
 from adam.observability.events import OperationalEvent
 from adam.observability.serializer import PublicEventSerializer
 from adam.rag.models import UserContext
 
 router = APIRouter()
+
+# Bounded chat generation concurrency with backpressure (R5)
+_CHAT_SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENT_GENERATIONS)
+_CHAT_BACKPRESSURE_TIMEOUT = float(os.environ.get("CHAT_BACKPRESSURE_TIMEOUT", "5.0"))
 
 
 class ChatRequest(BaseModel):
@@ -47,6 +51,15 @@ async def chat_endpoint(
     # Scope department if explicitly requested in payload
     if req.department_id and req.department_id != "ALL":
         user_ctx.department_id = req.department_id
+
+    # Bound chat concurrency with backpressure (R5)
+    try:
+        await asyncio.wait_for(_CHAT_SEMAPHORE.acquire(), timeout=_CHAT_BACKPRESSURE_TIMEOUT)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail="Chat generation capacity saturated (backpressure limit reached). Please try again shortly.",
+        )
 
     effective_gemini_key = x_gemini_api_key or req.api_key
 
@@ -334,6 +347,8 @@ async def chat_endpoint(
                 "command_hint": cmd_hint,
             }
             yield f"event: error\ndata: {json.dumps(error_payload)}\n\n"
+        finally:
+            _CHAT_SEMAPHORE.release()
 
     return StreamingResponse(
         generate(),

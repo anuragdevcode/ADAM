@@ -767,6 +767,43 @@ def run_chunking(version_id: Optional[str]):
         session.close()
 
 
+@rag_group.command(name="backfill-embeddings")
+@click.option("--batch-size", default=100, help="Number of chunks per transaction batch")
+def backfill_embeddings_cmd(batch_size: int):
+    """Backfill missing pgvector and JSON embeddings for document chunks (R1/R2)."""
+    from adam.db.models import DocumentChunk
+    from adam.rag.retriever import MultilingualSemanticVectorizer
+
+    session = get_session()
+    try:
+        chunks = session.query(DocumentChunk).filter(
+            (DocumentChunk.embedding == None) | (DocumentChunk.embedding_json == None)
+        ).all()
+        if not chunks:
+            click.secho("All chunks already have embeddings persisted.", fg="green")
+            return
+
+        click.echo(f"Found {len(chunks)} chunks requiring embedding backfill...")
+        count = 0
+        for chunk in chunks:
+            text = f"{chunk.section_heading or ''} {chunk.content}".strip()
+            emb = MultilingualSemanticVectorizer.embed_text(text)
+            chunk.embedding = emb
+            chunk.embedding_json = emb
+            count += 1
+            if count % batch_size == 0:
+                session.commit()
+                click.echo(f"  Processed {count}/{len(chunks)} chunks...")
+        session.commit()
+        click.secho(f"Successfully backfilled embeddings for {count} chunks.", fg="green", bold=True)
+    except Exception as e:
+        session.rollback()
+        click.secho(f"Backfill failed: {e}", fg="red", err=True)
+        raise SystemExit(1)
+    finally:
+        session.close()
+
+
 @rag_group.command(name="query")
 @click.argument("question")
 @click.option("--user-id", default="officer_1", help="Querying user ID")
@@ -860,9 +897,9 @@ def evaluate_rag(output_json: Optional[str], compare_reranker: bool = False):
 
     if compare_reranker:
         click.echo("\n" + "=" * 80)
-        click.echo("RRF HYBRID vs DEDICATED RERANKER (FLASHRANK) ABLATION")
+        click.echo("HYBRID (DENSE + BM25) vs HEURISTIC BOOST RERANKER ABLATION (E3)")
         click.echo("=" * 80)
-        # Run pure RRF without reranker
+        # Run pure Hybrid without heuristic booster
         pipe_norerank = RagPipeline(session)
         orig_retrieve = pipe_norerank.retriever.retrieve
         pipe_norerank.retriever.retrieve = lambda parsed_query, user_context=None, top_k=10, enable_rerank=False: orig_retrieve(
@@ -874,11 +911,11 @@ def evaluate_rag(output_json: Optional[str], compare_reranker: bool = False):
 
         click.echo(f"{'Configuration':<30} | {'Recall@10':<10} | {'Precision':<10} | {'Refusal':<10} | {'Latency':<12}")
         click.echo("-" * 80)
-        click.echo(f"{'ADAM Pure RRF Hybrid':<30} | {scorecard_norerank.recall_at_10*100:.2f}%    | {scorecard_norerank.citation_page_precision*100:.2f}%    | {scorecard_norerank.no_answer_refusal_rate*100:.2f}%    | {t_no/215*1000:.1f} ms/query")
-        click.echo(f"{'RRF + Compact Reranker':<30} | {scorecard.recall_at_10*100:.2f}%    | {scorecard.citation_page_precision*100:.2f}%    | {scorecard.no_answer_refusal_rate*100:.2f}%    | {duration/215*1000:.1f} ms/query")
+        click.echo(f"{'ADAM Base Hybrid (Dense+BM25)':<30} | {scorecard_norerank.recall_at_10*100:.2f}%    | {scorecard_norerank.citation_page_precision*100:.2f}%    | {scorecard_norerank.no_answer_refusal_rate*100:.2f}%    | {t_no/215*1000:.1f} ms/query")
+        click.echo(f"{'Hybrid + Heuristic Booster':<30} | {scorecard.recall_at_10*100:.2f}%    | {scorecard.citation_page_precision*100:.2f}%    | {scorecard.no_answer_refusal_rate*100:.2f}%    | {duration/215*1000:.1f} ms/query")
         click.echo("-" * 80)
-        click.echo("Conclusion: Pure RRF hybrid reaches 97.33% precision and 100% recall@10 natively.")
-        click.echo("            External neural reranker (FlashRank) is not required for parity.")
+        click.echo("Conclusion: Base hybrid retrieval achieves robust baseline precision and recall;")
+        click.echo("            heuristic booster provides exact phrase and GO number alignment (E3).")
         click.echo("=" * 80)
 
     if output_json:
@@ -1740,8 +1777,24 @@ def worker_ocr():
         pipeline = DocumentExtractionPipeline(session, storage)
         click.echo("OCR Worker active. Processing pending document versions...")
         processed = pipeline.process_all()
-        click.secho(f"OCR Worker finished processing. Documents processed: {processed}", fg="green")
         session.close()
+
+
+@worker_group.command(name="run")
+@click.option("--poll-interval", default=5.0, type=float, help="Polling interval in seconds.")
+@click.option("--once", is_flag=True, default=False, help="Run single cycle and exit.")
+def worker_run(poll_interval: float, once: bool):
+    """Run unified durable background worker for OCR, ingestion, and embeddings (R5)."""
+    from adam.worker.runner import UnifiedWorkerRunner
+
+    runner = UnifiedWorkerRunner(poll_interval=poll_interval)
+    if once:
+        click.echo("Executing single worker processing cycle...")
+        stats = runner.run_cycle()
+        click.secho(f"Worker cycle finished: {stats}", fg="green", bold=True)
+    else:
+        click.echo(f"Starting unified background worker daemon (poll interval: {poll_interval}s)...")
+        runner.run_forever()
 
 
 @cli.command(name="eval")
@@ -1845,6 +1898,91 @@ def backup_restore_cmd(archive_path: str, force: bool):
     except Exception as e:
         click.secho(f"Disaster Recovery Restore FAILED: {e}", fg="red", err=True)
         raise SystemExit(1)
+
+
+@backup_group.command(name="drill")
+def backup_drill_cmd():
+    """Execute an automated end-to-end disaster recovery restore drill in isolation (R6)."""
+    import tempfile
+    import time
+    from pathlib import Path
+    from adam.backup import create_backup, restore_backup, verify_backup
+    from adam.db.session import get_engine
+    from adam.db.models import compute_audit_event_hash
+    from sqlalchemy import text
+
+    click.secho("==================================================", bold=True)
+    click.secho("EXECUTING ADAM DISASTER RECOVERY DRILL (R6)", bold=True)
+    click.secho("==================================================", bold=True)
+
+    t0 = time.perf_counter()
+    with tempfile.TemporaryDirectory() as drill_dir_str:
+        drill_dir = Path(drill_dir_str)
+        archive_path = drill_dir / "drill_backup.tar.gz"
+        drill_storage = drill_dir / "storage"
+        drill_db_path = drill_dir / "drill_adam.db"
+        drill_db_url = f"sqlite:///{drill_db_path}"
+        drill_source_storage = drill_dir / "src_storage"
+        drill_source_storage.mkdir(parents=True, exist_ok=True)
+        (drill_source_storage / "sample_go.pdf").write_bytes(b"%PDF-1.4 Official Government Order Content\n%%EOF")
+        (drill_source_storage / "metadata.json").write_bytes(b'{"status": "APPROVED", "provenance": "VERIFIED"}')
+
+        # 1. Snapshot creation
+        click.echo("[1/4] Creating drill backup snapshot...")
+        create_backup(backup_path=archive_path, storage_dir=drill_source_storage)
+
+        # 2. Archive verification
+        click.echo("[2/4] Cryptographically verifying backup archive...")
+        verify_res = verify_backup(archive_path)
+        click.echo(f"      Verified {verify_res['verified_files']} files and manifest checksums.")
+
+        # 3. Restoration into isolated sandbox
+        click.echo("[3/4] Restoring backup snapshot into isolated sandbox...")
+        rest_res = restore_backup(
+            archive_path=archive_path,
+            target_storage_dir=drill_storage,
+            target_db_url=drill_db_url,
+            force=True,
+        )
+
+        # 4. Hash-chain audit trail verification on restored DB
+        click.echo("[4/4] Verifying cryptographic audit chain on restored database...")
+        from sqlalchemy.orm import sessionmaker
+        from adam.db.models import AuditEvent
+        eng = get_engine(drill_db_url)
+        sess = sessionmaker(bind=eng)()
+        events = sess.query(AuditEvent).order_by(AuditEvent.sequence_num.asc()).all()
+
+        chain_ok = True
+        prev = ""
+        for ev in events:
+            expected = compute_audit_event_hash(
+                sequence_num=ev.sequence_num,
+                timestamp_iso=ev.timestamp,
+                entity_type=ev.entity_type,
+                entity_id=ev.entity_id,
+                action=ev.action,
+                actor=ev.actor,
+                details_json=ev.details_json,
+                prev_hash=ev.prev_hash,
+            )
+            if ev.entry_hash != expected or (prev and ev.prev_hash != prev):
+                chain_ok = False
+                break
+            prev = ev.entry_hash
+        count_events = len(events)
+        sess.close()
+        eng.dispose()
+
+        elapsed = time.perf_counter() - t0
+        click.echo("-" * 50)
+        if chain_ok:
+            click.secho(f"DRILL RESULT: PASSED (RTO: {elapsed:.2f}s, Audit Records: {count_events})", fg="green", bold=True)
+            click.secho("Restored environment verified consistent and tamper-evident.", fg="green")
+        else:
+            click.secho("DRILL RESULT: FAILED (Audit chain validation error)", fg="red", bold=True)
+            raise SystemExit(1)
+        click.secho("==================================================", bold=True)
 
 
 @cli.group(name="audit")
@@ -1971,6 +2109,69 @@ def list_users_cmd():
             roles_str = ",".join(u.roles)
             click.echo(f"{u.username:<20} {roles_str:<25} {u.clearance_level:<15} {u.department_id:<20} {str(u.is_active):<8}")
     session.close()
+
+
+# ── Database Migration CLI Commands (R3) ───────────────────────────────────
+@cli.group(name="db")
+def db_group():
+    """Database schema migration and versioning commands."""
+    pass
+
+
+@db_group.command(name="upgrade")
+@click.option("--revision", "-r", default="head", help="Target revision (default: head)")
+def db_upgrade(revision: str):
+    """Apply database migrations up to the specified revision."""
+    import os
+    from alembic.config import Config
+    from alembic import command
+    from adam.config import get_database_url
+
+    ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    alembic_cfg = Config(ini_path)
+    alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+    click.echo(f"Applying database migrations to revision: {revision}...")
+    try:
+        command.upgrade(alembic_cfg, revision)
+        click.secho(f"Successfully upgraded database schema to {revision}.", fg="green", bold=True)
+    except Exception as e:
+        click.secho(f"Migration upgrade failed: {e}", fg="red", err=True)
+        raise SystemExit(1)
+
+
+@db_group.command(name="downgrade")
+@click.option("--revision", "-r", required=True, help="Target revision (e.g. -1 or base)")
+def db_downgrade(revision: str):
+    """Revert database migrations down to the specified revision."""
+    import os
+    from alembic.config import Config
+    from alembic import command
+    from adam.config import get_database_url
+
+    ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    alembic_cfg = Config(ini_path)
+    alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+    click.echo(f"Reverting database migrations down to: {revision}...")
+    try:
+        command.downgrade(alembic_cfg, revision)
+        click.secho(f"Successfully reverted database schema to {revision}.", fg="green", bold=True)
+    except Exception as e:
+        click.secho(f"Migration downgrade failed: {e}", fg="red", err=True)
+        raise SystemExit(1)
+
+
+@db_group.command(name="current")
+def db_current():
+    """Display current applied migration revision."""
+    import os
+    from alembic.config import Config
+    from alembic import command
+    from adam.config import get_database_url
+
+    ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    alembic_cfg = Config(ini_path)
+    alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+    command.current(alembic_cfg)
 
 
 if __name__ == "__main__":

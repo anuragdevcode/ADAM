@@ -62,6 +62,27 @@ services:
       retries: 6
       start_period: 15s
 
+  worker:
+    build:
+      context: .
+      target: development
+    command: adam worker run
+    environment:
+      ADAM_PROFILE: ${ADAM_PROFILE:-DEV_SERVER}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-adam}:${POSTGRES_PASSWORD:-adam_dev_password}@postgres:5432/${POSTGRES_DB:-adam}
+      STORAGE_DIR: /app/.adam_storage
+      SIGNING_SECRET: ${SIGNING_SECRET:-adam-local-development-only-change-me}
+      ADAM_MODEL_BACKEND: ${ADAM_MODEL_BACKEND:-ollama}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    volumes:
+      - ./adam:/app/adam
+      - adam_storage:/app/.adam_storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
   ui:
     build:
       context: ./ui

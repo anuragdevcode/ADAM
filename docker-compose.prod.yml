@@ -17,6 +17,18 @@ services:
     volumes: !override
       - adam_storage:/app/.adam_storage
 
+  worker:
+    build:
+      context: .
+      target: production
+    command: adam worker run
+    environment:
+      ADAM_ENV: production
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-adam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@postgres:5432/${POSTGRES_DB:-adam}
+      SIGNING_SECRET: ${SIGNING_SECRET:?SIGNING_SECRET must be set in production}
+    volumes: !override
+      - adam_storage:/app/.adam_storage
+
   ui:
     build:
       context: ./ui

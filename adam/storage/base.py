@@ -69,7 +69,26 @@ class StorageBackend(ABC):
 
 
 def get_storage_backend(base_dir: Optional[str] = None) -> StorageBackend:
-    """Factory providing configured local or S3-compatible storage backend."""
+    """Factory providing configured local or S3-compatible storage backend (R6)."""
+    import os
+    backend_type = os.environ.get("STORAGE_BACKEND", "local").lower()
+    if backend_type in ("s3", "minio"):
+        from adam.storage.s3 import S3StorageBackend
+        bucket = os.environ.get("S3_BUCKET_NAME", "adam-storage")
+        endpoint = os.environ.get("S3_ENDPOINT_URL")
+        access_key = os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("MINIO_ROOT_USER")
+        secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY") or os.environ.get("MINIO_ROOT_PASSWORD")
+        region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        prefix = os.environ.get("S3_PREFIX", "")
+        return S3StorageBackend(
+            bucket_name=bucket,
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region,
+            prefix=prefix,
+        )
+
     from adam.storage.local import LocalStorageBackend
     from adam.config import STORAGE_DIR
     return LocalStorageBackend(base_dir or STORAGE_DIR)

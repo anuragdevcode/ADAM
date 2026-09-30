@@ -15,7 +15,22 @@ jobs:
   backend-regression:
     name: Backend Regression & Acceptance Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: adam_ci
+          POSTGRES_USER: adam
+          POSTGRES_PASSWORD: adam_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout Repository
@@ -38,10 +53,27 @@ jobs:
           pip install -e ".[dev]"
           pip install pytest httpx
 
+      - name: Apply Alembic Schema Migrations on Empty PostgreSQL (R3)
+        run: |
+          adam db upgrade
+        env:
+          DATABASE_URL: postgresql+psycopg://adam:adam_ci_password@localhost:5432/adam_ci
+
+      - name: Verify Migration Rollback & Re-upgrade on PostgreSQL (R3)
+        run: |
+          adam db downgrade -r base
+          adam db upgrade -r head
+        env:
+          DATABASE_URL: postgresql+psycopg://adam:adam_ci_password@localhost:5432/adam_ci
+
       - name: Verify CLI Doctor & Bootstrap
         run: |
           adam dev doctor
           adam dev bootstrap
+
+      - name: Run Disaster Recovery Restore Drill (R6)
+        run: |
+          adam backup drill
 
       - name: Run Primary Acceptance Tests (Phase 09)
         run: |

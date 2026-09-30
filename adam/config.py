@@ -166,3 +166,6 @@ MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
 # Default request timeout in seconds
 REQUEST_TIMEOUT_SECONDS = 30.0
 
+# Generation concurrency limit (R5)
+MAX_CONCURRENT_GENERATIONS = int(os.getenv("MAX_CONCURRENT_GENERATIONS", "1"))
+

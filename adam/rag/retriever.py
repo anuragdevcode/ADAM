@@ -327,9 +327,9 @@ ADMIN_CATEGORY_WORDS: Set[str] = {
 }
 
 
-class CompactCrossEncoderReranker:
-    """Compact cross-encoder reranker scoring exact phrase alignment, heading match,
-    and entity containment.
+class HeuristicBoostReranker:
+    """Heuristic rule-based reranker scoring exact phrase alignment, heading match,
+    and entity containment (previously mislabelled as neural cross-encoder, E3).
     """
 
     @classmethod
@@ -339,7 +339,7 @@ class CompactCrossEncoderReranker:
         passages: List[EvidencePassage],
         top_k: int = 10,
     ) -> List[EvidencePassage]:
-        """Rerank top passages based on query-passage alignment."""
+        """Rerank top passages based on heuristic query-passage alignment."""
         if not passages:
             return []
 
@@ -378,6 +378,56 @@ class CompactCrossEncoderReranker:
         return passages[:top_k]
 
 
+# Alias for backward compatibility with existing tests and imports
+CompactCrossEncoderReranker = HeuristicBoostReranker
+
+
+class NeuralCrossEncoderReranker:
+    """Optional neural cross-encoder reranker (e.g. flashrank / sentence-transformers)
+    activated via ADAM_ENABLE_NEURAL_RERANKER=true (E3).
+    Falls back gracefully to HeuristicBoostReranker if neural dependencies are absent.
+    """
+
+    _model = None
+    _init_attempted = False
+
+    @classmethod
+    def _get_model(cls):
+        if not cls._init_attempted:
+            cls._init_attempted = True
+            try:
+                from flashrank import Ranker
+                cls._model = Ranker()
+            except ImportError:
+                cls._model = None
+        return cls._model
+
+    @classmethod
+    def rerank(
+        cls,
+        query: str,
+        passages: List[EvidencePassage],
+        top_k: int = 10,
+    ) -> List[EvidencePassage]:
+        """Rerank using FlashRank neural cross-encoder if installed, else fallback to heuristic boost."""
+        model = cls._get_model()
+        if model is None or not passages:
+            return HeuristicBoostReranker.rerank(query, passages, top_k=top_k)
+
+        try:
+            passages_data = [{"id": p.chunk_id, "text": p.content} for p in passages]
+            rerank_request = {"query": query, "passages": passages_data}
+            results = model.rerank(rerank_request)
+            result_map = {r["id"]: r.get("score", 0.0) for r in results}
+            for p in passages:
+                if p.chunk_id in result_map:
+                    p.score = float(result_map[p.chunk_id])
+            passages.sort(key=lambda x: x.score, reverse=True)
+            return passages[:top_k]
+        except Exception:
+            return HeuristicBoostReranker.rerank(query, passages, top_k=top_k)
+
+
 class HybridRetriever:
     """End-to-end hybrid retrieval engine integrating ACL, BM25, and vector search."""
 
@@ -385,7 +435,9 @@ class HybridRetriever:
         self.session = session
         self.bm25 = BM25Ranker()
         self.vectorizer = MultilingualSemanticVectorizer()
-        self.reranker = CompactCrossEncoderReranker()
+        import os
+        use_neural = os.environ.get("ADAM_ENABLE_NEURAL_RERANKER", "").lower() in ("true", "1")
+        self.reranker = NeuralCrossEncoderReranker() if use_neural else HeuristicBoostReranker()
         # Apply RetrievalSettings overrides if provided
         if retrieval_settings is not None:
             self._bm25_weight = float(getattr(retrieval_settings, "bm25_weight", 0.65))
@@ -485,13 +537,16 @@ class HybridRetriever:
         query_text = parsed_query.clean_query or parsed_query.raw_query
         q_vector = self.vectorizer.embed_text(query_text)
 
-        # Database-level pushdown for candidate gathering:
+        # Database-level pushdown for candidate gathering (R1/R2):
         # On PostgreSQL, push down pgvector HNSW (<=> cosine distance) and full-text search (tsvector @@ tsquery)
-        # to database level so we fetch O(top_k) candidates rather than O(corpus) full scans.
+        # to database level with ACL predicate, then apply Reciprocal Rank Fusion (RRF) over bounded top-N.
+        rrf_scores: Dict[str, float] = {}
         if self._is_postgresql():
             from sqlalchemy import func
             fetch_k = max(top_k * 4, 40)
             candidate_map: Dict[str, Tuple[DocumentChunk, Document]] = {}
+            vec_ranks: Dict[str, int] = {}
+            ts_ranks: Dict[str, int] = {}
 
             # Branch A: pgvector HNSW Index Scan (vector similarity <=> cosine distance)
             try:
@@ -501,7 +556,8 @@ class HybridRetriever:
                     .limit(fetch_k)
                     .all()
                 )
-                for chk, doc in vec_candidates:
+                for rank, (chk, doc) in enumerate(vec_candidates, 1):
+                    vec_ranks[chk.id] = rank
                     candidate_map[chk.id] = (chk, doc)
             except Exception:
                 pass
@@ -524,7 +580,9 @@ class HybridRetriever:
                         )
                         .limit(fetch_k)
                     )
-                    for chk, doc in ts_query.all():
+                    ts_results = ts_query.all()
+                    for rank, (chk, doc) in enumerate(ts_results, 1):
+                        ts_ranks[chk.id] = rank
                         candidate_map[chk.id] = (chk, doc)
                 except Exception:
                     pass
@@ -534,13 +592,25 @@ class HybridRetriever:
                 for chk, doc in query.limit(fetch_k).all():
                     candidate_map[chk.id] = (chk, doc)
 
+            # Reciprocal Rank Fusion (RRF)
+            k_rrf = 60
+            for cid in candidate_map:
+                score = 0.0
+                if cid in vec_ranks:
+                    score += 1.0 / (k_rrf + vec_ranks[cid])
+                if cid in ts_ranks:
+                    score += 1.0 / (k_rrf + ts_ranks[cid])
+                rrf_scores[cid] = score
+
             # Fallback if branches returned empty (e.g. unindexed/partial corpus)
             if not candidate_map:
                 candidates = query.limit(fetch_k).all()
             else:
                 candidates = list(candidate_map.values())
         else:
-            candidates = query.all()
+            # On SQLite / fallback: bound candidate retrieval to avoid O(corpus) memory saturation (R1)
+            fetch_k = max(top_k * 10, 100)
+            candidates = query.limit(fetch_k).all()
 
         if not candidates:
             # If explicit department returned 0, do not leak other departments
@@ -638,6 +708,7 @@ class HybridRetriever:
                 "doc": doc,
                 "bm25_score": bm25_val,
                 "vector_score": vec_val,
+                "rrf_score": rrf_scores.get(chk.id, 0.0),
                 "matched_substantive_count": len(matched_substantive),
                 "matched_specifiers_count": len(matched_specifiers),
                 "has_go_match": has_go_match,
@@ -646,7 +717,7 @@ class HybridRetriever:
         if not scored_candidates:
             return []
 
-        # Genuine Hybrid Scoring: weighted combination of normalized BM25 score and vector similarity
+        # Genuine Hybrid Scoring: weighted combination of normalized BM25 score, vector similarity, and RRF
         max_bm25 = max((c["bm25_score"] for c in scored_candidates), default=1.0)
         max_bm25 = max(max_bm25, 1.0)
 
@@ -654,7 +725,13 @@ class HybridRetriever:
             bm25_norm = item["bm25_score"] / max_bm25
             vec_score = item["vector_score"]
             sub_bonus = min(item["matched_substantive_count"] * 0.02, 0.10)
-            item["hybrid_score"] = min(1.0, self._bm25_weight * bm25_norm + self._vec_weight * vec_score + sub_bonus)
+            base_score = self._bm25_weight * bm25_norm + self._vec_weight * vec_score + sub_bonus
+            rrf_val = item.get("rrf_score", 0.0)
+            if rrf_val > 0.0:
+                rrf_norm = min(1.0, rrf_val * 30.0)
+                item["hybrid_score"] = min(1.0, 0.7 * base_score + 0.3 * rrf_norm)
+            else:
+                item["hybrid_score"] = min(1.0, base_score)
 
         scored_candidates.sort(key=lambda x: x["hybrid_score"], reverse=True)
         max_hybrid = scored_candidates[0]["hybrid_score"] if scored_candidates else 1.0

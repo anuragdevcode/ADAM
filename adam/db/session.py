@@ -57,14 +57,33 @@ def get_engine(db_url: Optional[str] = None) -> Engine:
                 except Exception:
                     pass
 
-        # Automatically ensure schema tables and versioned migrations exist
-        from adam.db.models import Base
-        Base.metadata.create_all(bind=engine)
-        from adam.db.migrations import apply_migrations
-        apply_migrations(engine)
-        _migrate_missing_columns(engine)
+        # Schema management: In production, eliminate create_all and apply versioned Alembic migrations (R3).
+        import os
+        is_prod = os.environ.get("ADAM_ENV") == "production"
+        if is_prod:
+            run_alembic_migrations(url)
+        else:
+            # Dev / test fallback for fast ephemeral databases
+            from adam.db.models import Base
+            Base.metadata.create_all(bind=engine)
+            from adam.db.migrations import apply_migrations
+            apply_migrations(engine)
+            _migrate_missing_columns(engine)
         _ENGINES[url] = engine
     return _ENGINES[url]
+
+
+def run_alembic_migrations(db_url: Optional[str] = None) -> None:
+    """Run versioned Alembic migrations up to head (R3)."""
+    import os
+    from alembic.config import Config
+    from alembic import command
+
+    ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "alembic.ini"))
+    alembic_cfg = Config(ini_path)
+    if db_url:
+        alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+    command.upgrade(alembic_cfg, "head")
 
 
 def _migrate_missing_columns(engine: Engine) -> None:

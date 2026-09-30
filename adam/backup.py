@@ -293,9 +293,12 @@ def restore_backup(
         # Step 4: Verify Post-Restore Audit Trail Usability
         engine = create_engine(target_db_url)
         with engine.connect() as conn:
-            integrity = conn.execute(text("PRAGMA integrity_check")).scalar()
-            if integrity != "ok":
-                raise DisasterRecoveryError(f"Database PRAGMA integrity_check failed: {integrity}")
+            if conn.dialect.name == "sqlite":
+                integrity = conn.execute(text("PRAGMA integrity_check")).scalar()
+                if integrity != "ok":
+                    raise DisasterRecoveryError(f"Database PRAGMA integrity_check failed: {integrity}")
+            else:
+                conn.execute(text("SELECT 1"))
 
         current_counts = _get_table_counts(engine)
         expected_counts = manifest.get("table_counts", {})

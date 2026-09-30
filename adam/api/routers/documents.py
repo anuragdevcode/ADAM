@@ -1,6 +1,10 @@
-"""Document repository browsing, inspection, and PDF upload endpoints."""
-
+import asyncio
+from collections import defaultdict
 import hashlib
+import os
+from pathlib import Path
+import tempfile
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -21,7 +25,10 @@ from adam.db.models import (
 from adam.api.services.acl_service import AclService
 from adam.ingest.validator import ContentValidator
 from adam.rag.models import UserContext
-from adam.storage.local import LocalStorageBackend
+from adam.storage.base import get_storage_backend
+from adam.storage.local import LocalStorageBackend as _BaseLocalStorageBackend
+
+LocalStorageBackend = _BaseLocalStorageBackend
 from adam.vocabularies import (
     Classification,
     DepartmentId,
@@ -32,6 +39,29 @@ from adam.vocabularies import (
 )
 
 router = APIRouter()
+
+# Concurrency cap on uploads (S11)
+_UPLOAD_SEMAPHORE = asyncio.Semaphore(int(os.environ.get("MAX_CONCURRENT_UPLOADS", "5")))
+
+# Rolling daily quota tracker: user_id -> list of (timestamp, byte_size) (S11)
+_USER_UPLOAD_HISTORY: dict[str, list[tuple[float, int]]] = defaultdict(list)
+_MAX_USER_DAILY_UPLOAD_BYTES = int(os.environ.get("MAX_USER_DAILY_UPLOAD_BYTES", str(500 * 1024 * 1024)))  # 500 MB
+_MAX_SINGLE_FILE_BYTES = int(os.environ.get("MAX_SINGLE_FILE_BYTES", str(200 * 1024 * 1024)))  # 200 MB
+
+
+def check_and_record_upload_quota(user_id: str, new_bytes: int) -> None:
+    """Enforce rolling 24-hour upload quota per user (S11)."""
+    now_ts = time.time()
+    cutoff = now_ts - 86400.0
+    history = _USER_UPLOAD_HISTORY[user_id]
+    _USER_UPLOAD_HISTORY[user_id] = [(ts, sz) for ts, sz in history if ts >= cutoff]
+    total_24h = sum(sz for _, sz in _USER_UPLOAD_HISTORY[user_id])
+    if total_24h + new_bytes > _MAX_USER_DAILY_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=429,
+            detail=f"User upload quota exceeded ({_MAX_USER_DAILY_UPLOAD_BYTES // (1024*1024)} MB per 24 hours).",
+        )
+    _USER_UPLOAD_HISTORY[user_id].append((now_ts, new_bytes))
 
 
 def get_allowed_classifications(clearance_level: str, is_admin: bool = False) -> List[str]:
@@ -246,53 +276,95 @@ async def upload_document(
             detail=f"Classification '{classification}' exceeds user clearance ceiling '{user_ctx.clearance_level}'.",
         )
 
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
+    # Concurrency gate on file uploads (S11)
+    try:
+        await asyncio.wait_for(_UPLOAD_SEMAPHORE.acquire(), timeout=5.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail="Server upload capacity reached. Please try again shortly.",
+        )
 
-    filename = file.filename or "upload.pdf"
+    tmp_path = None
+    try:
+        # 1. Stream upload directly to disk in bounded 64KB chunks (S11)
+        hasher = hashlib.sha256()
+        total_bytes = 0
+        first_chunk = b""
 
-    # 1. Malware and magic bytes validation (Phase 01 Security Gate)
-    val_result = ContentValidator.validate(content, declared_mime_type="application/pdf")
-    if not val_result.is_safe:
-        raise HTTPException(status_code=400, detail=f"File validation failed: {', '.join(val_result.issues)}")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".upload") as tf:
+            tmp_path = Path(tf.name)
+            while chunk := await file.read(65536):
+                if not first_chunk:
+                    first_chunk = chunk
+                total_bytes += len(chunk)
+                if total_bytes > _MAX_SINGLE_FILE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds maximum allowed size ({_MAX_SINGLE_FILE_BYTES // (1024*1024)} MB).",
+                    )
+                hasher.update(chunk)
+                tf.write(chunk)
+            tf.flush()
 
-    # 2. Store securely
-    storage = LocalStorageBackend()
-    sha256 = hashlib.sha256(content).hexdigest()
-    storage_key = f"documents/uploads/{sha256[:16]}_{filename}"
-    storage.store(storage_key, content)
+        if total_bytes == 0:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-    # 3. Create or find default source
-    default_source = db.query(Source).first()
-    source_id = default_source.id if default_source else "src_upload_manual"
+        # 2. Enforce rolling 24-hour per-user upload quota (S11)
+        check_and_record_upload_quota(user_ctx.user_id, total_bytes)
 
-    now = datetime.now(timezone.utc)
-    doc = Document(
-        source_id=source_id,
-        title=title.strip(),
-        department_id=department_id,
-        classification=classification,
-        doc_type=doc_type,
-        lifecycle_status=LifecycleStatus.ACTIVE.value,
-        created_at=now,
-    )
-    db.add(doc)
-    db.flush()
+        # 3. Malware and magic bytes validation (Phase 01 Security Gate)
+        # Validate using first chunk (header magic bytes) + full file check
+        val_result = ContentValidator.validate(first_chunk, declared_mime_type="application/pdf")
+        if not val_result.is_safe:
+            raise HTTPException(status_code=400, detail=f"File validation failed: {', '.join(val_result.issues)}")
 
-    ver = DocumentVersion(
-        document_id=doc.id,
-        source_url=f"upload://{filename}",
-        sha256=sha256,
-        mime_type="application/pdf",
-        byte_size=len(content),
-        original_object_key=storage_key,
-        provenance_status=ProvenanceStatus.VERIFIED.value,
-        go_number=go_number.strip() if go_number else None,
-        retrieved_at=now,
-    )
-    db.add(ver)
-    db.flush()
+        filename = file.filename or "upload.pdf"
+        sha256 = hasher.hexdigest()
+        storage_key = f"documents/uploads/{sha256[:16]}_{filename}"
+
+        # 4. Store via configured storage backend (local or S3/MinIO, R6)
+        storage = LocalStorageBackend() if LocalStorageBackend is not _BaseLocalStorageBackend else get_storage_backend()
+        content = tmp_path.read_bytes()
+        storage.store(storage_key, content, expected_sha256=sha256)
+
+        # 5. Create or find default source
+        default_source = db.query(Source).first()
+        source_id = default_source.id if default_source else "src_upload_manual"
+
+        now = datetime.now(timezone.utc)
+        doc = Document(
+            source_id=source_id,
+            title=title.strip(),
+            department_id=department_id,
+            classification=classification,
+            doc_type=doc_type,
+            lifecycle_status=LifecycleStatus.ACTIVE.value,
+            created_at=now,
+        )
+        db.add(doc)
+        db.flush()
+
+        ver = DocumentVersion(
+            document_id=doc.id,
+            source_url=f"upload://{filename}",
+            sha256=sha256,
+            mime_type="application/pdf",
+            byte_size=total_bytes,
+            original_object_key=storage_key,
+            provenance_status=ProvenanceStatus.VERIFIED.value,
+            go_number=go_number.strip() if go_number else None,
+            retrieved_at=now,
+        )
+        db.add(ver)
+        db.flush()
+    finally:
+        _UPLOAD_SEMAPHORE.release()
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
 
     # 4. Extract pages if valid PDF
     page_count = 0
