@@ -10,6 +10,72 @@ from adam.db.models import Base
 logger = logging.getLogger(__name__)
 
 MIGRATION_VERSION = "001_ingestion_control_plane"
+PGVECTOR_MIGRATION_VERSION = "002_pgvector_similarity"
+
+
+def apply_pgvector_migrations(engine: Engine) -> None:
+    """Apply versioned schema migrations for pgvector extension and HNSW indexing."""
+    is_postgres = getattr(engine.dialect, "name", "") == "postgresql" or "postgresql" in str(engine.url)
+
+    with engine.begin() as conn:
+        if is_postgres:
+            try:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            except Exception as e:
+                logger.warning("Could not execute CREATE EXTENSION IF NOT EXISTS vector: %s", e)
+
+        inspector = inspect(conn)
+        existing_tables = set(inspector.get_table_names())
+
+        if "schema_migrations" not in existing_tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version VARCHAR(64) PRIMARY KEY,
+                        applied_at TIMESTAMP NOT NULL
+                    )
+                    """
+                )
+            )
+
+        res = conn.execute(
+            text("SELECT version FROM schema_migrations WHERE version = :ver"),
+            {"ver": PGVECTOR_MIGRATION_VERSION},
+        ).fetchone()
+
+        if "document_chunks" in existing_tables:
+            chunk_cols = {c["name"] for c in inspector.get_columns("document_chunks")}
+            if "embedding" not in chunk_cols:
+                if is_postgres:
+                    conn.execute(text("ALTER TABLE document_chunks ADD COLUMN embedding vector(128)"))
+                else:
+                    conn.execute(text("ALTER TABLE document_chunks ADD COLUMN embedding VECTOR(128)"))
+
+            if is_postgres:
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS idx_chunk_embedding_hnsw "
+                            "ON document_chunks USING hnsw (embedding vector_cosine_ops)"
+                        )
+                    )
+                except Exception as e:
+                    logger.warning("Could not create HNSW index on document_chunks: %s", e)
+
+        if not res:
+            now = datetime.now(timezone.utc)
+            conn.execute(
+                text("INSERT INTO schema_migrations (version, applied_at) VALUES (:ver, :now)"),
+                {"ver": PGVECTOR_MIGRATION_VERSION, "now": now},
+            )
+            logger.info("Applied migration %s successfully.", PGVECTOR_MIGRATION_VERSION)
+
+
+def apply_migrations(engine: Engine) -> None:
+    """Apply all pending migrations idempotently."""
+    apply_ingestion_migrations(engine)
+    apply_pgvector_migrations(engine)
 
 
 def apply_ingestion_migrations(engine: Engine) -> None:

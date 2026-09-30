@@ -482,29 +482,71 @@ class HybridRetriever:
                 if range_q.first() is not None:
                     query = range_q
 
-        # PostgreSQL Optimization: For large collections, apply full-text index acceleration
-        if self._is_postgresql() and not parsed_query.go_number:
+        query_text = parsed_query.clean_query or parsed_query.raw_query
+        q_vector = self.vectorizer.embed_text(query_text)
+
+        # Database-level pushdown for candidate gathering:
+        # On PostgreSQL, push down pgvector HNSW (<=> cosine distance) and full-text search (tsvector @@ tsquery)
+        # to database level so we fetch O(top_k) candidates rather than O(corpus) full scans.
+        if self._is_postgresql():
             from sqlalchemy import func
+            fetch_k = max(top_k * 4, 40)
+            candidate_map: Dict[str, Tuple[DocumentChunk, Document]] = {}
+
+            # Branch A: pgvector HNSW Index Scan (vector similarity <=> cosine distance)
+            try:
+                vec_candidates = (
+                    query.filter(DocumentChunk.embedding.isnot(None))
+                    .order_by(DocumentChunk.embedding.cosine_distance(q_vector))
+                    .limit(fetch_k)
+                    .all()
+                )
+                for chk, doc in vec_candidates:
+                    candidate_map[chk.id] = (chk, doc)
+            except Exception:
+                pass
+
+            # Branch B: PostgreSQL Full-Text Lexical Search
             q_clean = parsed_query.clean_query or parsed_query.raw_query
-            if q_clean and len(q_clean.strip()) > 2:
+            if q_clean and len(q_clean.strip()) > 1:
                 try:
-                    ts_query = query.filter(
-                        func.to_tsvector("simple", DocumentChunk.content).op("@@")(
-                            func.plainto_tsquery("simple", q_clean)
+                    ts_query = (
+                        query.filter(
+                            func.to_tsvector("simple", DocumentChunk.content).op("@@")(
+                                func.plainto_tsquery("simple", q_clean)
+                            )
                         )
+                        .order_by(
+                            func.ts_rank_cd(
+                                func.to_tsvector("simple", DocumentChunk.content),
+                                func.plainto_tsquery("simple", q_clean)
+                            ).desc()
+                        )
+                        .limit(fetch_k)
                     )
-                    if len(ts_query.limit(top_k).all()) >= top_k:
-                        query = ts_query
+                    for chk, doc in ts_query.all():
+                        candidate_map[chk.id] = (chk, doc)
                 except Exception:
                     pass
 
-        candidates = query.all()
+            # Branch C: Exact GO Number or metadata match
+            if parsed_query.go_number:
+                for chk, doc in query.limit(fetch_k).all():
+                    candidate_map[chk.id] = (chk, doc)
+
+            # Fallback if branches returned empty (e.g. unindexed/partial corpus)
+            if not candidate_map:
+                candidates = query.limit(fetch_k).all()
+            else:
+                candidates = list(candidate_map.values())
+        else:
+            candidates = query.all()
+
         if not candidates:
             # If explicit department returned 0, do not leak other departments
             return []
 
         # Prepare corpus for BM25 and Vector calculation with bilingual expansion
-        query_text = parsed_query.clean_query or parsed_query.raw_query
         q_tokens = _tokenize(query_text)
         expanded_q_tokens = list(q_tokens)
         for t in q_tokens:
@@ -513,7 +555,6 @@ class HybridRetriever:
 
         substantive_q_terms = {t for t in expanded_q_tokens if t not in STOPWORDS and len(t) > 1}
         topic_specifiers = {t for t in substantive_q_terms if t not in ADMIN_CATEGORY_WORDS}
-        q_vector = self.vectorizer.embed_text(query_text)
 
         doc_data_list = []
         doc_lengths = []
@@ -568,8 +609,10 @@ class HybridRetriever:
                 field_bonus=field_bonus,
             )
 
-            # Vector similarity
-            if chk.embedding_json:
+            # Vector similarity: use precomputed pgvector or JSON embedding, fallback to on-the-fly
+            if chk.embedding is not None and hasattr(chk.embedding, "__len__") and len(chk.embedding) == len(q_vector):
+                doc_vector = list(chk.embedding)
+            elif chk.embedding_json and len(chk.embedding_json) == len(q_vector):
                 doc_vector = chk.embedding_json
             else:
                 doc_vector = self.vectorizer.embed_text(f"{subject} {chk.content}")

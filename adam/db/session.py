@@ -48,11 +48,20 @@ def get_engine(db_url: Optional[str] = None) -> Engine:
             url,
             **kwargs,
         )
+        if not url.startswith("sqlite"):
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+                    conn.commit()
+                except Exception:
+                    pass
+
         # Automatically ensure schema tables and versioned migrations exist
         from adam.db.models import Base
         Base.metadata.create_all(bind=engine)
-        from adam.db.migrations import apply_ingestion_migrations
-        apply_ingestion_migrations(engine)
+        from adam.db.migrations import apply_migrations
+        apply_migrations(engine)
         _migrate_missing_columns(engine)
         _ENGINES[url] = engine
     return _ENGINES[url]

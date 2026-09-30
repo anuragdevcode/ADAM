@@ -20,6 +20,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    from sqlalchemy import JSON as Vector
+
 from adam.db.session import Base
 from adam.vocabularies import (
     DocType,
@@ -380,6 +385,7 @@ class DocumentChunk(Base):
     review_status = Column(String(32), nullable=False, default=ReviewStatus.AUTO_APPROVED.value)
     block_ids_json = Column(JSON, nullable=True)
     bbox_list_json = Column(JSON, nullable=True)
+    embedding = Column(Vector(128), nullable=True)
     embedding_json = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
 
@@ -392,6 +398,12 @@ class DocumentChunk(Base):
         Index("idx_chunk_dept_class", "department_id", "classification"),
         Index("idx_chunk_review_dept_class", "review_status", "department_id", "classification"),
         Index("idx_chunk_go_num", "go_number"),
+        Index(
+            "idx_chunk_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
 

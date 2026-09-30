@@ -308,6 +308,12 @@ class SemanticChunker:
             all_block_ids.extend(u.block_ids)
             all_bboxes.extend(u.bboxes)
 
+        sec_heading = section_heading or metadata.get("subject")
+        subj = metadata.get("subject") or ""
+        embed_input = f"{sec_heading or ''} {subj} {content}".strip()
+        from adam.rag.retriever import MultilingualSemanticVectorizer
+        emb = MultilingualSemanticVectorizer.embed_text(embed_input)
+
         return {
             "document_id": metadata["document_id"],
             "version_id": metadata["version_id"],
@@ -316,7 +322,7 @@ class SemanticChunker:
             "token_count": token_count,
             "page_start": page_start,
             "page_end": page_end,
-            "section_heading": section_heading or metadata.get("subject"),
+            "section_heading": sec_heading,
             "language": metadata.get("language", "hi"),
             "department_id": metadata.get("department_id", "UNKNOWN"),
             "doc_type": metadata.get("doc_type", "UNKNOWN"),
@@ -332,6 +338,8 @@ class SemanticChunker:
             "review_status": metadata.get("review_status", ReviewStatus.AUTO_APPROVED.value),
             "block_ids_json": list(dict.fromkeys(all_block_ids)),
             "bbox_list_json": all_bboxes[:20],  # bounded sample for citation highlight coordinates
+            "embedding": emb,
+            "embedding_json": emb,
         }
 
 
@@ -440,6 +448,8 @@ def chunk_document_version(session: Session, version_id: str) -> List[DocumentCh
             review_status=cd["review_status"],
             block_ids_json=cd["block_ids_json"],
             bbox_list_json=cd["bbox_list_json"],
+            embedding=cd.get("embedding"),
+            embedding_json=cd.get("embedding_json"),
         )
         session.add(chunk)
         created_chunks.append(chunk)

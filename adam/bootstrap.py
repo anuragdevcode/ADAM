@@ -25,6 +25,7 @@ from adam.db.models import (
 )
 from adam.storage.base import get_storage_backend
 from adam.storage.local import LocalStorageBackend
+from adam.rag.retriever import MultilingualSemanticVectorizer
 from adam.vocabularies import (
     Classification,
     DepartmentId,
@@ -249,7 +250,8 @@ def bootstrap_mini_corpus(
                 source_url=ver.source_url,
                 sha256=sha256,
                 review_status=ReviewStatus.AUTO_APPROVED.value,
-                embedding_json=[0.05] * 384,
+                embedding=MultilingualSemanticVectorizer.embed_text(f"{item['section']} {item['content']}"),
+                embedding_json=MultilingualSemanticVectorizer.embed_text(f"{item['section']} {item['content']}"),
             )
             session.add(chunk)
             chunks_created += 1
