@@ -4,8 +4,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from adam.api.deps import get_db
+from adam.api.deps import get_db, get_user_context
+from adam.api.services.acl_service import AclService
 from adam.db.models import Document, DocumentVersion, PrecedentReference
+from adam.rag.models import UserContext
 
 router = APIRouter()
 
@@ -16,12 +18,18 @@ def list_precedents(
     search: Optional[str] = None,
     limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> List[Dict[str, Any]]:
     """Return verified precedent relationships, supersessions, and statutory links."""
-    query = db.query(PrecedentReference).join(
-        DocumentVersion, PrecedentReference.source_version_id == DocumentVersion.id
-    ).join(
-        Document, DocumentVersion.document_id == Document.id
+    allowed_classifications = AclService.get_accessible_classifications(
+        user_ctx.clearance_level, user_ctx.is_admin()
+    )
+
+    query = (
+        db.query(PrecedentReference)
+        .join(DocumentVersion, PrecedentReference.source_version_id == DocumentVersion.id)
+        .join(Document, DocumentVersion.document_id == Document.id)
+        .filter(Document.classification.in_(allowed_classifications))
     )
 
     if relation_type and relation_type != "ALL":

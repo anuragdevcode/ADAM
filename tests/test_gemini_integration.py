@@ -130,8 +130,9 @@ def test_gemini_runtime_redacts_api_key_on_error():
 
 # ── 2. Gemini STT & TTS Voice Engines ─────────────────────────────────────────
 
-def test_gemini_stt_engine_transcription():
+def test_gemini_stt_engine_transcription(monkeypatch):
     """Verify GeminiSttEngine sends multimodal audio and parses transcript."""
+    monkeypatch.setenv("ADAM_ALLOW_HOSTED_VOICE", "true")
     stt = GeminiSttEngine(api_key="AIzaSyTestKey")
     assert stt.is_available() is True
 

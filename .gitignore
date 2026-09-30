@@ -81,4 +81,6 @@ ui/.git/
 *.md
 **/*.md
 !/README.md
+!/SECURITY.md
+
 

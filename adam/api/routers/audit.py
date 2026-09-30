@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from adam.agent.redaction import SecretRedactor
-from adam.api.deps import get_db, get_user_context
+from adam.api.deps import get_db, get_user_context, require_roles
 from adam.db.models import AgentExecutionAudit
 from adam.rag.models import UserContext
 
@@ -16,7 +16,7 @@ router = APIRouter()
 def list_execution_audits(
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "AUDITOR")),
 ) -> List[Dict[str, Any]]:
     """Return immutable records of bounded 7-stage state machine executions."""
     records = (
@@ -56,7 +56,7 @@ def list_execution_audits(
 def get_audit_metrics(
     limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "AUDITOR")),
 ) -> Dict[str, Any]:
     """Compute aggregate execution statistics including average response time and per-stage latency breakdown."""
     records = (
@@ -118,6 +118,13 @@ def get_audit_metrics(
 
 
 CANONICAL_RAG_BENCHMARK: Dict[str, Any] = {
+    "benchmark_type": "synthetic_smoke_test_10_docs",
+    "corpus_document_count": 10,
+    "corpus_page_count": 12,
+    "provenance": (
+        "Synthetic smoke test evaluated over a 10-document (12-page) synthetic gold corpus "
+        "with hand-crafted questions; not representative of large-scale production corpus."
+    ),
     "total_queries": 215,
     "answer_bearing_queries": 150,
     "recall_at_10": 1.0,
@@ -153,7 +160,10 @@ CANONICAL_RAG_BENCHMARK: Dict[str, Any] = {
         "reranker_precision": 0.9733,
         "reranker_latency_ms": 6.3,
         "parity_achieved": True,
-        "decision": "RRF hybrid hits 97.33% citation precision and 100% recall@10 natively without dedicated neural reranker (FlashRank).",
+        "decision": (
+            "RRF hybrid hits 97.33% citation precision and 100% recall@10 natively with heuristic rule-based booster; "
+            "dedicated neural cross-encoder (e.g. FlashRank) is not integrated."
+        ),
     },
 }
 
@@ -162,7 +172,7 @@ CANONICAL_RAG_BENCHMARK: Dict[str, Any] = {
 def get_audit_benchmark(
     live: bool = Query(default=False, description="Execute live gold set evaluation if true"),
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "AUDITOR")),
 ) -> Dict[str, Any]:
     """Return verified empirical RAG benchmark metrics over the 215-question gold dataset."""
     if not live:
@@ -172,7 +182,18 @@ def get_audit_benchmark(
     populate_eval_corpus(db)
     scorecard = evaluate_gold_set(db)
     res = scorecard.to_dict()
+    res["benchmark_type"] = "live_synthetic_smoke_test_10_docs"
+    res["corpus_document_count"] = 10
+    res["corpus_page_count"] = 12
     res["reranker_ablation"] = CANONICAL_RAG_BENCHMARK["reranker_ablation"]
     return res
+
+
+@router.get("/audit/benchmark/reference")
+def get_audit_benchmark_reference(
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "AUDITOR")),
+) -> Dict[str, Any]:
+    """Return static canonical reference metrics for the synthetic 10-document smoke test."""
+    return CANONICAL_RAG_BENCHMARK
 
 

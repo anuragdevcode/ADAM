@@ -170,7 +170,7 @@ def test_prometheus_metrics_endpoint():
     app = create_app()
     client = TestClient(app)
 
-    resp = client.get("/api/metrics")
+    resp = client.get("/api/metrics", headers={"X-User-Role": "ADMIN"})
     assert resp.status_code == 200
     assert "text/plain" in resp.headers["content-type"]
 

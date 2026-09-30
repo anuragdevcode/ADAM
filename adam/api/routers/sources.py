@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from adam.api.deps import get_db, get_user_context
+from adam.api.deps import get_db, get_user_context, require_roles
 from adam.connectors.registry import ConnectorRegistry
 from adam.db.models import Document, Source, IngestionJob
 from adam.rag.models import UserContext
@@ -72,7 +72,7 @@ def get_source_presets() -> List[Dict[str, Any]]:
 @router.post("/sources/seed")
 def seed_official_sources(
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER")),
 ) -> Dict[str, Any]:
     """Seed or update official Uttarakhand government data sources."""
     count = _seed_playbook(db, actor=user_ctx.user_id or "records_officer")
@@ -165,7 +165,7 @@ def get_source(source_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
 def create_source(
     req: CreateSourceRequest,
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER")),
 ) -> Dict[str, Any]:
     """Onboard a new data source (Website, Database, File Batch, or Custom)."""
     source_id = f"src_{uuid.uuid4().hex[:12]}"
@@ -202,6 +202,7 @@ def create_source(
 def test_source_connection(
     source_id: str,
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> Dict[str, Any]:
     """Test reachability, credentials, or permissions for a source without initiating crawling."""
     source = db.query(Source).filter(Source.id == source_id).first()
@@ -224,7 +225,7 @@ def test_source_connection(
 def toggle_source_status(
     source_id: str,
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER")),
 ) -> Dict[str, Any]:
     """Toggle source status between APPROVED and PAUSED."""
     source = db.query(Source).filter(Source.id == source_id).first()
@@ -251,7 +252,7 @@ def toggle_source_status(
 def delete_source(
     source_id: str,
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER")),
 ) -> Dict[str, Any]:
     """Soft-remove a data source while preserving document provenance and audit history."""
     source = db.query(Source).filter(Source.id == source_id).first()

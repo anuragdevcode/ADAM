@@ -853,7 +853,9 @@ class ReadOnlyToolRegistry:
         filter_by = arguments.get("filter_by") or {}
 
         if table_name == "documents":
+            from adam.rag.acl import AclEnforcer
             q = session.query(Document)
+            q = AclEnforcer.apply_document_acl_filter(session, q, user_context)
             if "department_id" in filter_by and filter_by["department_id"]:
                 q = q.filter(Document.department_id == filter_by["department_id"])
             if "doc_type" in filter_by and filter_by["doc_type"]:
@@ -910,7 +912,9 @@ class ReadOnlyToolRegistry:
                 ],
             }
         elif table_name == "document_versions":
-            q = session.query(DocumentVersion)
+            from adam.rag.acl import AclEnforcer
+            q = session.query(DocumentVersion).join(Document, DocumentVersion.document_id == Document.id)
+            q = AclEnforcer.apply_document_acl_filter(session, q, user_context)
             if aggregate == "count":
                 return {"table": table_name, "aggregate": "count", "result": q.count()}
             vers = q.limit(limit).all()
@@ -939,8 +943,25 @@ class ReadOnlyToolRegistry:
         doc_a = None
         doc_b = None
         if session is not None:
-            doc_a = session.query(Document).filter(Document.id == src_a).first()
-            doc_b = session.query(Document).filter(Document.id == src_b).first()
+            from adam.rag.acl import AclEnforcer
+            raw_a = session.query(Document).filter(Document.id == src_a).first()
+            raw_b = session.query(Document).filter(Document.id == src_b).first()
+
+            if raw_a:
+                if not AclEnforcer.is_document_authorized(session, raw_a, user_context):
+                    return {
+                        "error": f"Access denied: User '{user_context.user_id}' does not have clearance to access source '{src_a}'.",
+                        "status": "forbidden",
+                    }
+                doc_a = raw_a
+
+            if raw_b:
+                if not AclEnforcer.is_document_authorized(session, raw_b, user_context):
+                    return {
+                        "error": f"Access denied: User '{user_context.user_id}' does not have clearance to access source '{src_b}'.",
+                        "status": "forbidden",
+                    }
+                doc_b = raw_b
 
         text_a = f"Title: {doc_a.title} (Dept: {doc_a.department_id})" if doc_a else src_a
         text_b = f"Title: {doc_b.title} (Dept: {doc_b.department_id})" if doc_b else src_b

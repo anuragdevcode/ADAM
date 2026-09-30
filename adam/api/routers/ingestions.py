@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from adam.api.deps import get_db, get_user_context
+from adam.api.deps import get_db, get_user_context, require_roles
 from adam.db.models import IngestionJob, IngestionJobItem, Source
 from adam.ingest.control_plane import GLOBAL_INGESTION_CONTROL_PLANE
 from adam.rag.models import UserContext
@@ -56,7 +56,7 @@ class JobActionResponse(BaseModel):
 async def trigger_job(
     request: Request,
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> Dict[str, Any]:
     """Trigger an ingestion job (Full or Incremental, with optional uploaded files).
 
@@ -144,6 +144,7 @@ def list_jobs(
     status: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> List[Dict[str, Any]]:
     """List recent ingestion jobs with status and progress aggregates."""
     query = db.query(IngestionJob)
@@ -179,7 +180,11 @@ def list_jobs(
 
 
 @router.get("/jobs/{job_id}")
-def get_job(job_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+def get_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
+) -> Dict[str, Any]:
     """Retrieve detailed state and metrics for a specific ingestion job."""
     job = db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
     if not job:
@@ -214,6 +219,7 @@ def get_job_items(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> Dict[str, Any]:
     """Paginated items list for an ingestion job, preventing DOM and memory overload."""
     job = db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
@@ -258,7 +264,7 @@ def get_job_items(
 @router.post("/jobs/{job_id}/pause", response_model=JobActionResponse)
 def pause_job(
     job_id: str,
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> JobActionResponse:
     """Request cooperative pause on an active job."""
     try:
@@ -275,7 +281,7 @@ def pause_job(
 @router.post("/jobs/{job_id}/resume", response_model=JobActionResponse)
 def resume_job(
     job_id: str,
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> JobActionResponse:
     """Resume a PAUSED job from its compound cursor checkpoint."""
     try:
@@ -292,7 +298,7 @@ def resume_job(
 @router.post("/jobs/{job_id}/stop", response_model=JobActionResponse)
 def stop_job(
     job_id: str,
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> JobActionResponse:
     """Request cooperative cancellation of an active job."""
     try:
@@ -309,7 +315,7 @@ def stop_job(
 @router.post("/jobs/{job_id}/retry")
 def retry_failed_items(
     job_id: str,
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "OPERATOR")),
 ) -> Dict[str, Any]:
     """Trigger a retry job that re-attempts only the failed items from a prior job."""
     try:

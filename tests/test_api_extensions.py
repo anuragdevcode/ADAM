@@ -111,7 +111,7 @@ def ext_client(ext_engine):
     session.commit()
     session.close()
 
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-User-Role": "OFFICER"}) as c:
         yield c
 
 

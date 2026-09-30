@@ -4,7 +4,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from adam.api.deps import get_db
+from adam.api.deps import get_db, get_user_context, require_roles
+from adam.rag.models import UserContext
 from adam.model.registry import CANONICAL_MODELS, ModelRegistry
 from adam.model.runtime import OllamaModelRuntime
 from adam.vocabularies import (
@@ -87,7 +88,10 @@ def validate_gemini_key(req: ValidateKeyRequest) -> Dict[str, Any]:
 
 
 @router.get("/metrics", response_class=PlainTextResponse)
-def get_prometheus_metrics(db: Session = Depends(get_db)) -> PlainTextResponse:
+def get_prometheus_metrics(
+    db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OPERATOR", "AUDITOR")),
+) -> PlainTextResponse:
     """Expose Prometheus / OpenMetrics telemetry endpoint for standard infrastructure monitoring."""
     from adam.observability.metrics import GLOBAL_METRICS
     content = GLOBAL_METRICS.generate_metrics_text(session=db)
@@ -198,6 +202,7 @@ def get_vocabularies() -> Dict[str, Any]:
 def get_system_rag_benchmark(
     live: bool = False,
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "AUDITOR")),
 ) -> Dict[str, Any]:
     """Return verified empirical RAG benchmark scorecard and reranker ablation analysis."""
     from adam.api.routers.audit import CANONICAL_RAG_BENCHMARK
@@ -406,6 +411,7 @@ class _ProviderRegistrationRequest(_BaseModel):
 def register_remote_provider(
     req: _ProviderRegistrationRequest,
     x_provider_api_key: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(require_roles("ADMIN")),
 ) -> Dict[str, Any]:
     """Register a remote API provider.
 
@@ -465,7 +471,10 @@ def register_remote_provider(
 
 
 @router.delete("/system/providers/{provider_id}")
-def remove_remote_provider(provider_id: str) -> Dict[str, Any]:
+def remove_remote_provider(
+    provider_id: str,
+    user_ctx: UserContext = Depends(require_roles("ADMIN")),
+) -> Dict[str, Any]:
     """Remove a registered remote API provider and its associated models."""
     removed = REMOTE_PROVIDER_REGISTRY.remove(provider_id)
     if not removed:
@@ -478,6 +487,7 @@ def remove_remote_provider(provider_id: str) -> Dict[str, Any]:
 def recheck_model(
     model_id: str,
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER")),
 ) -> Dict[str, Any]:
     """Run a lightweight health check on a specific model and return updated status.
 

@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from adam.api.deps import get_db
+from adam.api.deps import get_db, get_user_context
 from adam.db.models import ChatSession
 from adam.memory.session import (
     SessionAccessDeniedError,
@@ -14,15 +14,30 @@ from adam.memory.session import (
     SessionManager,
 )
 from adam.memory.retention import ensure_utc
+from adam.rag.models import UserContext
 
 router = APIRouter()
 
 
 @router.get("/sessions")
-def get_sessions(user_id: str, db: Session = Depends(get_db)):
-    """List all sessions for a given user, ordered newest-first."""
+def get_sessions(
+    user_id: Optional[str] = None,
+    user_ctx: UserContext = Depends(get_user_context),
+    db: Session = Depends(get_db),
+):
+    """List all sessions for the authenticated user, ordered newest-first."""
     from sqlalchemy import func
     from adam.db.models import ChatTurn
+
+    # Server-side identity enforcement (S6 IDOR prevention)
+    target_user_id = user_ctx.user_id
+    if user_id:
+        if user_ctx.is_admin():
+            target_user_id = user_id
+        elif user_ctx.user_id != "anonymous" and user_id != user_ctx.user_id:
+            raise HTTPException(status_code=403, detail="Forbidden: Cannot list sessions for another user.")
+        else:
+            target_user_id = user_id
 
     # Compute turn counts in a single SQL query to avoid lazy-loading in threads
     rows = (
@@ -31,7 +46,7 @@ def get_sessions(user_id: str, db: Session = Depends(get_db)):
             func.count(ChatTurn.id).label("turn_count"),
         )
         .outerjoin(ChatTurn, ChatTurn.session_id == ChatSession.id)
-        .filter(ChatSession.user_id == user_id)
+        .filter(ChatSession.user_id == target_user_id)
         .group_by(ChatSession.id)
         .order_by(ChatSession.created_at.desc())
         .all()
@@ -53,12 +68,14 @@ def get_sessions(user_id: str, db: Session = Depends(get_db)):
 def get_session_history(
     session_id: str,
     x_user_id: str = Header(default="anonymous"),
+    user_ctx: UserContext = Depends(get_user_context),
     db: Session = Depends(get_db),
 ):
     """Return decrypted conversation turns for an authorized session owner."""
+    effective_user_id = user_ctx.user_id if user_ctx.user_id != "anonymous" else x_user_id
     manager = SessionManager(db)
     try:
-        turns = manager.get_turns(session_id, requesting_user_id=x_user_id)
+        turns = manager.get_turns(session_id, requesting_user_id=effective_user_id)
         from adam.db.models import AgentExecutionAudit
         audit = (
             db.query(AgentExecutionAudit)

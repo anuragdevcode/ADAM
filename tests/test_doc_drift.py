@@ -155,7 +155,7 @@ def test_benchmark_api_matches_canonical():
     from adam.api.app import app
     from adam.api.routers.audit import CANONICAL_RAG_BENCHMARK
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-User-Role": "ADMIN"})
 
     r1 = client.get("/api/audit/benchmark")
     assert r1.status_code == 200

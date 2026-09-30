@@ -187,7 +187,7 @@ def integ_client(integ_engine, tmp_path, monkeypatch):
     db.add(chunk)
     db.commit()
 
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-User-Role": "OFFICER"}) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 

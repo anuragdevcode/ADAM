@@ -85,6 +85,8 @@ class GroqWhisperEngine(BaseSttEngine):
     def transcribe(self, audio_bytes: bytes, language_hint: str = 'hi') -> SttResult:
         if not self.is_available():
             raise SttError("GROQ_API_KEY is not configured.")
+        if os.getenv("ADAM_ALLOW_HOSTED_VOICE", "false").strip().lower() not in ("1", "true", "yes"):
+            raise SttError("Hosted speech-to-text is disabled. Set ADAM_ALLOW_HOSTED_VOICE=true to opt in.")
         # Groq validates the extension, so pick one matching what browsers record.
         filename = "recording.webm"
         if audio_bytes[:4] == b"RIFF":
@@ -191,6 +193,8 @@ class GeminiSttEngine(BaseSttEngine):
     def transcribe(self, audio_bytes: bytes, language_hint: str = 'hi') -> SttResult:
         if not self.is_available():
             raise SttError("GEMINI_API_KEY is not configured.")
+        if os.getenv("ADAM_ALLOW_HOSTED_VOICE", "false").strip().lower() not in ("1", "true", "yes"):
+            raise SttError("Hosted speech-to-text is disabled. Set ADAM_ALLOW_HOSTED_VOICE=true to opt in.")
         try:
             import base64
             import httpx
@@ -276,24 +280,11 @@ def _describe_http_error(provider: str, resp: httpx.Response) -> str:
 
 
 def get_stt_engine(api_key: Optional[str] = None, clearance_level: Optional[str] = None) -> BaseSttEngine:
-    """Pick the STT engine, strictly enforcing air-gapped data sovereignty for classified clearance."""
+    """Pick the STT engine, strictly enforcing air-gapped data sovereignty and hosted voice opt-in."""
     is_air_gapped = bool(clearance_level and clearance_level.strip().upper() in ("RESTRICTED", "CONFIDENTIAL"))
     provider = os.getenv("ADAM_STT_PROVIDER", "auto").strip().lower()
+    allow_hosted = os.getenv("ADAM_ALLOW_HOSTED_VOICE", "false").strip().lower() in ("1", "true", "yes")
 
-    if not is_air_gapped:
-        gemini = GeminiSttEngine(api_key=api_key)
-
-        if provider == "gemini":
-            if gemini.is_available():
-                return gemini
-            logger.warning("ADAM_STT_PROVIDER=gemini but GEMINI_API_KEY is empty; STT disabled")
-            return NullSttEngine()
-
-        if gemini.is_available():
-            logger.info("Selected GeminiSttEngine for STT")
-            return gemini
-
-    groq = GroqWhisperEngine()
     local = FasterWhisperEngine()
 
     if is_air_gapped:
@@ -304,12 +295,37 @@ def get_stt_engine(api_key: Optional[str] = None, clearance_level: Optional[str]
         logger.warning("Classified clearance active: Cloud STT disabled. Using NullSttEngine.")
         return NullSttEngine()
 
-
-    if provider == "groq":
-        if groq.is_available():
-            return groq
-        logger.warning("ADAM_STT_PROVIDER=groq but GROQ_API_KEY is empty; STT disabled")
+    if provider == "none":
         return NullSttEngine()
+
+    # Cloud STT (Gemini / Groq) requires explicit opt-in via ADAM_ALLOW_HOSTED_VOICE=true
+    if allow_hosted:
+        gemini = GeminiSttEngine(api_key=api_key)
+        if provider == "gemini":
+            if gemini.is_available():
+                return gemini
+            logger.warning("ADAM_STT_PROVIDER=gemini but GEMINI_API_KEY is empty; STT disabled")
+            return NullSttEngine()
+
+        if gemini.is_available():
+            logger.info("Selected GeminiSttEngine for STT")
+            return gemini
+
+        groq = GroqWhisperEngine()
+        if provider == "groq":
+            if groq.is_available():
+                return groq
+            logger.warning("ADAM_STT_PROVIDER=groq but GROQ_API_KEY is empty; STT disabled")
+            return NullSttEngine()
+
+        if groq.is_available():
+            logger.info("Selected GroqWhisperEngine for STT")
+            return groq
+    else:
+        if provider in ("gemini", "groq"):
+            logger.warning("Cloud STT provider '%s' requested but ADAM_ALLOW_HOSTED_VOICE is not enabled. Cloud STT blocked to enforce data sovereignty.", provider)
+            return NullSttEngine()
+
     if provider == "faster_whisper":
         if local.is_available():
             return local
@@ -318,9 +334,6 @@ def get_stt_engine(api_key: Optional[str] = None, clearance_level: Optional[str]
     if provider == "none":
         return NullSttEngine()
 
-    if groq.is_available():
-        logger.info("Selected GroqWhisperEngine for STT")
-        return groq
     if local.is_available():
         logger.info("Selected FasterWhisperEngine for STT")
         return local

@@ -91,7 +91,7 @@ def test_api_presets_and_seed_endpoints():
     assert preset_map["ekosh"]["connector_class"] == "EkoshTreasuryConnector"
 
     # Test POST /api/sources/seed
-    seed_resp = client.post("/api/sources/seed")
+    seed_resp = client.post("/api/sources/seed", headers={"X-User-Role": "ADMIN"})
     assert seed_resp.status_code == 200
     seed_data = seed_resp.json()
     assert seed_data["success"] is True
@@ -109,7 +109,7 @@ def test_api_presets_and_seed_endpoints():
 
 
 def test_api_trigger_job_json_and_multipart(monkeypatch):
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-User-Role": "ADMIN"})
 
     from adam.db.models import IngestionJob
     mock_job = IngestionJob(

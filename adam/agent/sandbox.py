@@ -103,6 +103,14 @@ class _SecurityAstValidator(ast.NodeVisitor):
                 raise SandboxSecurityError(
                     f"Security Violation: Call to restricted function '{node.func.id}()' is strictly prohibited."
                 )
+        # Check string format calls attempting dunder attribute or globals traversal
+        if isinstance(node.func, ast.Attribute) and node.func.attr in ("format", "format_map"):
+            if isinstance(node.func.value, ast.Constant) and isinstance(node.func.value.value, str):
+                val_str = node.func.value.value
+                if "{" in val_str and ("__" in val_str or "globals" in val_str):
+                    raise SandboxSecurityError(
+                        "Security Violation: Format string attempts unauthorized inspection."
+                    )
         self.generic_visit(node)
 
 
@@ -114,6 +122,12 @@ def _subprocess_sandbox_worker(
     memory_limit_bytes: int = 256 * 1024 * 1024,
 ) -> None:
     """Isolated child process worker executing sandboxed code with resource ceilings."""
+    # Scrub parent environment variables containing secrets, tokens, or credentials
+    import os
+    for k in list(os.environ.keys()):
+        if any(term in k.upper() for term in ("SECRET", "KEY", "TOKEN", "PASSWORD", "DATABASE", "AUTH", "CREDENTIAL")):
+            os.environ.pop(k, None)
+
     # Apply OS resource limits on POSIX platforms
     try:
         import resource
@@ -414,11 +428,17 @@ class SecurePythonSandbox:
                         execution_time_ms=elapsed_ms,
                         error=res["error"],
                     )
-            except Exception:
-                # Subprocess creation failed (e.g. pickling error or restricted environment), fall through to thread
-                pass
+            except Exception as e:
+                # Subprocess creation failed. Fail securely rather than falling back to in-process execution in API server.
+                return SandboxExecutionResult(
+                    success=False,
+                    output="",
+                    value=None,
+                    execution_time_ms=(time.perf_counter() - start_time) * 1000.0,
+                    error=f"Sandbox execution failed: subprocess isolation error ({type(e).__name__}: {str(e)}). In-process fallback is disabled for security.",
+                )
 
-        # 3. In-process thread execution fallback
+        # 3. Explicit non-subprocess execution (only when prefer_subprocess=False)
         return cls._execute_in_thread(
             code=code,
             tree=tree,

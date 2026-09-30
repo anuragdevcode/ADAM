@@ -78,8 +78,49 @@ DEFAULT_USER_AGENT = (
     "(+https://uk.gov.in; departmental-authorised-crawler)"
 )
 
+# Environment mode
+ADAM_ENV = os.getenv("ADAM_ENV", os.getenv("ENV", "development")).lower()
+
+KNOWN_INSECURE_SECRETS = {
+    "adam-uk-gov-default-auth-secret-key-2026",
+    "change-me",
+    "secret",
+    "placeholder",
+    "default",
+    "password",
+    "admin",
+}
+
+def get_signing_secret() -> str:
+    """Retrieve signing secret with mandatory production enforcement."""
+    env = os.getenv("ADAM_ENV", os.getenv("ENV", "development")).lower()
+    secret = os.getenv("SIGNING_SECRET", "").strip()
+    if env in ("production", "prod"):
+        if not secret or secret in KNOWN_INSECURE_SECRETS:
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: "
+                "SIGNING_SECRET must be set to a secure, unique string in production. "
+                f"Current value is {'empty' if not secret else 'a known insecure placeholder'}."
+            )
+        return secret
+    # Development / test default
+    return secret or "adam-uk-gov-default-auth-secret-key-2026"
+
+def validate_production_database_url(url: str) -> str:
+    """Ensure production database URL does not use insecure default credentials."""
+    env = os.getenv("ADAM_ENV", os.getenv("ENV", "development")).lower()
+    if env in ("production", "prod"):
+        if "change-me" in url or "adam_dev_password" in url:
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: "
+                "DATABASE_URL contains default placeholder password credentials ('change-me'). "
+                "You must supply a secure password in production."
+            )
+    return url
+
 # Cryptographic signing secret for inventory manifests
-SIGNING_SECRET = os.getenv("SIGNING_SECRET", "adam-uk-gov-default-auth-secret-key-2026")
+SIGNING_SECRET = get_signing_secret()
+validate_production_database_url(DATABASE_URL)
 
 # Maximum permitted file size for ingestion (e.g., 200MB)
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from adam.api.deps import get_db, get_user_context
+from adam.api.deps import get_db, get_user_context, require_roles
 from adam.db.models import AuditEvent, Document, DocumentPage, DocumentVersion, ReviewAnnotation
 from adam.rag.models import UserContext
 from adam.vocabularies import ReviewStatus
@@ -24,6 +24,7 @@ class PageCorrectionRequest(BaseModel):
 def list_review_pages(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "REVIEWER")),
 ) -> List[Dict[str, Any]]:
     """List document pages requiring human QA or reviewer verification."""
     query = (
@@ -71,7 +72,7 @@ def list_review_pages(
 def approve_page(
     page_id: str,
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "REVIEWER")),
 ) -> Dict[str, Any]:
     """Approve a flagged or pending page into the authoritative corpus."""
     page = db.query(DocumentPage).filter(DocumentPage.id == page_id).first()
@@ -98,7 +99,7 @@ def correct_page(
     page_id: str,
     req: PageCorrectionRequest,
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "REVIEWER")),
 ) -> Dict[str, Any]:
     """Submit a reviewer correction without mutating original raw/born-digital transcripts."""
     page = db.query(DocumentPage).filter(DocumentPage.id == page_id).first()

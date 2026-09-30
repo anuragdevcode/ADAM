@@ -99,6 +99,72 @@ class AclEnforcer:
         return query.filter(or_(*conditions))
 
     @classmethod
+    def apply_document_acl_filter(
+        cls,
+        session: Session,
+        query: Query,
+        user_context: Optional[UserContext] = None,
+    ) -> Query:
+        """Apply pre-query metadata ACL constraints to a Document query.
+
+        Ensures that low-privilege or cross-tenant users cannot see restricted,
+        confidential, or other-department internal documents via relational queries.
+        """
+        from adam.db.models import Document
+        user = user_context or UserContext()
+
+        if user.is_admin():
+            return query
+
+        conditions = [Document.classification == Classification.PUBLIC.value]
+
+        now = datetime.now(timezone.utc)
+        subjects = [user.user_id] + list(user.roles)
+
+        active_grants = (
+            session.query(AccessGrant)
+            .filter(
+                AccessGrant.subject_id.in_(subjects),
+                AccessGrant.action.in_([AccessAction.READ.value, AccessAction.ADMIN.value, "READ", "ADMIN"]),
+                or_(AccessGrant.expires_at.is_(None), AccessGrant.expires_at > now),
+            )
+            .all()
+        )
+
+        granted_doc_ids: Set[str] = {g.document_id for g in active_grants if g.document_id}
+        granted_classifications: Set[str] = {g.classification for g in active_grants if g.classification}
+
+        if granted_doc_ids:
+            conditions.append(Document.id.in_(list(granted_doc_ids)))
+
+        if Classification.INTERNAL.value in granted_classifications:
+            conditions.append(Document.classification == Classification.INTERNAL.value)
+        elif user.clearance_level in (Classification.INTERNAL.value, Classification.RESTRICTED.value, Classification.CONFIDENTIAL.value):
+            if user.department_id:
+                conditions.append(
+                    and_(
+                        Document.classification == Classification.INTERNAL.value,
+                        Document.department_id == user.department_id,
+                    )
+                )
+
+        if Classification.RESTRICTED.value in granted_classifications:
+            conditions.append(Document.classification == Classification.RESTRICTED.value)
+        elif user.clearance_level in (Classification.RESTRICTED.value, Classification.CONFIDENTIAL.value):
+            if user.department_id and "OFFICER" in [r.upper() for r in user.roles]:
+                conditions.append(
+                    and_(
+                        Document.classification == Classification.RESTRICTED.value,
+                        Document.department_id == user.department_id,
+                    )
+                )
+
+        if Classification.CONFIDENTIAL.value in granted_classifications:
+            conditions.append(Document.classification == Classification.CONFIDENTIAL.value)
+
+        return query.filter(or_(*conditions))
+
+    @classmethod
     def is_chunk_authorized(
         cls,
         session: Session,

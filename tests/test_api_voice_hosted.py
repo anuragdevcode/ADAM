@@ -6,6 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.fixture(autouse=True)
+def enable_hosted_voice(monkeypatch):
+    """Enable hosted voice opt-in for hosted voice test suite."""
+    monkeypatch.setenv("ADAM_ALLOW_HOSTED_VOICE", "true")
+
+
 @pytest.fixture()
 def test_client():
     from adam.api.app import create_app
@@ -39,6 +45,15 @@ def test_groq_engine_unavailable_without_key(monkeypatch):
     from adam.api.voice.stt import GroqWhisperEngine
     assert GroqWhisperEngine().is_available() is False
     assert GroqWhisperEngine(api_key="gsk_test").is_available() is True
+
+
+def test_groq_engine_blocked_without_opt_in(monkeypatch):
+    """S10: Verify that hosted voice engine refuses to transcribe when opt-in is false."""
+    monkeypatch.setenv("ADAM_ALLOW_HOSTED_VOICE", "false")
+    from adam.api.voice import stt as stt_module
+    engine = stt_module.GroqWhisperEngine(api_key="gsk_test")
+    with pytest.raises(stt_module.SttError, match="Hosted speech-to-text is disabled"):
+        engine.transcribe(b"RIFF" + b"\x00" * 40)
 
 
 def test_groq_engine_transcribes_via_http(monkeypatch):

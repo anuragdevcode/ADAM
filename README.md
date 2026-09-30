@@ -20,10 +20,10 @@ ADAM is a platform for turning approved Uttarakhand public records into a connec
 
 - **Database Environments (Explicit Canonical Roles):**
   - **Native Local Development & Tests (Canonical: SQLite):** When running outside Docker (`adam serve`, CLI tools, pytest), ADAM defaults to local SQLite (`sqlite:///{BASE_DIR}/adam.db` or in-memory `sqlite:///:memory:` for pytest). This provides zero external daemon dependencies, fast startup, automated table creation, and missing-column schema migrations.
-  - **Docker Compose, Staging & Production (Canonical: PostgreSQL 16 + pgvector):** In containerized multi-user environments, ADAM runs on `pgvector/pgvector:pg16` (`postgresql+psycopg://adam:change-me@postgres:5432/adam` configured via `DATABASE_URL`). PostgreSQL serves relational records, ACID transactions across concurrent workers, and vector similarity search without requiring an external vector database.
+  - **Docker Compose, Staging & Production (Canonical: PostgreSQL 16 + pgvector):** In containerized multi-user environments, ADAM runs on `pgvector/pgvector:pg16` (`postgresql+psycopg://adam:change-me@postgres:5432/adam` configured via `DATABASE_URL`). PostgreSQL serves relational records, ACID transactions across concurrent workers, and native pgvector vector similarity search with HNSW indexing without requiring an external vector database.
 - **ORM/driver:** SQLAlchemy 2.0 with `sqlite3` for local dev/testing and `psycopg3` (binary) for PostgreSQL.
-- **Retrieval:** hybrid search combining full-text/BM25 with pgvector similarity (or keyword/lexical ranking under SQLite), filtered by department and clearance-level ACLs *before* ranking. ADAM's native Reciprocal Rank Fusion (RRF) achieves 97.33% citation precision and 100% Recall@10 natively on the 215-question gold set, matching heavier neural rerankers (e.g. FlashRank) without adding external dependency overhead (see [Empirical RAG Benchmark & Pilot Gate Scorecard](#empirical-rag-benchmark--pilot-gate-scorecard)).
-- **Original document storage:** a local filesystem backend by default (`STORAGE_DIR`), built to swap to an S3-compatible backend for production without changing calling code.
+- **Retrieval:** hybrid search combining full-text/BM25 with native pgvector similarity (or keyword/lexical ranking under SQLite), filtered by department and clearance-level ACLs *before* ranking. Candidate retrieval pushes ACL predicates and HNSW distance calculation directly to the database. ADAM's native Reciprocal Rank Fusion (RRF) with heuristic boosting achieves 97.33% citation precision and 100% Recall@10 natively on the 215-question gold set, matching heavier neural rerankers (e.g. FlashRank) without adding external dependency overhead (see [Empirical RAG Benchmark & Pilot Gate Scorecard](#empirical-rag-benchmark--pilot-gate-scorecard)).
+- **Original document storage:** a local filesystem backend by default (`STORAGE_DIR`, `LocalStorageBackend`), architected to support S3-compatible object storage backends for production deployments.
 
 ### Model & agent layer
 
@@ -68,6 +68,7 @@ ADAM is a platform for turning approved Uttarakhand public records into a connec
 ### Security & governance
 
 - Role/clearance-based access control (`X-User-Role`, `X-Clearance-Level` request headers) enforced at the retrieval layer, not just the UI
+- Production secrets enforcement: `ADAM_ENV=production` refuses startup if `SIGNING_SECRET` or database passwords match default development placeholders
 - Document-embedded prompt-injection detection and quarantining before content reaches the model
 - Upload validation: magic-byte/format checks, executable (PE/ELF) rejection, suspicious embedded-PDF-action detection
 - XSS detection and sanitization on both ingested and generated content
@@ -75,6 +76,7 @@ ADAM is a platform for turning approved Uttarakhand public records into a connec
 - Signed, tamper-evident audit manifests over the document inventory
 - "Stealth" 404s — unauthorized requests get a not-found response rather than a message revealing that a restricted resource exists
 - Session memory encrypted at rest, isolated per user, with TTL-based expiry and audited purge/delete
+- Hosted cloud voice strictly opt-in via `ADAM_ALLOW_HOSTED_VOICE=true` to guarantee local-first and air-gapped sovereignty by default
 
 ### Testing
 
@@ -323,7 +325,7 @@ This architecture allows plugging an external OpenTelemetry or Langfuse exporter
 
 ## Empirical RAG Benchmark & Pilot Gate Scorecard
 
-ADAM's retrieval and reasoning architecture is quantitatively verified against a **215-question gold evaluation dataset** (`adam/rag/gold_set.py` & `adam/rag/evaluation.py`) spanning 5 Uttarakhand State Government departments across both Hindi (Devanagari) and English.
+> **Benchmark Provenance & Synthetic Smoke Test Notice:** This benchmark suite is a **synthetic smoke test over 10 documents** (12 pages total, defined in `adam/rag/gold_set.py`) evaluated across a **215-question gold evaluation dataset** (`adam/rag/evaluation.py`) spanning 5 Uttarakhand State Government departments across both Hindi (Devanagari) and English. It exercises end-to-end pipeline invariants, citation precision, ACL segregation, and refusal behavior on canonical test patterns. As a synthetic smoke test, it establishes baseline correctness but is not representative of large-scale, heterogeneous production archives. Production scaling with real held-out government orders is tracked under Phase 3.
 
 All acceptance criteria and pilot gates were evaluated across known-answer, amendment, conflicting document, ungrounded/no-answer, and access-control (ACL) queries:
 

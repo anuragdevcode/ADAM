@@ -382,7 +382,7 @@ def test_api_audit_metrics_aggregation(populated_trail_db):
     populated_trail_db.add(audit2)
     populated_trail_db.commit()
 
-    resp = client.get("/api/audit/metrics?limit=10")
+    resp = client.get("/api/audit/metrics?limit=10", headers={"X-User-Role": "ADMIN"})
     assert resp.status_code == 200
     metrics = resp.json()
 

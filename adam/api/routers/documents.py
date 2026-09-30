@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from adam.api.deps import get_db, get_user_context
+from adam.api.deps import get_db, get_user_context, require_roles
 from adam.db.models import (
     Document,
     DocumentAttribute,
@@ -235,9 +235,17 @@ async def upload_document(
     classification: str = Form(default=Classification.PUBLIC.value),
     go_number: Optional[str] = Form(default=None),
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(get_user_context),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "OFFICER", "RECORDS_OFFICER")),
 ) -> Dict[str, Any]:
     """Upload and validate an official government order or circular PDF."""
+    # Clearance ceiling gate: caller cannot upload records exceeding their own clearance
+    allowed_classifications = get_allowed_classifications(user_ctx.clearance_level, user_ctx.is_admin())
+    if classification not in allowed_classifications:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Classification '{classification}' exceeds user clearance ceiling '{user_ctx.clearance_level}'.",
+        )
+
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
