@@ -84,6 +84,9 @@ class ToolCapabilitySnapshot:
     allowed_tools: List[Dict[str, Any]] = field(default_factory=list)
     forbidden_tools: List[str] = field(default_factory=list)
     guardrail_invariants: List[str] = field(default_factory=list)
+    capabilities: List[Dict[str, Any]] = field(default_factory=list)
+    mcp_tools_count: int = 0
+    specialist_agents: List[str] = field(default_factory=list)
 
     @property
     def forbidden_capabilities(self) -> List[str]:
@@ -199,6 +202,9 @@ class SystemSnapshot:
                 "allowed_tools": self.tool_capabilities.allowed_tools,
                 "forbidden_tools": self.tool_capabilities.forbidden_tools,
                 "guardrail_invariants": self.tool_capabilities.guardrail_invariants,
+                "capabilities": self.tool_capabilities.capabilities,
+                "mcp_tools_count": self.tool_capabilities.mcp_tools_count,
+                "specialist_agents": self.tool_capabilities.specialist_agents,
             },
             "data_sources": {
                 "total_sources": self.data_sources.total_sources,
@@ -232,6 +238,10 @@ class SystemSnapshot:
                 "timestamp": self.last_execution.timestamp,
             } if self.last_execution else None,
         }
+
+    def to_ground_truth_context(self, subtopic: Optional[str] = None) -> str:
+        """Format snapshot into authoritative ground-truth context for prompts or resources."""
+        return SystemIntrospectionService.format_snapshot_for_prompt(self, subtopic=subtopic)
 
 
 class SystemIntrospectionService:
@@ -357,10 +367,23 @@ class SystemIntrospectionService:
             }
             for t in allowed_tool_defs
         ]
+        from adam.capabilities.registry import CapabilityRegistry
+        cap_manifests = CapabilityRegistry.list_capabilities(user_context=user_context, filter_unavailable=False)
+        mcp_tools = CapabilityRegistry.get_mcp_tools_manifest(user_context=user_context)
+        specialists = [
+            "precedent_graph_specialist",
+            "quantitative_analysis_specialist",
+            "web_research_specialist",
+            "compliance_audit_specialist",
+        ]
+
         tool_snap = ToolCapabilitySnapshot(
             allowed_tools=clean_tool_defs,
             forbidden_tools=sorted(list(ReadOnlyToolRegistry.FORBIDDEN_TOOLS)),
             guardrail_invariants=cls.GUARDRAIL_INVARIANTS,
+            capabilities=cap_manifests,
+            mcp_tools_count=len(mcp_tools),
+            specialist_agents=specialists,
         )
 
         # 5. Data Sources Catalog

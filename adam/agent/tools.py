@@ -161,6 +161,9 @@ class ReadOnlyToolRegistry:
         AgentToolName.COMPARE_SOURCES.value,
         AgentToolName.WEB_SEARCH.value,
         AgentToolName.FETCH_WEB_PAGE.value,
+        "traverse_precedent_dag",
+        "trace_claim_provenance",
+        "a2a_dispatch",
     }
 
     FORBIDDEN_TOOLS = {
@@ -549,8 +552,26 @@ class ReadOnlyToolRegistry:
             return cls._execute_web_search(validated_args, user_context, session)
         elif normalized_name == AgentToolName.FETCH_WEB_PAGE.value:
             return cls._execute_fetch_web_page(validated_args, user_context, session)
+        elif normalized_name == "traverse_precedent_dag":
+            from adam.capabilities.registry import CapabilityRegistry
+            inv_res = CapabilityRegistry.invoke("traverse_precedent_dag", validated_args, user_context, session)
+            return inv_res.value
+        elif normalized_name == "trace_claim_provenance":
+            from adam.capabilities.registry import CapabilityRegistry
+            inv_res = CapabilityRegistry.invoke("trace_claim_provenance", validated_args, user_context, session)
+            return inv_res.value
+        elif normalized_name == "a2a_dispatch":
+            from adam.capabilities.registry import CapabilityRegistry
+            inv_res = CapabilityRegistry.invoke("a2a_dispatch", validated_args, user_context, session)
+            return inv_res.value
 
         raise ForbiddenToolError(f"Unsupported tool '{tool_name}'.")
+
+    @classmethod
+    def get_capability_registry(cls):
+        """Return the backing typed CapabilityRegistry."""
+        from adam.capabilities.registry import CapabilityRegistry
+        return CapabilityRegistry
 
     @classmethod
     def _execute_search(

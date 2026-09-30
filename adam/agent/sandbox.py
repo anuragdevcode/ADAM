@@ -147,6 +147,11 @@ def _subprocess_sandbox_worker(
             exec(compiled, exec_globals)
 
         result_val = exec_globals.get("__result_val__")
+        if result_val is None:
+            for candidate in ("result", "res", "ans", "total", "output", "val", "value"):
+                if candidate in exec_globals and not candidate.startswith("_"):
+                    result_val = exec_globals[candidate]
+                    break
         output = stdout_buffer.getvalue()[:max_output_chars]
         result_queue.put({
             "success": True,
@@ -291,7 +296,13 @@ class SecurePythonSandbox:
             try:
                 with contextlib.redirect_stdout(stdout_buffer):
                     exec(compiled_code, exec_globals)
-                    captured_value_holder["__result_val__"] = exec_globals.get("__result_val__")
+                    val = exec_globals.get("__result_val__")
+                    if val is None:
+                        for candidate in ("result", "res", "ans", "total", "output", "val", "value"):
+                            if candidate in exec_globals and not candidate.startswith("_"):
+                                val = exec_globals[candidate]
+                                break
+                    captured_value_holder["__result_val__"] = val
             except Exception as e:
                 exec_error = e
             finally:

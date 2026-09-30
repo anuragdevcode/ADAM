@@ -74,6 +74,7 @@ class AgentExecutionPlan:
     plan_summary: str
     steps: List[PlanStep] = field(default_factory=list)
     is_direct_lookup: bool = False
+    capabilities_matched: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -81,6 +82,7 @@ class AgentExecutionPlan:
             "complexity": str(self.complexity.value if hasattr(self.complexity, "value") else self.complexity),
             "plan_summary": self.plan_summary,
             "is_direct_lookup": self.is_direct_lookup,
+            "capabilities_matched": self.capabilities_matched,
             "total_steps": len(self.steps),
             "steps": [s.to_dict() for s in self.steps],
         }
@@ -176,7 +178,24 @@ class AgenticPlanner:
         user_context: Optional[UserContext] = None,
         department_id: Optional[str] = None,
     ) -> AgentExecutionPlan:
-        """Construct a high-level, bounded execution plan based on problem classification."""
+        """Construct a high-level, bounded execution plan based on problem classification and capabilities."""
+        plan = cls._create_plan_internal(query, user_context, department_id)
+        from adam.capabilities.registry import CapabilityRegistry
+        from adam.capabilities.router import CapabilityRouter
+        plan.capabilities_matched = CapabilityRouter.select_capabilities_for_query(
+            query=query,
+            user_context=user_context,
+            registry=CapabilityRegistry,
+        )
+        return plan
+
+    @classmethod
+    def _create_plan_internal(
+        cls,
+        query: str,
+        user_context: Optional[UserContext] = None,
+        department_id: Optional[str] = None,
+    ) -> AgentExecutionPlan:
         complexity = cls.classify_complexity(query)
 
         # Case 1: Direct Lookup (Fast Path)

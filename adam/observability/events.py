@@ -59,6 +59,16 @@ class OperationalEventType(str, Enum):
     STEP_STARTED = "step.started"
     STEP_COMPLETED = "step.completed"
 
+    # Capability Fabric & Standards
+    CAPABILITY_DISCOVERED = "capability.discovered"
+    CAPABILITY_SELECTED = "capability.selected"
+    CAPABILITY_INVOKED = "capability.invoked"
+    CAPABILITY_VERIFIED = "capability.verified"
+    CAPABILITY_EVIDENCE_CONVERGED = "capability.evidence_converged"
+    A2A_TASK_DISPATCHED = "a2a.task_dispatched"
+    A2A_TASK_RESOLVED = "a2a.task_resolved"
+    MCP_TOOL_INVOKED = "mcp.tool_invoked"
+
     # Terminal Lifecycle
     EXECUTION_COMPLETED = "execution.completed"
     EXECUTION_FAILED = "execution.failed"

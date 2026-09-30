@@ -684,3 +684,133 @@ def reset_advanced_settings(
     manager = AdvancedSettingsManager(db, user_id=user_id)
     default = manager.reset()
     return {"reset": True, "settings": default.to_dict()}
+
+
+# ── Capability Fabric & MCP Endpoints ──────────────────────────────────────────
+
+@router.get("/system/capabilities")
+def get_capabilities(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+    x_user_role: Optional[str] = Header("PUBLIC"),
+    x_clearance_level: Optional[str] = Header(None),
+    x_department_id: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """Return all registered capabilities filtered by caller clearance and role."""
+    from adam.capabilities.registry import CapabilityRegistry
+    from adam.rag.models import UserContext
+
+    user_ctx = UserContext(
+        user_id=x_user_id or "anonymous",
+        roles=[x_user_role] if x_user_role else ["PUBLIC"],
+        clearance_level=x_clearance_level or Classification.PUBLIC.value,
+        department_id=x_department_id,
+    )
+    caps = CapabilityRegistry.list_capabilities(user_context=user_ctx, filter_unavailable=True)
+    return {
+        "user_clearance": user_ctx.clearance_level,
+        "total_available": len(caps),
+        "capabilities": caps,
+    }
+
+
+@router.get("/system/capabilities/{capability_id}")
+def get_capability_detail(
+    capability_id: str,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+    x_clearance_level: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """Return comprehensive typed descriptor for a capability."""
+    from adam.capabilities.registry import CapabilityRegistry
+    from adam.rag.models import UserContext
+
+    user_ctx = UserContext(
+        user_id=x_user_id or "anonymous",
+        clearance_level=x_clearance_level or Classification.PUBLIC.value,
+    )
+    cap = CapabilityRegistry.get(capability_id)
+    if not cap:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail={"error": "capability_not_found"})
+
+    manifest = cap.to_manifest_dict()
+    from adam.capabilities.governance import CapabilityGovernanceEngine
+    allowed_clr, _ = CapabilityGovernanceEngine.evaluate_clearance(cap, user_ctx)
+    allowed_airgap, _ = CapabilityGovernanceEngine.evaluate_air_gapped_policy(cap, user_ctx)
+    manifest["is_accessible"] = allowed_clr and allowed_airgap
+    return manifest
+
+
+class McpCallRequest(BaseModel):
+    name: str
+    arguments: Dict[str, Any] = {}
+
+
+@router.post("/system/mcp/call")
+def call_mcp_tool(
+    req: McpCallRequest,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+    x_user_role: Optional[str] = Header("PUBLIC"),
+    x_clearance_level: Optional[str] = Header(None),
+    x_department_id: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """Execute a registered capability via standard MCP tools/call gateway."""
+    from adam.capabilities.mcp import AdamMcpServer
+    from adam.capabilities.registry import CapabilityRegistry
+    from adam.rag.models import UserContext
+
+    user_ctx = UserContext(
+        user_id=x_user_id or "anonymous",
+        roles=[x_user_role] if x_user_role else ["PUBLIC"],
+        clearance_level=x_clearance_level or Classification.PUBLIC.value,
+        department_id=x_department_id,
+    )
+    server = AdamMcpServer(registry=CapabilityRegistry)
+    return server.call_tool(
+        name=req.name,
+        arguments=req.arguments,
+        user_context=user_ctx,
+        db_session=db,
+    )
+
+
+@router.get("/system/mcp/tools")
+def get_mcp_tools(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+    x_user_role: Optional[str] = Header("PUBLIC"),
+    x_clearance_level: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """List all authorized capabilities in standard Model Context Protocol (MCP) format."""
+    from adam.capabilities.mcp import AdamMcpServer
+    from adam.capabilities.registry import CapabilityRegistry
+    from adam.rag.models import UserContext
+
+    user_ctx = UserContext(
+        user_id=x_user_id or "anonymous",
+        roles=[x_user_role] if x_user_role else ["PUBLIC"],
+        clearance_level=x_clearance_level or Classification.PUBLIC.value,
+    )
+    server = AdamMcpServer(registry=CapabilityRegistry)
+    return server.list_tools(user_context=user_ctx)
+
+
+@router.get("/system/mcp/resources")
+def get_mcp_resources(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header("anonymous"),
+    x_clearance_level: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    """List accessible document collections and resources in standard MCP format."""
+    from adam.capabilities.mcp import AdamMcpServer
+    from adam.capabilities.registry import CapabilityRegistry
+    from adam.rag.models import UserContext
+
+    user_ctx = UserContext(
+        user_id=x_user_id or "anonymous",
+        clearance_level=x_clearance_level or Classification.PUBLIC.value,
+    )
+    server = AdamMcpServer(registry=CapabilityRegistry)
+    return server.list_resources(user_context=user_ctx, db_session=db)

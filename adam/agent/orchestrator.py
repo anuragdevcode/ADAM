@@ -24,6 +24,11 @@ from adam.agent.redaction import SecretRedactor
 from adam.agent.sandbox import SecurePythonSandbox
 from adam.agent.subagents import SubagentCoordinator, SubagentResult
 from adam.agent.tools import ReadOnlyToolRegistry
+from adam.capabilities import (
+    CapabilityRegistry,
+    EvidenceStoppingEvaluator,
+    CapabilityRouter,
+)
 from adam.harness.templates import PromptTemplateRegistry
 from adam.prompts import (
     FewShotCatalog,
@@ -511,6 +516,62 @@ class AgenticOrchestrator:
                 )
                 step.status = StepStatus.VERIFIED if verify_res.get("is_supported") else StepStatus.COMPLETED
                 step.result_summary = "Claims verified against retrieved corpus." if verify_res.get("is_supported") else "Partial support in corpus."
+
+            # ── 10. Deep Precedent DAG Traversal ─────────────────────────
+            elif step.action_type in ("precedent_dag", "traverse_precedent_dag"):
+                order_num = step.tool_args.get("order_number") or plan.query
+                cap_res = CapabilityRegistry.invoke(
+                    capability_id="traverse_precedent_dag",
+                    arguments={"order_number": order_num, "max_hops": 3},
+                    user_context=user_context,
+                    session=self.session,
+                )
+                step.status = StepStatus.VERIFIED if cap_res.status.value == "SUCCESS" else StepStatus.COMPLETED
+                step.result_summary = f"Precedent DAG traversed for '{order_num}'."
+                tool_call_records.append({
+                    "tool": "traverse_precedent_dag",
+                    "step_id": step.step_id,
+                    "result": cap_res.value,
+                })
+
+            # ── 11. A2A Specialist Delegation ────────────────────────────
+            elif step.action_type in ("a2a", "a2a_dispatch"):
+                spec_id = step.tool_args.get("specialist_agent_id", "web_research")
+                cap_res = CapabilityRegistry.invoke(
+                    capability_id="a2a_dispatch",
+                    arguments={
+                        "specialist_agent_id": spec_id,
+                        "objective": step.description or plan.query,
+                        "input_artifacts": step.tool_args,
+                    },
+                    user_context=user_context,
+                    session=self.session,
+                )
+                step.status = StepStatus.VERIFIED if cap_res.status.value == "SUCCESS" else StepStatus.COMPLETED
+                step.result_summary = f"A2A specialist '{spec_id}' executed."
+                tool_call_records.append({
+                    "tool": "a2a_dispatch",
+                    "step_id": step.step_id,
+                    "specialist": spec_id,
+                    "result": cap_res.value,
+                })
+
+            # Evaluate Real-Time Evidence Stopping Criterion
+            stop_assess = EvidenceStoppingEvaluator.evaluate(
+                query=plan.query,
+                accumulated_passages=accumulated_passages,
+                verified_calculations=verified_calculations,
+            )
+            if stop_assess.can_stop:
+                local_evidence_sufficient = True
+                if self.emitter:
+                    self.emitter.emit(
+                        OperationalEventType.CAPABILITY_EVIDENCE_CONVERGED,
+                        stage="execution",
+                        status="completed",
+                        message=f"Evidence converged: {stop_assess.reason}",
+                        data={"confidence": stop_assess.confidence, "reason": stop_assess.reason},
+                    )
 
             if self.emitter:
                 self.emitter.emit(

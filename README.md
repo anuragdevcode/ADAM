@@ -295,6 +295,14 @@ ADAM incorporates a minimal, security-hardened operational transparency layer pr
 | `plan.created` | `query` | `completed` | Dynamic problem execution plan created | `step_id`, `title`, `plan_summary`, `total_steps` |
 | `step.started` | `execution` | `running` | Agent reasoning step started | `step_id`, `action`, `tool_name` |
 | `step.completed` | `execution` | `completed` | Agent reasoning step completed | `step_id`, `status`, `summary` |
+| `capability.discovered` | `execution` | `completed` | Capability fabric matched capabilities for query | `capability_ids` |
+| `capability.selected` | `execution` | `completed` | Capability selected for invocation by router | `capability_id`, `score` |
+| `capability.invoked` | `execution` | `running` | Capability invocation dispatched | `capability_id`, `arguments` |
+| `capability.verified` | `execution` | `completed` | Capability result verified against evidence | `capability_id`, `status` |
+| `capability.evidence_converged` | `execution` | `completed` | Evidence stopping criterion satisfied; further steps skipped | `confidence`, `reason` |
+| `a2a.task_dispatched` | `execution` | `running` | A2A specialist agent task dispatched | `specialist_agent_id`, `objective` |
+| `a2a.task_resolved` | `execution` | `completed` | A2A specialist task completed and result returned | `specialist_agent_id`, `status` |
+| `mcp.tool_invoked` | `execution` | `running` | MCP JSON-RPC tool invocation made | `tool_name`, `params` |
 
 ### Security & Sanitization Boundary
 
