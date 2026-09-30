@@ -82,9 +82,12 @@ def p0_engine():
 
 @pytest.fixture
 def p0_client(p0_engine):
+    from adam.api.middleware import global_rate_limiter
+    global_rate_limiter.reset()
     app = create_app()
 
     def override_db():
+
         factory = sessionmaker(bind=p0_engine, autoflush=False, expire_on_commit=False)
         db = factory()
         try:
@@ -182,6 +185,17 @@ def test_mutating_routes_reject_unauthenticated_callers(p0_client):
     assert resp.status_code == 403
 
 
+def _auth(user_id="test_user", role="ADMIN", clearance="PUBLIC"):
+    from adam.auth.security import create_access_token
+    token = create_access_token({
+        "sub": user_id,
+        "username": user_id,
+        "roles": [role],
+        "clearance_level": clearance,
+    })
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_authorized_caller_can_access_protected_routes(p0_client):
     """Callers with appropriate role headers can access protected routes."""
     # ADMIN accessing /api/metrics
@@ -189,17 +203,18 @@ def test_authorized_caller_can_access_protected_routes(p0_client):
     assert resp.status_code == 200
     assert "adam_info" in resp.text
 
+
     # OFFICER accessing /api/sources/seed
-    resp = p0_client.post("/api/sources/seed", headers={"X-User-Role": "OFFICER"})
+    resp = p0_client.post("/api/sources/seed", headers=_auth("officer", "OFFICER"))
     assert resp.status_code == 200
     assert resp.json()["success"] is True
 
     # AUDITOR accessing /api/audit/metrics
-    resp = p0_client.get("/api/audit/metrics", headers={"X-User-Role": "AUDITOR"})
+    resp = p0_client.get("/api/audit/metrics", headers=_auth("auditor", "AUDITOR"))
     assert resp.status_code == 200
 
     # REVIEWER accessing /api/review/pages
-    resp = p0_client.get("/api/review/pages", headers={"X-User-Role": "REVIEWER"})
+    resp = p0_client.get("/api/review/pages", headers=_auth("reviewer", "REVIEWER"))
     assert resp.status_code == 200
 
 
@@ -210,7 +225,7 @@ def test_document_upload_classification_ceiling(p0_client):
         "/api/documents/upload",
         data={"title": "Leaked Secret", "classification": "CONFIDENTIAL"},
         files={"file": ("secret.pdf", b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF", "application/pdf")},
-        headers={"X-User-Role": "OFFICER", "X-Clearance-Level": "RESTRICTED"},
+        headers=_auth("officer", "OFFICER", clearance="RESTRICTED"),
     )
     assert resp.status_code == 403
     assert "exceeds user clearance ceiling" in _get_error_msg(resp)
@@ -244,7 +259,7 @@ def test_session_idor_prevention(p0_client, p0_engine):
     assert "Cannot list sessions for another user" in _get_error_msg(resp_idor)
 
     # Admin CAN view Bob's sessions
-    resp_admin = p0_client.get("/api/sessions?user_id=bob", headers={"X-User-Id": "admin", "X-User-Role": "ADMIN"})
+    resp_admin = p0_client.get("/api/sessions?user_id=bob", headers=_auth("admin", "ADMIN"))
     assert resp_admin.status_code == 200
     admin_session_ids = [s["session_id"] for s in resp_admin.json()]
     assert "sess_bob_01" in admin_session_ids
@@ -252,6 +267,7 @@ def test_session_idor_prevention(p0_client, p0_engine):
     # Alice attempts to access Bob's session history directly
     resp_hist_idor = p0_client.get("/api/sessions/sess_bob_01/history", headers={"X-User-Id": "alice"})
     assert resp_hist_idor.status_code == 403
+
 
     # Alice attempts to delete Bob's session
     resp_del_idor = p0_client.delete("/api/sessions/sess_bob_01", headers={"X-User-Id": "alice"})
@@ -445,6 +461,8 @@ def test_audit_benchmark_reference_endpoint(p0_client):
     """Audit reference endpoint returns benchmark metadata marking it as a synthetic smoke test."""
     resp = p0_client.get("/api/audit/benchmark/reference", headers={"X-User-Role": "ADMIN"})
     assert resp.status_code == 200
+
+
     data = resp.json()
     assert data["benchmark_type"] == "synthetic_smoke_test_10_docs"
     assert data["corpus_document_count"] == 10

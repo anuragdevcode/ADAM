@@ -1,60 +1,80 @@
-"""Authenticated encryption engine for conversation memory at rest.
+"""Authenticated encryption engine for conversation memory at rest using standard AES-256-GCM.
 
-Provides field-level encryption for conversational turns, session summaries,
-and user preferences using standard-library cryptography (SHA-256 CTR keystream
-with HMAC-SHA256 Encrypt-then-MAC). Zero external C-dependencies required.
+Provides field-level authenticated encryption for conversational turns, session summaries,
+and user preferences using standard AES-GCM (via the `cryptography` library).
+Supports key versioning and key separation via MEMORY_ENCRYPTION_KEY.
 """
 
 import base64
 import hashlib
-import hmac
 import json
 import os
 import secrets
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
-from adam.config import SIGNING_SECRET
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from adam.config import get_memory_encryption_key, get_signing_secret
 
 
 class MemoryCryptoError(Exception):
-    """Raised when encryption or decryption fails (e.g., tampering, corrupt ciphertext)."""
+    """Raised when encryption or decryption fails (e.g., tampering, corrupt ciphertext, invalid key)."""
     pass
 
 
 class AuthenticatedCipher:
-    """Authenticated field-level cipher using Encrypt-then-MAC.
+    """Authenticated field-level cipher using standard AES-256-GCM with key versioning.
 
     Format of encrypted token:
-        Base64( IV [16 bytes] + HMAC_TAG [32 bytes] + CIPHERTEXT [N bytes] )
+        Base64( VERSION [1 byte] + NONCE [12 bytes] + CIPHERTEXT_AND_TAG [N + 16 bytes] )
     """
 
-    def __init__(self, key: Optional[bytes] = None):
-        raw_key = key or os.environ.get("MEMORY_ENCRYPTION_KEY", SIGNING_SECRET).encode("utf-8")
-        # Derive separate 16-byte encryption key and 16-byte MAC key
-        derived = hashlib.sha256(raw_key).digest()
-        self._enc_key = derived[:16]
-        self._mac_key = derived[16:]
+    CURRENT_VERSION = 1
 
-    def encrypt(self, plaintext: str) -> str:
-        """Encrypt plaintext string into base64 authenticated ciphertext token."""
+    def __init__(
+        self,
+        key: Optional[bytes] = None,
+        key_ring: Optional[Dict[int, bytes]] = None,
+        active_version: int = CURRENT_VERSION,
+    ):
+        self.active_version = active_version
+        self._key_ring: Dict[int, bytes] = {}
+
+        if key_ring:
+            for v, k in key_ring.items():
+                self._key_ring[v] = self._normalize_key(k)
+        elif key:
+            self._key_ring[self.active_version] = self._normalize_key(key)
+        else:
+            default_key = get_memory_encryption_key().encode("utf-8")
+            self._key_ring[self.active_version] = self._normalize_key(default_key)
+
+    @staticmethod
+    def _normalize_key(key: bytes) -> bytes:
+        """Ensure key is exactly 32 bytes (256 bits) for AES-256-GCM."""
+        if len(key) == 32:
+            return key
+        return hashlib.sha256(b"ADAM-AES256-MEMORY-KEY:" + key).digest()
+
+    def encrypt(self, plaintext: str, version: Optional[int] = None) -> str:
+        """Encrypt plaintext string into base64 authenticated ciphertext token using AES-GCM."""
         if not isinstance(plaintext, str):
             raise TypeError("Plaintext must be a string")
 
+        target_version = version or self.active_version
+        key = self._key_ring.get(target_version)
+        if not key:
+            raise MemoryCryptoError(f"No key available for encryption version {target_version}")
+
         data = plaintext.encode("utf-8")
-        iv = secrets.token_bytes(16)
+        nonce = secrets.token_bytes(12)  # Standard 96-bit nonce for AES-GCM
+        aesgcm = AESGCM(key)
+        ciphertext_and_tag = aesgcm.encrypt(nonce, data, None)
 
-        # Keystream via SHA-256 CTR mode
-        keystream = b""
-        counter = 0
-        while len(keystream) < len(data):
-            keystream += hashlib.sha256(self._enc_key + iv + counter.to_bytes(4, "big")).digest()
-            counter += 1
-
-        ciphertext = bytes(a ^ b for a, b in zip(data, keystream[:len(data)]))
-        # Encrypt-then-MAC: authenticate both IV and ciphertext
-        tag = hmac.new(self._mac_key, iv + ciphertext, hashlib.sha256).digest()
-
-        return base64.b64encode(iv + tag + ciphertext).decode("ascii")
+        version_byte = bytes([target_version & 0xFF])
+        raw = version_byte + nonce + ciphertext_and_tag
+        return base64.b64encode(raw).decode("ascii")
 
     def decrypt(self, token: str) -> str:
         """Decrypt base64 token and verify integrity. Raises MemoryCryptoError on tampering."""
@@ -66,34 +86,78 @@ class AuthenticatedCipher:
         except Exception as e:
             raise MemoryCryptoError(f"Invalid base64 encoding: {e}") from e
 
-        if len(raw) < 48:  # 16 bytes IV + 32 bytes HMAC tag
+        # 1 byte version + 12 bytes nonce + 16 bytes minimum AES-GCM tag = 29 bytes
+        if len(raw) < 29:
             raise MemoryCryptoError("Ciphertext payload is truncated or invalid")
 
+        version = raw[0]
+        nonce = raw[1:13]
+        ciphertext_and_tag = raw[13:]
+
+        key = self._key_ring.get(version)
+        if not key:
+            # Check for legacy token format migration
+            try:
+                return self._decrypt_legacy(raw)
+            except Exception:
+                raise MemoryCryptoError(f"Unknown key version: {version}")
+
+        aesgcm = AESGCM(key)
+        try:
+            decrypted = aesgcm.decrypt(nonce, ciphertext_and_tag, None)
+        except InvalidTag as e:
+            raise MemoryCryptoError("Integrity check failed: ciphertext has been modified or wrong key") from e
+        except Exception as e:
+            raise MemoryCryptoError(f"Decryption failed: {e}") from e
+
+        try:
+            return decrypted.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise MemoryCryptoError(f"Decoded data is not valid UTF-8: {e}") from e
+
+    def _decrypt_legacy(self, raw: bytes) -> str:
+        """Decrypt legacy SHA-256 CTR + HMAC token to allow seamless migration to AES-GCM."""
+        import hmac
+        if len(raw) < 48:
+            raise MemoryCryptoError("Ciphertext payload is truncated")
         iv = raw[:16]
         tag = raw[16:48]
         ciphertext = raw[48:]
 
-        # Verify HMAC tag in constant time
-        expected_tag = hmac.new(self._mac_key, iv + ciphertext, hashlib.sha256).digest()
-        if not hmac.compare_digest(tag, expected_tag):
-            raise MemoryCryptoError("Integrity check failed: ciphertext has been modified or wrong key")
+        keys_to_try = [
+            get_memory_encryption_key().encode("utf-8"),
+            get_signing_secret().encode("utf-8"),
+            b"adam-uk-gov-default-auth-secret-key-2026",
+            b"adam-uk-gov-default-memory-encryption-key-2026",
+        ]
+        for k in self._key_ring.values():
+            keys_to_try.append(k)
 
-        # Regenerate keystream
-        keystream = b""
-        counter = 0
-        while len(keystream) < len(ciphertext):
-            keystream += hashlib.sha256(self._enc_key + iv + counter.to_bytes(4, "big")).digest()
-            counter += 1
+        for raw_k in keys_to_try:
+            derived = hashlib.sha256(raw_k).digest()
+            enc_key = derived[:16]
+            mac_key = derived[16:]
+            expected_tag = hmac.new(mac_key, iv + ciphertext, hashlib.sha256).digest()
+            if hmac.compare_digest(tag, expected_tag):
+                keystream = b""
+                counter = 0
+                while len(keystream) < len(ciphertext):
+                    keystream += hashlib.sha256(enc_key + iv + counter.to_bytes(4, "big")).digest()
+                    counter += 1
+                data = bytes(a ^ b for a, b in zip(ciphertext, keystream[:len(ciphertext)]))
+                return data.decode("utf-8")
 
-        data = bytes(a ^ b for a, b in zip(ciphertext, keystream[:len(ciphertext)]))
-        try:
-            return data.decode("utf-8")
-        except UnicodeDecodeError as e:
-            raise MemoryCryptoError(f"Decoded data is not valid UTF-8: {e}") from e
+        raise MemoryCryptoError("Legacy ciphertext integrity check failed")
 
-    def encrypt_json(self, data: Any) -> str:
+
+    def reencrypt(self, token: str, target_version: Optional[int] = None) -> str:
+        """Decrypt token using its version key and re-encrypt under target_version (or active_version)."""
+        plaintext = self.decrypt(token)
+        return self.encrypt(plaintext, version=target_version)
+
+    def encrypt_json(self, data: Any, version: Optional[int] = None) -> str:
         """Serialize data to JSON and encrypt."""
-        return self.encrypt(json.dumps(data, ensure_ascii=False))
+        return self.encrypt(json.dumps(data, ensure_ascii=False), version=version)
 
     def decrypt_json(self, token: str) -> Any:
         """Decrypt token and parse as JSON."""

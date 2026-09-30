@@ -59,3 +59,35 @@ def test_truncated_token_rejection():
     cipher = AuthenticatedCipher(b"test-secret-key-1234567890")
     with pytest.raises(MemoryCryptoError):
         cipher.decrypt("dHJ1bmNhdGVk")  # "truncated" in base64 (too short)
+
+
+def test_key_versioning_and_reencryption():
+    """Verify multi-key ring, version-tagged tokens, and seamless re-encryption."""
+    key_v1 = b"old-encryption-key-v1-32bytes!!"
+    key_v2 = b"new-encryption-key-v2-32bytes!!"
+
+    # Cipher with only key v1
+    cipher_v1 = AuthenticatedCipher(key=key_v1, active_version=1)
+    secret_text = "Classified administrative directive"
+    token_v1 = cipher_v1.encrypt(secret_text)
+    assert cipher_v1.decrypt(token_v1) == secret_text
+
+    # Cipher with keyring supporting v1 (decrypt) and v2 (encrypt)
+    cipher_keyring = AuthenticatedCipher(
+        key_ring={1: key_v1, 2: key_v2},
+        active_version=2,
+    )
+    # It can decrypt v1 token
+    assert cipher_keyring.decrypt(token_v1) == secret_text
+
+    # Re-encrypt v1 token to v2
+    token_v2 = cipher_keyring.reencrypt(token_v1, target_version=2)
+    assert token_v2 != token_v1
+    assert cipher_keyring.decrypt(token_v2) == secret_text
+
+    # Cipher with only v2 cannot decrypt v1 token
+    cipher_v2_only = AuthenticatedCipher(key=key_v2, active_version=2)
+    assert cipher_v2_only.decrypt(token_v2) == secret_text
+    with pytest.raises(MemoryCryptoError, match="Unknown key version"):
+        cipher_v2_only.decrypt(token_v1)
+

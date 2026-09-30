@@ -120,17 +120,22 @@ export async function streamChat(
   }
 
   try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('adam_token') : null;
+    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
     response = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-User-Id': userId,
-        'X-User-Role': options.userRole || 'OFFICER',
-        'X-Clearance-Level': options.clearanceLevel || 'PUBLIC',
+        ...(options.userRole ? { 'X-User-Role': options.userRole } : {}),
+        ...(options.clearanceLevel ? { 'X-Clearance-Level': options.clearanceLevel } : {}),
         ...(options.departmentId ? { 'X-Department-Id': options.departmentId } : {}),
         ...(geminiKey ? { 'X-Gemini-Api-Key': geminiKey } : {}),
         ...settingsHeaders,
+        ...authHeaders,
       },
+
       body: JSON.stringify({
         query,
         session_id: sessionId,
@@ -863,12 +868,17 @@ export async function fetchSystemIntrospection(
     const params = new URLSearchParams();
     if (sessionId) params.append('session_id', sessionId);
 
+    const token = typeof window !== 'undefined' ? localStorage.getItem('adam_token') : null;
+    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
     const headers: Record<string, string> = {
       'X-User-Id': options.userId || 'anonymous',
-      'X-User-Role': options.userRole || 'PUBLIC',
-      'X-Clearance-Level': options.clearanceLevel || 'PUBLIC',
+      ...(options.userRole ? { 'X-User-Role': options.userRole } : {}),
+      ...(options.clearanceLevel ? { 'X-Clearance-Level': options.clearanceLevel } : {}),
+      ...(options.departmentId ? { 'X-Department-Id': options.departmentId } : {}),
+      ...authHeaders,
     };
-    if (options.departmentId) headers['X-Department-Id'] = options.departmentId;
+
 
     const url = `${API_BASE}/system/introspection${params.toString() ? `?${params.toString()}` : ''}`;
     const resp = await fetch(url, { headers });

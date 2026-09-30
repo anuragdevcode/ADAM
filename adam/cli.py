@@ -1553,6 +1553,46 @@ def delete_preference(user_id: str):
     session.close()
 
 
+@memory_group.command(name="re-encrypt")
+@click.option("--target-version", default=1, type=int, help="Target key version to re-encrypt records into.")
+def reencrypt_memory(target_version: int):
+    """Re-encrypt all stored turns, summaries, and user preferences with target key version."""
+    from adam.memory.crypto import get_cipher
+    from adam.db.models import ChatTurn, SessionSummary, UserPreference
+    session = get_session()
+    cipher = get_cipher()
+
+    turns_count = 0
+    summaries_count = 0
+    prefs_count = 0
+
+    # 1. Chat turns
+    turns = session.query(ChatTurn).all()
+    for t in turns:
+        if t.content_ciphertext:
+            t.content_ciphertext = cipher.reencrypt(t.content_ciphertext, target_version=target_version)
+            turns_count += 1
+
+    # 2. Session summaries
+    summaries = session.query(SessionSummary).all()
+    for s in summaries:
+        if s.summary_ciphertext:
+            s.summary_ciphertext = cipher.reencrypt(s.summary_ciphertext, target_version=target_version)
+            summaries_count += 1
+
+    # 3. User preferences
+    prefs = session.query(UserPreference).all()
+    for p in prefs:
+        if p.preference_ciphertext:
+            p.preference_ciphertext = cipher.reencrypt(p.preference_ciphertext, target_version=target_version)
+            prefs_count += 1
+
+    session.commit()
+    session.close()
+    click.echo(f"Successfully re-encrypted memory records to version {target_version}: {turns_count} turns, {summaries_count} summaries, {prefs_count} preferences.")
+
+
+
 @cli.command(name="serve")
 @click.option("--host", default="0.0.0.0", show_default=True, help="Host to bind the API server.")
 @click.option("--port", default=8000, show_default=True, type=int, help="Port to bind the API server.")
@@ -1807,6 +1847,133 @@ def backup_restore_cmd(archive_path: str, force: bool):
         raise SystemExit(1)
 
 
+@cli.group(name="audit")
+def audit_group():
+    """Cryptographic audit trail inspection and verification (S13)."""
+    pass
+
+
+@audit_group.command(name="verify")
+def verify_audit():
+    """Verify cryptographic hash-chain integrity of the immutable audit log."""
+    from adam.db.models import AuditEvent, compute_audit_event_hash
+    session = get_session()
+    events = session.query(AuditEvent).order_by(AuditEvent.sequence_num.asc()).all()
+
+    if not events:
+        click.echo("Audit log is empty. 0 records to verify.")
+        session.close()
+        return
+
+    expected_prev = "0" * 64
+    for i, event in enumerate(events):
+        seq = event.sequence_num
+        expected_seq = i + 1
+        if seq != expected_seq:
+            click.secho(
+                f"INTEGRITY VIOLATION: Sequence break at record ID {event.id}. "
+                f"Expected sequence {expected_seq}, found {seq}.",
+                fg="red",
+                err=True,
+            )
+            session.close()
+            raise SystemExit(1)
+
+        if event.prev_hash != expected_prev:
+            click.secho(
+                f"INTEGRITY VIOLATION: Broken hash chain at record ID {event.id} (sequence #{seq}). "
+                f"Expected prev_hash {expected_prev}, found {event.prev_hash}.",
+                fg="red",
+                err=True,
+            )
+            session.close()
+            raise SystemExit(1)
+
+        ts_iso = event.timestamp.isoformat() if hasattr(event.timestamp, "isoformat") else str(event.timestamp)
+        recomputed_hash = compute_audit_event_hash(
+            sequence_num=event.sequence_num,
+            timestamp_iso=ts_iso,
+            entity_type=event.entity_type,
+            entity_id=event.entity_id,
+            action=event.action,
+            actor=event.actor,
+            details_json=event.details_json,
+            prev_hash=event.prev_hash,
+        )
+
+        if event.entry_hash != recomputed_hash:
+            click.secho(
+                f"INTEGRITY VIOLATION: Tampered audit record at ID {event.id} (sequence #{seq}). "
+                f"Stored entry_hash {event.entry_hash}, recomputed {recomputed_hash}.",
+                fg="red",
+                err=True,
+            )
+            session.close()
+            raise SystemExit(1)
+
+        expected_prev = event.entry_hash
+
+    click.secho(
+        f"Audit log integrity verified: {len(events)} cryptographically chained records checked. Zero tampering detected.",
+        fg="green",
+        bold=True,
+    )
+    session.close()
+
+
+@cli.group(name="user")
+def user_group():
+    """Manage server-side user identities, roles, and clearance levels (S1)."""
+    pass
+
+
+@user_group.command(name="create")
+@click.option("--username", required=True, help="Unique username")
+@click.option("--password", required=True, help="Account password")
+@click.option("--role", default="OFFICER", help="Role (ADMIN, OFFICER, RECORDS_OFFICER, REVIEWER, AUDITOR, etc.)")
+@click.option("--clearance", default="PUBLIC", help="Clearance level (PUBLIC, INTERNAL, RESTRICTED, CONFIDENTIAL, ADMIN)")
+@click.option("--dept", default="UNKNOWN", help="Department ID")
+@click.option("--full-name", default="", help="Full name")
+def create_user_cmd(username: str, password: str, role: str, clearance: str, dept: str, full_name: str):
+    """Create a new user account with hashed password and server-side roles."""
+    from adam.auth.service import create_user
+    session = get_session()
+    try:
+        user = create_user(
+            session,
+            username=username,
+            password=password,
+            roles=[role],
+            clearance=clearance,
+            department=dept,
+            full_name=full_name,
+        )
+        click.secho(f"User '{user.username}' created successfully (ID: {user.id}, Role: {role}, Clearance: {clearance}).", fg="green")
+    except Exception as e:
+        click.secho(f"Failed to create user: {e}", fg="red", err=True)
+        raise SystemExit(1)
+    finally:
+        session.close()
+
+
+@user_group.command(name="list")
+def list_users_cmd():
+    """List all registered user accounts and clearance levels."""
+    from adam.db.models import User
+    session = get_session()
+    users = session.query(User).order_by(User.created_at.asc()).all()
+    if not users:
+        click.echo("No users registered.")
+    else:
+        click.echo(f"{'Username':<20} {'Roles':<25} {'Clearance':<15} {'Department':<20} {'Active':<8}")
+        click.echo("-" * 90)
+        for u in users:
+            roles_str = ",".join(u.roles)
+            click.echo(f"{u.username:<20} {roles_str:<25} {u.clearance_level:<15} {u.department_id:<20} {str(u.is_active):<8}")
+    session.close()
+
+
 if __name__ == "__main__":
     cli()
+
 

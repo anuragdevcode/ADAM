@@ -1,16 +1,19 @@
 """ADAM API Server — FastAPI application factory."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 
 from adam.api.middleware import TraceIdMiddleware, RateLimitMiddleware
 from adam.api.routers import (
     audit,
+    auth,
     chat,
     documents,
     precedents,
@@ -27,10 +30,30 @@ from adam.api.routers import (
     v1_search,
     v1_feedback,
 )
-from adam.config import DATABASE_URL
-from adam.db.session import get_engine, init_db
+from adam.config import CORS_ORIGINS, DATABASE_URL, SECURITY_HEADERS_ENABLED
+from adam.db.session import get_engine, get_session, init_db
 
 logger = logging.getLogger(__name__)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Enforce defense-in-depth HTTP security headers (CSP, HSTS, frame-busting, nosniff) (S12)."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if SECURITY_HEADERS_ENABLED:
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; object-src 'none'; frame-ancestors 'none';"
+            )
+            env = os.getenv("ADAM_ENV", "development").lower()
+            if env in ("production", "prod"):
+                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
 
 @asynccontextmanager
@@ -38,16 +61,31 @@ async def lifespan(app: FastAPI):
     engine = get_engine(DATABASE_URL)
     init_db(engine)
     logger.info("Database initialized.")
+
+    # Bootstrap initial dev admin if user table is empty
+    from adam.auth.service import seed_default_admin_if_empty
+    db_session = get_session(engine)
+    try:
+        seed_default_admin_if_empty(db_session)
+    finally:
+        db_session.close()
+
     yield
     logger.info("API Server shutdown cleanly.")
 
 
 def create_app() -> FastAPI:
+    env = os.getenv("ADAM_ENV", "development").lower()
+    is_prod = env in ("production", "prod")
+
     _app = FastAPI(
         title="ADAM API",
         version="1.0.0",
         description="Uttarakhand Public Records AI Assistant & Knowledge Engine",
         lifespan=lifespan,
+        docs_url=None if is_prod else "/docs",
+        redoc_url=None if is_prod else "/redoc",
+        openapi_url=None if is_prod else "/openapi.json",
     )
 
     # Global Exception Handlers for Structured Errors
@@ -97,11 +135,12 @@ def create_app() -> FastAPI:
         )
 
     # Middleware Pipeline
+    _app.add_middleware(SecurityHeadersMiddleware)
     _app.add_middleware(RateLimitMiddleware)
     _app.add_middleware(TraceIdMiddleware)
     _app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -113,6 +152,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": "adam-api"}
 
     # /api Routers (Internal & Web UI)
+    _app.include_router(auth.router, prefix="/api")
     _app.include_router(chat.router, prefix="/api")
     _app.include_router(sessions.router, prefix="/api")
     _app.include_router(voice.router, prefix="/api")

@@ -1,5 +1,7 @@
 """SQLAlchemy ORM models for Uttarakhand public records acquisition and governance."""
 
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
@@ -17,8 +19,12 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     Index,
+    event,
+    select,
+    desc,
 )
 from sqlalchemy.orm import relationship
+
 
 try:
     from pgvector.sqlalchemy import Vector
@@ -49,6 +55,91 @@ def _generate_id(prefix: str = "doc") -> str:
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# ── Phase 01: Multi-User Identity & Organization Models ─────────────────────
+
+
+
+class User(Base):
+    """User account record with server-side authentication credentials and clearance level."""
+    __tablename__ = "users"
+
+    id = Column(String(64), primary_key=True, default=lambda: _generate_id("usr"))
+    username = Column(String(64), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False, default="")
+    department_id = Column(String(64), nullable=False, default=DepartmentId.UNKNOWN.value)
+    clearance_level = Column(String(32), nullable=False, default=Classification.PUBLIC.value)
+    roles_json = Column(JSON, nullable=False, default=lambda: ["PUBLIC"])
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_superuser = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
+
+    memberships = relationship("Membership", back_populates="user", cascade="all, delete-orphan")
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def roles(self) -> List[str]:
+        return self.roles_json or ["PUBLIC"]
+
+    def to_user_context(self) -> Any:
+        from adam.rag.models import UserContext
+        from adam.auth.policy import get_role_policy
+        policy = get_role_policy(self.roles)
+        return UserContext(
+            user_id=self.id,
+            roles=self.roles,
+            department_id=self.department_id,
+            clearance_level=self.clearance_level,
+            can_access_web=policy.can_access_web,
+            allow_web_research=policy.allow_web_research,
+        )
+
+
+class Organization(Base):
+    """Multi-tenant organization boundary."""
+    __tablename__ = "organizations"
+
+    id = Column(String(64), primary_key=True, default=lambda: _generate_id("org"))
+    name = Column(String(255), nullable=False)
+    slug = Column(String(128), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
+
+    memberships = relationship("Membership", back_populates="organization", cascade="all, delete-orphan")
+
+
+class Membership(Base):
+    """User membership and role assignment within an organization."""
+    __tablename__ = "memberships"
+
+    id = Column(String(64), primary_key=True, default=lambda: _generate_id("mem"))
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id = Column(String(64), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(64), nullable=False, default="OFFICER")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
+
+    user = relationship("User", back_populates="memberships")
+    organization = relationship("Organization", back_populates="memberships")
+
+
+class ApiKey(Base):
+    """Machine-to-machine API key credential."""
+    __tablename__ = "api_keys"
+
+    id = Column(String(64), primary_key=True, default=lambda: _generate_id("apk"))
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    key_hash = Column(String(64), unique=True, nullable=False, index=True)
+    name = Column(String(128), nullable=False, default="Default API Key")
+    roles_json = Column(JSON, nullable=False, default=lambda: ["PUBLIC"])
+    clearance_level = Column(String(32), nullable=False, default=Classification.PUBLIC.value)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
+
+    user = relationship("User", back_populates="api_keys")
 
 
 class Source(Base):
@@ -262,21 +353,105 @@ class AccessGrant(Base):
 
 
 class AuditEvent(Base):
-    """Immutable audit trail for all governance and ingestion actions."""
+    """Cryptographically chained, tamper-evident immutable audit log for governance and ingestion actions."""
     __tablename__ = "audit_events"
 
     id = Column(String(64), primary_key=True, default=lambda: _generate_id("aud"))
-    entity_type = Column(String(32), nullable=False)  # SOURCE, DOCUMENT, INGESTION_RUN, ACL
+    sequence_num = Column(BigInteger, nullable=False, default=0, index=True)
+    entity_type = Column(String(32), nullable=False)  # SOURCE, DOCUMENT, INGESTION_RUN, ACL, SYSTEM, USER
     entity_id = Column(String(64), nullable=False)
-    action = Column(String(64), nullable=False)  # ONBOARD, APPROVE, PAUSE, REMOVE, INGEST, QUARANTINE
+    action = Column(String(64), nullable=False)  # ONBOARD, APPROVE, PAUSE, REMOVE, INGEST, QUARANTINE, LOGIN
     actor = Column(String(128), nullable=False)
     details_json = Column(JSON, nullable=True)
+    prev_hash = Column(String(64), nullable=True)
+    entry_hash = Column(String(64), nullable=False, default="")
     timestamp = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
 
     __table_args__ = (
+        Index("idx_audit_seq", "sequence_num"),
         Index("idx_audit_entity", "entity_type", "entity_id"),
         Index("idx_audit_timestamp", "timestamp"),
     )
+
+
+def compute_audit_event_hash(
+    sequence_num: int,
+    timestamp_iso: Any,
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    actor: str,
+    details_json: Any,
+    prev_hash: Optional[str],
+) -> str:
+    """Compute cryptographic SHA-256 fingerprint for tamper-evident audit chaining."""
+    if hasattr(timestamp_iso, "tzinfo") and timestamp_iso.tzinfo is not None:
+        ts_str = timestamp_iso.astimezone(timezone.utc).isoformat()
+    elif hasattr(timestamp_iso, "isoformat"):
+        ts_str = timestamp_iso.replace(tzinfo=timezone.utc).isoformat()
+    else:
+        ts_str = str(timestamp_iso).strip().replace(" ", "T")
+        if not ts_str.endswith("+00:00") and not ts_str.endswith("Z"):
+            ts_str += "+00:00"
+
+    if isinstance(details_json, str):
+        try:
+            details_obj = json.loads(details_json)
+        except Exception:
+            details_obj = details_json
+    else:
+        details_obj = details_json or {}
+
+    details_str = json.dumps(details_obj, sort_keys=True, ensure_ascii=False)
+    payload = f"{sequence_num}|{ts_str}|{entity_type}|{entity_id}|{action}|{actor}|{details_str}|{prev_hash or ''}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+
+
+@event.listens_for(AuditEvent, "before_insert")
+def _audit_event_before_insert(mapper, connection, target: AuditEvent):
+    """Derive sequence number and link cryptographic hash chain before persistence."""
+    stmt = (
+        select(AuditEvent.sequence_num, AuditEvent.entry_hash)
+        .order_by(desc(AuditEvent.sequence_num))
+        .limit(1)
+    )
+    res = connection.execute(stmt).first()
+    if res and res[0] is not None:
+        target.sequence_num = res[0] + 1
+        target.prev_hash = res[1] or ("0" * 64)
+    else:
+        target.sequence_num = 1
+        target.prev_hash = "0" * 64
+
+    if not target.timestamp:
+        target.timestamp = _utc_now()
+
+    ts_iso = target.timestamp.isoformat() if hasattr(target.timestamp, "isoformat") else str(target.timestamp)
+    target.entry_hash = compute_audit_event_hash(
+        sequence_num=target.sequence_num,
+        timestamp_iso=ts_iso,
+        entity_type=target.entity_type,
+        entity_id=target.entity_id,
+        action=target.action,
+        actor=target.actor,
+        details_json=target.details_json,
+        prev_hash=target.prev_hash,
+    )
+
+
+@event.listens_for(AuditEvent, "before_update")
+def _audit_event_before_update(mapper, connection, target):
+    """Enforce append-only immutability. Revoke UPDATE capability at ORM layer."""
+    raise RuntimeError("AuditEvent records are immutable and append-only. Updates are strictly forbidden.")
+
+
+@event.listens_for(AuditEvent, "before_delete")
+def _audit_event_before_delete(mapper, connection, target):
+    """Enforce append-only immutability. Revoke DELETE capability at ORM layer."""
+    raise RuntimeError("AuditEvent records are immutable and append-only. Deletions are strictly forbidden.")
+
 
 
 # ── Phase 02: Document Processing & OCR Models ──────────────────────────────

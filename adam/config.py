@@ -118,12 +118,51 @@ def validate_production_database_url(url: str) -> str:
             )
     return url
 
-# Cryptographic signing secret for inventory manifests
+
+def get_memory_encryption_key() -> str:
+    """Retrieve conversation memory encryption key with production separation checks."""
+    env = os.getenv("ADAM_ENV", os.getenv("ENV", "development")).lower()
+    mem_key = os.getenv("MEMORY_ENCRYPTION_KEY", "").strip()
+    signing_secret = os.getenv("SIGNING_SECRET", "").strip()
+    if env in ("production", "prod"):
+        if not mem_key or mem_key in KNOWN_INSECURE_SECRETS:
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: "
+                "MEMORY_ENCRYPTION_KEY must be explicitly set to a secure key in production. "
+                f"Current value is {'empty' if not mem_key else 'a known insecure placeholder'}."
+            )
+        if mem_key == signing_secret:
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: "
+                "MEMORY_ENCRYPTION_KEY must be separate and distinct from SIGNING_SECRET in production."
+            )
+        return mem_key
+    # Development / test default: fallback to separate derived key or provided key
+    return mem_key or signing_secret or "adam-uk-gov-default-memory-encryption-key-2026"
+
+
+# Cryptographic signing secret for inventory manifests and auth tokens
 SIGNING_SECRET = get_signing_secret()
 validate_production_database_url(DATABASE_URL)
+MEMORY_ENCRYPTION_KEY = get_memory_encryption_key()
+
+# CORS allowed origins
+DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+def get_cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "")
+    if not raw.strip():
+        return DEFAULT_CORS_ORIGINS
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+CORS_ORIGINS = get_cors_origins()
+SECURITY_HEADERS_ENABLED = os.getenv("SECURITY_HEADERS_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # Maximum permitted file size for ingestion (e.g., 200MB)
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
 
 # Default request timeout in seconds
 REQUEST_TIMEOUT_SECONDS = 30.0
+

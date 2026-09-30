@@ -73,6 +73,12 @@ def get_session_history(
 ):
     """Return decrypted conversation turns for an authorized session owner."""
     effective_user_id = user_ctx.user_id if user_ctx.user_id != "anonymous" else x_user_id
+    if user_ctx.is_admin():
+        # Admin can view any session
+        session_row = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if session_row:
+            effective_user_id = session_row.user_id
+
     manager = SessionManager(db)
     try:
         turns = manager.get_turns(session_id, requesting_user_id=effective_user_id)
@@ -116,12 +122,19 @@ def get_session_history(
 def delete_session_endpoint(
     session_id: str,
     x_user_id: str = Header(default="anonymous"),
+    user_ctx: UserContext = Depends(get_user_context),
     db: Session = Depends(get_db),
 ):
-    """Delete a session and all its encrypted turns. Only the owning user may delete."""
+    """Delete a session and all its encrypted turns. Only the owning user or admin may delete."""
+    effective_user_id = user_ctx.user_id if user_ctx.user_id != "anonymous" else x_user_id
+    if user_ctx.is_admin():
+        session_row = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if session_row:
+            effective_user_id = session_row.user_id
+
     manager = SessionManager(db)
     try:
-        manager.delete_session(session_id, requesting_user_id=x_user_id)
+        manager.delete_session(session_id, requesting_user_id=effective_user_id)
         return {"deleted": True}
     except SessionAccessDeniedError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -130,3 +143,4 @@ def delete_session_endpoint(
     except SessionExpiredError:
         # Expired sessions can still be deleted by owner — treat as success
         return {"deleted": True}
+

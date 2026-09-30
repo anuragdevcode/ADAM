@@ -116,6 +116,69 @@ def session_scope(engine: Optional[Engine] = None) -> Generator[Session, None, N
         session.close()
 
 
+def backfill_audit_chain_if_needed(eng: Engine) -> None:
+    """Backfill cryptographic hash chain for legacy unchained audit records."""
+    import json
+    from sqlalchemy import text
+    from adam.db.models import compute_audit_event_hash
+
+    with eng.connect() as conn:
+        try:
+            rows = conn.execute(
+                text("SELECT id, entity_type, entity_id, action, actor, details_json, timestamp, sequence_num, prev_hash, entry_hash "
+                     "FROM audit_events ORDER BY timestamp ASC")
+            ).fetchall()
+        except Exception:
+            return
+
+        if not rows:
+            return
+
+        needs_backfill = any(r[7] is None or r[7] == 0 or not r[9] for r in rows)
+        if not needs_backfill:
+            return
+
+        current_seq = 0
+        prev_hash = "0" * 64
+
+        for r in rows:
+            r_id = r[0]
+            entity_type = r[1]
+            entity_id = r[2]
+            action = r[3]
+            actor = r[4]
+            details_json = r[5]
+            ts = r[6]
+            if isinstance(details_json, str):
+                try:
+                    details_dict = json.loads(details_json)
+                except Exception:
+                    details_dict = {}
+            else:
+                details_dict = details_json or {}
+
+            current_seq += 1
+            ts_iso = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+            entry_hash = compute_audit_event_hash(
+                sequence_num=current_seq,
+                timestamp_iso=ts_iso,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                actor=actor,
+                details_json=details_dict,
+                prev_hash=prev_hash,
+            )
+
+            conn.execute(
+                text("UPDATE audit_events SET sequence_num = :seq, prev_hash = :p_hash, entry_hash = :e_hash WHERE id = :id"),
+                {"seq": current_seq, "p_hash": prev_hash, "e_hash": entry_hash, "id": r_id},
+            )
+            prev_hash = entry_hash
+
+        conn.commit()
+
+
 def init_db(engine: Optional[Engine] = None) -> None:
     """Create all registered database tables and run versioned migrations."""
     from adam.db.models import Base  # ensure all models are imported
@@ -123,3 +186,5 @@ def init_db(engine: Optional[Engine] = None) -> None:
     Base.metadata.create_all(bind=eng)
     from adam.db.migrations import apply_ingestion_migrations
     apply_ingestion_migrations(eng)
+    backfill_audit_chain_if_needed(eng)
+
