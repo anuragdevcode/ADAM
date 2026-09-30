@@ -90,9 +90,12 @@ def validate_gemini_key(req: ValidateKeyRequest) -> Dict[str, Any]:
 @router.get("/metrics", response_class=PlainTextResponse)
 def get_prometheus_metrics(
     db: Session = Depends(get_db),
-    user_ctx: UserContext = Depends(require_roles("ADMIN", "OPERATOR", "AUDITOR")),
+    user_ctx: UserContext = Depends(require_roles("ADMIN", "AUDITOR")),
 ) -> PlainTextResponse:
-    """Expose Prometheus / OpenMetrics telemetry endpoint for standard infrastructure monitoring."""
+    """Expose Prometheus / OpenMetrics telemetry endpoint for standard infrastructure monitoring.
+
+    Access is restricted to ADMIN and AUDITOR roles only (H8).
+    """
     from adam.observability.metrics import GLOBAL_METRICS
     content = GLOBAL_METRICS.generate_metrics_text(session=db)
     return PlainTextResponse(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")

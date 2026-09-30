@@ -58,6 +58,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Configure OpenTelemetry OTLP exporter when endpoint is provided (H8)
+    _configure_otel(app)
+
     engine = get_engine(DATABASE_URL)
     init_db(engine)
     logger.info("Database initialized.")
@@ -72,6 +75,59 @@ async def lifespan(app: FastAPI):
 
     yield
     logger.info("API Server shutdown cleanly.")
+
+
+def _configure_otel(app: FastAPI) -> None:
+    """Configure OpenTelemetry OTLP tracing when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+
+    Gracefully skips configuration if the ``opentelemetry-sdk`` package is not
+    installed so that the base image remains lightweight.
+    """
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not otlp_endpoint:
+        return
+
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+
+        resource = Resource.create({SERVICE_NAME: os.getenv("OTEL_SERVICE_NAME", "adam-api")})
+        provider = TracerProvider(resource=resource)
+
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+            logger.info("OpenTelemetry OTLP gRPC exporter configured → %s", otlp_endpoint)
+        except ImportError:
+            logger.warning(
+                "opentelemetry-exporter-otlp-proto-grpc not installed; "
+                "tracing spans will not be exported. Install adam[otel] to enable export."
+            )
+
+        trace.set_tracer_provider(provider)
+
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            FastAPIInstrumentor.instrument_app(app)
+            logger.info("OpenTelemetry FastAPI instrumentation enabled.")
+        except ImportError:
+            logger.debug("opentelemetry-instrumentation-fastapi not installed; skipping.")
+
+        try:
+            from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+            SQLAlchemyInstrumentor().instrument()
+            logger.info("OpenTelemetry SQLAlchemy instrumentation enabled.")
+        except ImportError:
+            logger.debug("opentelemetry-instrumentation-sqlalchemy not installed; skipping.")
+
+    except ImportError:
+        logger.warning(
+            "opentelemetry-sdk not installed; distributed tracing disabled. "
+            "Set OTEL_EXPORTER_OTLP_ENDPOINT and install adam[otel] to enable."
+        )
 
 
 def create_app() -> FastAPI:

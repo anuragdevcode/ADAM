@@ -7,7 +7,7 @@ name = "adam"
 version = "0.1.0"
 description = "Uttarakhand Public Records Acquisition, Governance and Processing System"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.13,<2",
     "beautifulsoup4>=4.12,<5",
@@ -31,7 +31,20 @@ dependencies = [
 
 [project.optional-dependencies]
 voice = ["faster-whisper>=1.1,<2"]
-dev = ["pytest>=8,<10", "pytest-cov>=5,<7"]
+dev = [
+    "pytest>=8,<10",
+    "pytest-cov>=5,<7",
+    "ruff>=0.4,<1",
+    "mypy>=1.10,<2",
+    "pip-audit>=2.7,<3",
+    "pre-commit>=3.7,<4",
+]
+otel = [
+    "opentelemetry-sdk>=1.20,<2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20,<2",
+    "opentelemetry-instrumentation-fastapi>=0.41b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.41b0",
+]
 
 [tool.setuptools.packages.find]
 include = ["adam*"]
@@ -44,3 +57,31 @@ adam-api = "adam.api.app:run_server"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E", "F", "W"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+strict = false
+warn_unused_ignores = true
+warn_return_any = false
+pretty = true
+
+[tool.coverage.run]
+source = ["adam"]
+omit = ["tests/*", "build/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = false
