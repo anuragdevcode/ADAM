@@ -8,6 +8,7 @@ from adam.connectors.egazette import EGazetteConnector
 from adam.connectors.database import DatabaseConnector
 from adam.connectors.generic_web import GenericWebsiteConnector
 from adam.connectors.file_batch import FileBatchConnector
+from adam.connectors.s3_bucket import S3BucketConnector
 from adam.connectors.registry import ConnectorRegistry
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "DatabaseConnector",
     "GenericWebsiteConnector",
     "FileBatchConnector",
+    "S3BucketConnector",
     "ConnectorRegistry",
 ]
 

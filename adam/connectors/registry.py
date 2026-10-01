@@ -7,6 +7,7 @@ from adam.connectors.base import BaseConnector
 from adam.connectors.database import DatabaseConnector
 from adam.connectors.generic_web import GenericWebsiteConnector
 from adam.connectors.file_batch import FileBatchConnector
+from adam.connectors.s3_bucket import S3BucketConnector
 from adam.db.models import Source
 
 logger = logging.getLogger(__name__)
@@ -174,7 +175,18 @@ class ConnectorRegistry:
             batch_dir = cfg.get("batch_dir")
             return FileBatchConnector(batch_dir=batch_dir)
 
-        # 6. Default Generic Website Crawler
+        # 6. S3 / MinIO Object Storage Connector
+        if stype in ("S3", "OBJECT_STORAGE", "MINIO") or connector_id in ("s3", "minio"):
+            return S3BucketConnector(
+                bucket_name=cfg.get("bucket_name"),
+                prefix=cfg.get("prefix", ""),
+                endpoint_url=cfg.get("endpoint_url"),
+                aws_access_key_id=cfg.get("aws_access_key_id"),
+                aws_secret_access_key=cfg.get("aws_secret_access_key"),
+                region_name=cfg.get("region_name", "ap-south-1"),
+            )
+
+        # 7. Default Generic Website Crawler
         return GenericWebsiteConnector(
             rate_limit_per_minute=source.rate_limit_per_minute or 30,
         )

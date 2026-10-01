@@ -85,5 +85,6 @@ ui/.git/
 !/CHANGELOG.md
 !/CONTRIBUTING.md
 !docs/benchmarks/*.md
+!docs/compliance/*.md
 
 
