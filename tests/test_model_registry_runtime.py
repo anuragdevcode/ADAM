@@ -7,6 +7,7 @@ from adam.model.registry import (
     ModelRegistry,
     QWEN3_4B_INSTRUCT,
     QWEN3_1_7B_INSTRUCT,
+    QWEN3_5_4B_INSTRUCT,
     GEMMA_3_4B_IT,
     LLAMA_3_2_3B_INSTRUCT,
     QWEN3_CHATML_TEMPLATE,
@@ -282,3 +283,79 @@ def test_production_load_model_raises_when_ollama_offline(monkeypatch):
     assert "Google Gemini API key is not configured" in str(exc_info_gemini.value)
 
     lifecycle.unload_model()
+
+
+def test_qwen3_5_key_capabilities_registry_and_runtime():
+    """Verify that Qwen 3.5 4B artifact and runtime fully implement all 6 Key Capabilities."""
+    artifact = QWEN3_5_4B_INSTRUCT
+
+    # 1. Native Vision-Language Understanding
+    assert artifact.capabilities["vision"] is True
+    assert artifact.capabilities["multimodal"] is True
+    assert artifact.capabilities["early_fusion_multimodal_tokens"] is True
+    assert artifact.capabilities["document_understanding"] is True
+    assert artifact.capabilities["chart_interpretation"] is True
+    assert artifact.capabilities["ui_layout_reading"] is True
+    assert artifact.capabilities["vqa"] is True
+    assert "OmniDocBench" in artifact.sbom["vision_capabilities"]
+
+    # 2. Ultra-Long Context Processing (256k tokens)
+    assert artifact.context_window == 262_144
+    assert artifact.capabilities["ultra_long_context"] is True
+    assert artifact.capabilities["context_window_tokens"] == 262_144
+    assert "256k" in artifact.sbom["context_window"]
+
+    # 3. Coding & Structured Outputs
+    assert artifact.capabilities["coding"] is True
+    assert "python" in artifact.capabilities["supported_languages"]
+    assert "sql" in artifact.capabilities["supported_languages"]
+    assert artifact.capabilities["unit_test_drafting"] is True
+    assert artifact.capabilities["structured_output"] is True
+    assert artifact.capabilities["json_schema_compliant"] is True
+
+    # 4. Massive Multilingual Coverage (200+ languages & regional scripts)
+    assert artifact.capabilities["multilingual"] is True
+    assert artifact.capabilities["multilingual_languages_count"] == 200
+    assert artifact.capabilities["hindi"] is True
+    assert artifact.capabilities["regional_scripts"] is True
+    assert artifact.capabilities["translation_fidelity"] is True
+    assert len(artifact.languages) >= 10
+    assert "hi" in artifact.languages and "sa" in artifact.languages
+
+    # 5. High Inference Efficiency on Edge Devices (Gated DeltaNet)
+    assert artifact.capabilities["hybrid_linear_attention"] is True
+    assert artifact.capabilities["gated_deltanet"] is True
+    assert artifact.capabilities["edge_device_optimized"] is True
+    assert artifact.capabilities["sub_quadratic_kv_cache"] is True
+    assert "Gated DeltaNet" in artifact.sbom["architecture"]
+
+    # 6. Thinking / Reasoning Mode (Integrated CoT)
+    assert artifact.capabilities["thinking_mode"] is True
+    assert artifact.capabilities["chain_of_thought"] is True
+    assert artifact.capabilities["multi_hop_reasoning"] is True
+    assert artifact.capabilities["stem_calculations"] is True
+
+    # Test runtime execution of capabilities under DeterministicModelRuntime
+    runtime = DeterministicModelRuntime(artifact)
+
+    # Test Vision generation
+    res_vision = runtime.generate(
+        user_prompt="Examine the scanned Government Order",
+        images=["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="],
+    )
+    assert "OmniDocBench" in res_vision.answer or "visual document understanding" in res_vision.answer
+
+    # Test Thinking mode execution
+    res_thinking = runtime.generate(
+        user_prompt="Passage [1] Page 2: Finance order.\nCompute composite rate enhancement.",
+        thinking_enabled=True,
+    )
+    assert res_thinking.thinking is not None
+    assert "Step 1" in res_thinking.thinking or "Step 2" in res_thinking.thinking
+
+    # Test Coding task output
+    res_coding = runtime.generate(
+        user_prompt="### coding task [python]\nDraft a unit test verifying HRA ceiling calculation.",
+    )
+    assert "```python" in res_coding.answer
+

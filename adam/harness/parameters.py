@@ -37,6 +37,7 @@ class ModelInferenceParameters:
     thinking_enabled: bool = False
     thinking_budget: int = 1024
     stop_sequences: List[str] = field(default_factory=lambda: ["<|im_end|>", "<|endoftext|>"])
+    images: Optional[List[str]] = None
     custom_options: Dict[str, Any] = field(default_factory=dict)
 
     def to_ollama_options(self) -> Dict[str, Any]:
@@ -78,5 +79,6 @@ class ModelInferenceParameters:
             "thinking_enabled": self.thinking_enabled,
             "thinking_budget": self.thinking_budget,
             "stop_sequences": self.stop_sequences,
+            "images": self.images,
             "custom_options": self.custom_options,
         }

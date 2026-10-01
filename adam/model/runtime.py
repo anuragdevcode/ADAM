@@ -222,9 +222,20 @@ class DeterministicModelRuntime(BaseModelRuntime):
             or "reference records:" in lower_prompt
             or "<approved_evidence>" in lower_prompt
             or "<evidence_passage" in lower_prompt
+            or "passage [" in lower_prompt
         ):
             # Evidence packet is provided directly in the prompt
             answer = self._synthesize_from_packet_prompt(user_prompt)
+        elif "### visual task" in lower_prompt or kwargs.get("images"):
+            answer = (
+                "Based on visual document understanding (OmniDocBench layout interpretation), "
+                "the official Uttarakhand State Government record exhibits authentic departmental seals, "
+                "valid executive sanctions, and authorized signatory provisions."
+            )
+        elif "### coding task" in lower_prompt:
+            answer = (
+                "```python\ndef execute_task():\n    \"\"\"Standard schema-compliant implementation.\"\"\"\n    return True\n```"
+            )
         elif "### research brief" in lower_prompt or "[human authority required]" in lower_prompt:
             answer = user_prompt.strip()
         else:
@@ -245,6 +256,28 @@ class DeterministicModelRuntime(BaseModelRuntime):
             answer = " ".join(words) + " [TRUNCATED_TOKEN_LIMIT]"
             estimated_completion_tokens = max_tokens
 
+        harness_params = kwargs.get("harness_parameters")
+        thinking_flag = False
+        if harness_params and getattr(harness_params, "thinking_enabled", False):
+            thinking_flag = True
+        elif kwargs.get("thinking_enabled") or kwargs.get("enable_thinking"):
+            thinking_flag = True
+
+        thinking_trace = None
+        if thinking_flag:
+            if is_refusal:
+                thinking_trace = (
+                    "Step 1: Ingest query context and check jurisdictional authority.\n"
+                    "Step 2: Assess evidence sufficiency against Uttarakhand public records.\n"
+                    "Step 3: Determine query cannot be substantiated; formulate safe abstention response."
+                )
+            else:
+                thinking_trace = (
+                    "Step 1: Ingest query context and check jurisdictional authority.\n"
+                    "Step 2: Unroll multi-hop reasoning, inspect provisions, and verify numerical calculation integrity.\n"
+                    "Step 3: Synthesize strictly grounded answer adhering to governance constraints."
+                )
+
         token_callback = kwargs.get("token_callback")
         if token_callback and answer:
             token_callback(answer)
@@ -262,6 +295,7 @@ class DeterministicModelRuntime(BaseModelRuntime):
             finish_reason="stop" if estimated_completion_tokens <= max_tokens else "length",
             is_refusal=is_refusal,
             refusal_category=refusal_category,
+            thinking=thinking_trace,
         )
 
     def _synthesize_from_packet_prompt(self, user_prompt: str) -> str:
@@ -504,6 +538,7 @@ class OllamaModelRuntime(BaseModelRuntime):
         temperature: float = 0.0,
         max_tokens: int = 512,
         stop_sequences: Optional[List[str]] = None,
+        images: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> ModelGenerationResult:
         """Execute physical local generation on Apple Silicon Metal via Ollama."""
@@ -511,6 +546,7 @@ class OllamaModelRuntime(BaseModelRuntime):
         sys_prompt = system_prompt or self.artifact.system_prompt_default
 
         harness_parameters = kwargs.get("harness_parameters")
+        resolved_images = images or kwargs.get("images")
         if harness_parameters is not None:
             from adam.harness.parameters import ModelInferenceParameters
             if isinstance(harness_parameters, ModelInferenceParameters):
@@ -523,6 +559,8 @@ class OllamaModelRuntime(BaseModelRuntime):
             valid_temp = params.temperature
             options = params.to_ollama_options()
             effective_max_tokens = params.max_tokens
+            if getattr(params, "images", None) and not resolved_images:
+                resolved_images = params.images
             if self._is_thinking_model():
                 think_flag = True if params.thinking_enabled else False
             else:
@@ -534,18 +572,22 @@ class OllamaModelRuntime(BaseModelRuntime):
             options = {
                 "temperature": valid_temp,
                 "num_predict": max_tokens,
-                "num_ctx": min(self.artifact.context_window, 4096),
+                "num_ctx": min(self.artifact.context_window, 262_144),
                 "num_thread": min(8, max(2, cpu_count)),
                 "stop": stops,
             }
             effective_max_tokens = max_tokens
             think_flag = False if self._is_thinking_model() else None
 
+        user_message: Dict[str, Any] = {"role": "user", "content": user_prompt}
+        if resolved_images:
+            user_message["images"] = resolved_images
+
         payload: Dict[str, Any] = {
             "model": self.model_tag,
             "messages": [
                 {"role": "system", "content": sys_prompt},
-                {"role": "user", "content": user_prompt},
+                user_message,
             ],
             "stream": False,
             "options": options,
@@ -555,6 +597,7 @@ class OllamaModelRuntime(BaseModelRuntime):
             payload["think"] = think_flag
 
         token_callback = kwargs.get("token_callback")
+        thinking_callback = kwargs.get("thinking_callback")
 
         try:
             if token_callback is not None:
@@ -579,6 +622,8 @@ class OllamaModelRuntime(BaseModelRuntime):
                                 token_callback(delta_content)
                             if delta_thinking:
                                 collected_thinking.append(delta_thinking)
+                                if thinking_callback:
+                                    thinking_callback(delta_thinking)
                             if chunk_data.get("prompt_eval_count"):
                                 prompt_tokens = chunk_data["prompt_eval_count"]
                             if chunk_data.get("eval_count"):
@@ -661,6 +706,23 @@ class OllamaModelRuntime(BaseModelRuntime):
                 f"Physical Ollama generation failed for model '{self.model_tag}': {e}. "
                 f"Ensure Ollama server is running on '{self.host}' and model is pulled ('ollama pull {self.model_tag}')."
             )
+
+    def generate_vision(
+        self,
+        user_prompt: str,
+        images: List[str],
+        task_type: str = "document_understanding",
+        **kwargs: Any,
+    ) -> ModelGenerationResult:
+        """Execute early-fusion native vision-language understanding (OmniDocBench, charts, UI layout, VQA)."""
+        from adam.harness.profiles import QwenHarnessProfile
+        profile = QwenHarnessProfile(is_reasoning_variant=False)
+        vision_prompt = profile.format_vision_prompt(user_prompt, images=images, task_type=task_type)
+        return self.generate(
+            user_prompt=vision_prompt,
+            images=images,
+            **kwargs,
+        )
 
     def unload(self) -> None:
         """Evict model from Apple Silicon unified memory to reclaim RAM headroom."""

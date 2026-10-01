@@ -173,6 +173,8 @@ def get_models(
             "unavailable_reason": unavailable_reason,
             "is_cloud": is_cloud,
             "air_gapped_restricted": is_cloud and is_air_gapped_clearance,
+            "capabilities": getattr(m, "capabilities", {}) or {},
+            "sbom": getattr(m, "sbom", {}) or {},
         })
     return result
 

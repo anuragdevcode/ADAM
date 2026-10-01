@@ -111,6 +111,7 @@ class AgentResponse:
     computation_results: List[Dict[str, Any]] = field(default_factory=list)
     research_summary: Optional[str] = None
     subagents: List[Dict[str, Any]] = field(default_factory=list)
+    thinking: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -153,6 +154,7 @@ class AgentResponse:
             "computation_results": self.computation_results,
             "research_summary": self.research_summary,
             "subagents": self.subagents,
+            "thinking": self.thinking,
         }
 
 
@@ -257,6 +259,7 @@ class AgentStateMachine:
         answer_passes = 0
         per_stage_latency_ms: Dict[str, float] = {}
         recorded_abstention_reason: Optional[str] = None
+        thinking_output: Optional[str] = None
         stage_start_time = time.perf_counter()
 
         def transition_to(
@@ -766,6 +769,7 @@ class AgentStateMachine:
                 answer = gen_result.answer
                 prompt_tokens = gen_result.tokens_prompt
                 completion_tokens = gen_result.tokens_completion
+                thinking_output = getattr(gen_result, "thinking", None)
                 citations = []
 
                 emitter.emit(
@@ -928,6 +932,7 @@ class AgentStateMachine:
                     answer = gen_result.answer
                     prompt_tokens = gen_result.tokens_prompt
                     completion_tokens = gen_result.tokens_completion
+                    thinking_output = getattr(gen_result, "thinking", None)
                     emitter.emit(
                         OperationalEventType.GENERATION_COMPLETED,
                         stage="generation",
@@ -1029,6 +1034,7 @@ class AgentStateMachine:
                     answer = gen_result.answer
                     prompt_tokens = gen_result.tokens_prompt
                     completion_tokens = gen_result.tokens_completion
+                    thinking_output = getattr(gen_result, "thinking", None)
                     if gen_result.is_refusal:
                         is_refusal = True
                         if not recorded_abstention_reason:
@@ -1249,6 +1255,7 @@ class AgentStateMachine:
             is_cached=is_cached,
             plan=execution_plan.to_dict() if execution_plan else None,
             computation_results=[],
+            thinking=thinking_output,
         )
 
     def _format_research_brief(
@@ -1554,6 +1561,7 @@ class AgentStateMachine:
             computation_results=verified_calculations,
             research_summary=research_summary,
             subagents=subagents,
+            thinking=orch_res.get("thinking"),
         )
 
 

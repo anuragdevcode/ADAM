@@ -222,3 +222,109 @@ def test_validate_json_output_invalid():
     assert is_valid is False
     assert data is None
     assert err is not None
+
+
+# ── Qwen 3.5 4B Key Capabilities Tests ──────────────────────────────────────
+
+def test_qwen_profile_vision_multimodal_understanding():
+    """Verify Capability 1: Native Vision-Language Understanding prompt formatting."""
+    profile = QwenHarnessProfile(is_reasoning_variant=True)
+    images = ["data:image/jpeg;base64,/9j/4AAQSkZJRg..."]
+
+    # Test document understanding (OmniDocBench)
+    doc_prompt = profile.format_vision_prompt("Read the GO stamp", images=images, task_type="document_understanding")
+    assert "OmniDocBench" in doc_prompt
+    assert "Extract exact tables, seals, signatures" in doc_prompt
+    assert "Read the GO stamp" in doc_prompt
+
+    # Test chart interpretation
+    chart_prompt = profile.format_vision_prompt("Explain expenditure trend", images=images, task_type="chart_interpretation")
+    assert "axis labels" in chart_prompt
+
+    # Test parameter extraction with images
+    params = profile.resolve_parameters(intent="rag", images=images)
+    assert params.images == images
+
+
+def test_qwen_profile_ultra_long_context_256k():
+    """Verify Capability 2: Ultra-Long Context Processing up to 256k tokens."""
+    profile = QwenHarnessProfile(is_reasoning_variant=True)
+
+    long_ctx_params = profile.resolve_parameters(intent="long_context")
+    assert long_ctx_params.context_size == 262_144
+    assert long_ctx_params.max_tokens == 4096
+    assert long_ctx_params.temperature == 0.1
+
+    options = long_ctx_params.to_ollama_options()
+    assert options["num_ctx"] == 262_144
+
+
+def test_qwen_profile_coding_and_structured_outputs():
+    """Verify Capability 3: Coding and Structured Outputs across languages."""
+    profile = QwenHarnessProfile(is_reasoning_variant=True)
+
+    # 1. Format coding prompt with unit test specification
+    prompt = profile.format_coding_prompt(
+        task="Write a Python class calculating Dearness Allowance.",
+        language="python",
+        test_spec="Verify 50% rate when basic >= 25000",
+    )
+    assert "[PYTHON]" in prompt
+    assert "unit tests verifying" in prompt
+
+    # 2. Syntax validation for Python
+    valid_py = "def compute_da(basic: float) -> float:\n    return basic * 0.50\n"
+    is_valid, err = HarnessOutputValidator.validate_code_syntax(valid_py, "python")
+    assert is_valid is True
+    assert err is None
+
+    invalid_py = "def compute_da(basic: float)\n    return basic * 0.50"
+    is_valid_bad, err_bad = HarnessOutputValidator.validate_code_syntax(invalid_py, "python")
+    assert is_valid_bad is False
+    assert "SyntaxError" in (err_bad or "")
+
+    # 3. Syntax validation for SQL
+    valid_sql = "SELECT id, title, page_number FROM public_records WHERE department_id = 'FINANCE' ORDER BY date DESC;"
+    is_valid_sql, err_sql = HarnessOutputValidator.validate_code_syntax(valid_sql, "sql")
+    assert is_valid_sql is True
+
+    # 4. Code block extraction
+    md_text = "Here is the implementation:\n```python\nx = 10\n```\nAnd SQL:\n```sql\nSELECT 1;\n```"
+    blocks = HarnessOutputValidator.extract_code_blocks(md_text)
+    assert len(blocks) == 2
+    assert blocks[0]["language"] == "python"
+    assert blocks[1]["language"] == "sql"
+
+    # 5. Schema validation
+    data = {"status": "approved", "score": 0.98}
+    is_schema_ok, schema_err = HarnessOutputValidator.validate_json_schema(data, required_fields=["status", "score"])
+    assert is_schema_ok is True
+    assert schema_err is None
+
+
+def test_qwen_profile_multilingual_coverage():
+    """Verify Capability 4: Massive Multilingual Coverage and Devanagari regional scripts."""
+    profile = QwenHarnessProfile(is_reasoning_variant=True)
+    hindi_prompt = profile.format_multilingual_prompt("उत्तराखंड महंगाई भत्ता आदेश 2024", target_language="hi")
+    assert "[HI]" in hindi_prompt
+    assert "regional script" in hindi_prompt
+    assert "उत्तराखंड महंगाई भत्ता आदेश 2024" in hindi_prompt
+
+
+def test_qwen_profile_thinking_reasoning_mode():
+    """Verify Capability 6: Thinking / Reasoning Mode (enable_thinking: true)."""
+    profile = QwenHarnessProfile(is_reasoning_variant=True)
+
+    # Thinking enabled via intent or explicit parameter
+    params_thinking = profile.resolve_parameters(intent="reasoning", thinking_budget=2048)
+    assert params_thinking.thinking_enabled is True
+    assert params_thinking.thinking_budget == 2048
+
+    # Alias enable_thinking supported
+    params_alias = profile.resolve_parameters(intent="rag", enable_thinking=True)
+    assert params_alias.thinking_enabled is True
+
+    # Options include thinking budget in num_predict
+    ollama_opts = params_thinking.to_ollama_options()
+    assert ollama_opts["num_predict"] == 2048 + 2048  # max_tokens (2048) + thinking_budget (2048)
+

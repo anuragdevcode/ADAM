@@ -107,3 +107,90 @@ class HarnessOutputValidator:
             return True, parsed, None
         except Exception as exc:
             return False, None, str(exc)
+
+    @classmethod
+    def extract_code_blocks(cls, text: str, language: Optional[str] = None) -> List[Dict[str, str]]:
+        """Extract tagged code blocks from markdown fences (e.g. ```python ... ```)."""
+        pattern = re.compile(r"```([a-zA-Z0-9_+-]*)\n(.*?)```", re.DOTALL)
+        blocks = []
+        for match in pattern.finditer(text):
+            lang = match.group(1).strip().lower()
+            code = match.group(2).strip()
+            if not language or lang == language.lower():
+                blocks.append({"language": lang, "code": code})
+        return blocks
+
+    @classmethod
+    def validate_code_syntax(cls, code: str, language: str = "python") -> Tuple[bool, Optional[str]]:
+        """Validate standard syntax across languages (Python, C++, JavaScript, TypeScript, SQL).
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        clean_code = code.strip()
+        lang = language.strip().lower()
+
+        if lang in ("python", "py"):
+            import ast
+            try:
+                ast.parse(clean_code)
+                return True, None
+            except SyntaxError as e:
+                return False, f"Python SyntaxError: {e}"
+
+        elif lang in ("sql", "postgresql", "sqlite"):
+            # Ensure balanced quotes and parentheses
+            if clean_code.count("(") != clean_code.count(")"):
+                return False, "Unbalanced parentheses in SQL query"
+            if clean_code.count("'") % 2 != 0:
+                return False, "Unterminated single quote in SQL string literal"
+            keywords = ("select", "insert", "update", "delete", "create", "alter", "with", "drop")
+            if not any(k in clean_code.lower() for k in keywords):
+                return False, "Missing standard SQL operation keyword (SELECT, INSERT, WITH, etc.)"
+            return True, None
+
+        elif lang in ("javascript", "typescript", "js", "ts"):
+            # Check balanced brackets, braces, and parentheses
+            stack = []
+            matching = {")": "(", "}": "{", "]": "["}
+            for char in clean_code:
+                if char in matching.values():
+                    stack.append(char)
+                elif char in matching.keys():
+                    if not stack or stack.pop() != matching[char]:
+                        return False, f"Mismatched bracket/brace '{char}' in {lang.upper()}"
+            if stack:
+                return False, f"Unclosed block delimiters in {lang.upper()}"
+            return True, None
+
+        elif lang in ("c++", "cpp", "c"):
+            # Check balanced brackets, braces, and parentheses
+            stack = []
+            matching = {")": "(", "}": "{", "]": "["}
+            for char in clean_code:
+                if char in matching.values():
+                    stack.append(char)
+                elif char in matching.keys():
+                    if not stack or stack.pop() != matching[char]:
+                        return False, f"Mismatched bracket/brace '{char}' in C++"
+            if stack:
+                return False, "Unclosed block delimiters in C++"
+            return True, None
+
+        return True, None
+
+    @classmethod
+    def validate_json_schema(
+        cls,
+        data: Any,
+        required_fields: Optional[List[str]] = None,
+    ) -> Tuple[bool, Optional[str]]:
+        """Validate parsed JSON data against required keys."""
+        if not isinstance(data, dict):
+            return False, f"Expected JSON object (dict), got {type(data).__name__}"
+        if required_fields:
+            missing = [k for k in required_fields if k not in data]
+            if missing:
+                return False, f"Missing required fields in JSON schema: {missing}"
+        return True, None
+

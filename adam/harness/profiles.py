@@ -59,10 +59,19 @@ class QwenHarnessProfile(BaseHarnessProfile):
 
     def resolve_parameters(self, intent: str = "rag", **overrides: Any) -> ModelInferenceParameters:
         # For governed RAG: low temperature (0.2) to maintain strict grounding
-        if intent in ("conversational", "coding", "general"):
+        context_size = overrides.get("context_size", 4096)
+        if intent in ("long_context", "codebase", "document_analysis", "technical_manual"):
+            temp = overrides.get("temperature", 0.1)
+            max_tokens = overrides.get("max_tokens", 4096)
+            context_size = overrides.get("context_size", 262_144)
+        elif intent in ("coding", "unit_test", "sql"):
+            temp = overrides.get("temperature", 0.2)
+            max_tokens = overrides.get("max_tokens", 2048)
+            context_size = overrides.get("context_size", 8192)
+        elif intent in ("conversational", "general"):
             temp = overrides.get("temperature", 0.6)
             max_tokens = overrides.get("max_tokens", 1536)
-        elif intent in ("reasoning", "multi_step"):
+        elif intent in ("reasoning", "multi_step", "stem", "puzzle"):
             temp = overrides.get("temperature", 0.4)
             max_tokens = overrides.get("max_tokens", 2048)
         elif intent == "introspection":
@@ -72,7 +81,8 @@ class QwenHarnessProfile(BaseHarnessProfile):
             temp = overrides.get("temperature", 0.2)
             max_tokens = overrides.get("max_tokens", 1024)
 
-        thinking_enabled = self.is_reasoning_variant and overrides.get("thinking_enabled", True)
+        thinking_flag = overrides.get("thinking_enabled", overrides.get("enable_thinking", True))
+        thinking_enabled = self.is_reasoning_variant and bool(thinking_flag)
 
         params = ModelInferenceParameters(
             temperature=temp,
@@ -80,15 +90,56 @@ class QwenHarnessProfile(BaseHarnessProfile):
             top_k=overrides.get("top_k", 40),
             min_p=overrides.get("min_p", 0.05),
             max_tokens=max_tokens,
-            context_size=overrides.get("context_size", 4096),
+            context_size=context_size,
             thinking_enabled=thinking_enabled,
             thinking_budget=overrides.get("thinking_budget", 1024 if thinking_enabled else 0),
             stop_sequences=overrides.get(
                 "stop_sequences",
                 ["<|im_end|>", "<|endoftext|>", "\n\nUser:", "\n\nQuestion:", "\n\nHuman:", "\n\nReference Records:"],
             ),
+            images=overrides.get("images"),
         )
         return params
+
+    def format_vision_prompt(self, query: str, images: Optional[List[str]] = None, task_type: str = "document_understanding") -> str:
+        """Format an early-fusion multimodal prompt for vision-language understanding.
+
+        Supports OmniDocBench document understanding, chart interpretation, UI layout reading, and VQA.
+        """
+        task_directives = {
+            "document_understanding": "Analyze the attached document scan with high visual fidelity (OmniDocBench standard). Extract exact tables, seals, signatures, and paragraph text.",
+            "chart_interpretation": "Interpret the chart/diagram with precision. Read all axis labels, data series, legends, and quantitative figures verbatim.",
+            "ui_layout_reading": "Parse the UI layout, component hierarchy, buttons, forms, and textual elements sequentially.",
+            "vqa": "Answer the visual question based strictly on the provided image evidence.",
+        }
+        directive = task_directives.get(task_type, task_directives["document_understanding"])
+        return f"### Visual Task [{task_type.upper()}]\n{directive}\n\nUser Query: {query.strip()}"
+
+    def format_coding_prompt(self, task: str, language: str = "python", test_spec: Optional[str] = None) -> str:
+        """Format a coding and structured output prompt.
+
+        Capable of generating standard syntax across languages (Python, C++, JavaScript, TypeScript, SQL),
+        drafting unit tests, and producing schema-compliant JSON/Markdown.
+        """
+        prompt = (
+            f"### Coding Task [{language.upper()}]\n"
+            f"Generate standard, syntactically flawless {language} code implementing the following requirement:\n"
+            f"{task.strip()}\n\n"
+            "Requirements:\n"
+            "- Use clean, idiomatic formatting.\n"
+            "- Encapsulate code in standard markdown fences.\n"
+        )
+        if test_spec:
+            prompt += f"- Draft comprehensive unit tests verifying: {test_spec.strip()}\n"
+        return prompt
+
+    def format_multilingual_prompt(self, query: str, target_language: str = "hi") -> str:
+        """Format a prompt preserving high translation and instruction-following fidelity across 200+ languages."""
+        return (
+            f"### Multilingual Instruction [{target_language.upper()}]\n"
+            "Maintain high fidelity and accurate terminology in the regional script without phonetic drift.\n\n"
+            f"Query: {query.strip()}"
+        )
 
     def format_rag_prompt(self, query: str, packet: EvidencePacket, max_passages: int = 4) -> str:
         return ContextStrategy.build_grounded_rag_prompt(query, packet, max_passages=max_passages)

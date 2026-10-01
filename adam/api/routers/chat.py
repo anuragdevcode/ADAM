@@ -260,6 +260,7 @@ async def chat_endpoint(
                 "computation_results": getattr(response, "computation_results", []),
                 "research_summary": getattr(response, "research_summary", None),
                 "subagents": getattr(response, "subagents", []),
+                "thinking": getattr(response, "thinking", None),
             }
             yield f"event: trail\ndata: {json.dumps(trail_payload)}\n\n"
 
@@ -284,6 +285,7 @@ async def chat_endpoint(
                 "computation_results": getattr(response, "computation_results", []),
                 "research_summary": getattr(response, "research_summary", None),
                 "subagents": getattr(response, "subagents", []),
+                "thinking": getattr(response, "thinking", None),
             }
             yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
 

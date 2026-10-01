@@ -196,23 +196,70 @@ QWEN3_5_4B_INSTRUCT = ModelArtifact(
     license_id="Apache-2.0",
     license_status=LicenseStatus.APPROVED,
     requires_legal_review=False,
-    context_window=8192,
-    languages=["en", "hi"],
+    context_window=262_144,  # Ultra-Long Context: 256k tokens native ingestion
+    languages=["en", "hi", "sa", "ur", "pa", "bn", "mr", "gu", "ta", "te", "kn", "ml"],
     serving_runtime="ollama",
     prompt_template=QWEN3_CHATML_TEMPLATE,
     is_primary=False,
     is_fallback=False,
     is_comparator=False,
     status=ModelStatus.REGISTERED,
+    capabilities={
+        # 1. Native Vision-Language Understanding (Early-fusion multimodal tokens)
+        "vision": True,
+        "multimodal": True,
+        "early_fusion_multimodal_tokens": True,
+        "document_understanding": True,  # OmniDocBench
+        "chart_interpretation": True,
+        "ui_layout_reading": True,
+        "vqa": True,
+        # 2. Ultra-Long Context Processing (256k tokens)
+        "ultra_long_context": True,
+        "context_window_tokens": 262_144,
+        # 3. Coding & Structured Outputs
+        "coding": True,
+        "supported_languages": ["python", "cpp", "javascript", "typescript", "sql"],
+        "unit_test_drafting": True,
+        "structured_output": True,
+        "json_schema_compliant": True,
+        # 4. Massive Multilingual Coverage (200+ languages & regional scripts)
+        "multilingual": True,
+        "multilingual_languages_count": 200,
+        "hindi": True,
+        "english": True,
+        "regional_scripts": True,
+        "translation_fidelity": True,
+        # 5. High Inference Efficiency on Edge Devices (Gated DeltaNet linear attention)
+        "hybrid_linear_attention": True,
+        "gated_deltanet": True,
+        "edge_device_optimized": True,
+        "sub_quadratic_kv_cache": True,
+        # 6. Thinking / Reasoning Mode (Integrated CoT)
+        "thinking_mode": True,
+        "chain_of_thought": True,
+        "multi_hop_reasoning": True,
+        "stem_calculations": True,
+        "streaming": True,
+        "citation_format": True,
+        "instruction_following": True,
+    },
     sbom={
         "vendor": "Alibaba Cloud / Qwen Team",
         "base_model": "Qwen3.5-4B-Instruct",
         "parameters": "4.0B",
+        "architecture": "Hybrid Linear-Attention (Gated DeltaNet) + Transformer",
         "quantizer": "llama.cpp-kquants / ollama",
         "tokenizer": "BPE tiktoken-derived vocab 151646",
         "training_license": "Apache-2.0",
         "commercial_use_permitted": True,
         "vulnerability_scan": "CLEARED_NO_KNOWN_CVE",
+        "modality": "multimodal (text, vision)",
+        "vision_capabilities": "Native early-fusion multimodal tokens for document understanding (OmniDocBench), chart interpretation, UI layout reading, VQA",
+        "context_window": "256k tokens (262,144 native context length)",
+        "coding_capabilities": "Python, C++, JavaScript, TypeScript, SQL, unit tests, schema-compliant JSON/Markdown",
+        "multilingual_coverage": "200+ languages and dialects with high translation and instruction-following fidelity across regional scripts",
+        "inference_efficiency": "Hybrid Gated DeltaNet layers reducing KV cache growth and prefill latency for edge laptops (6GB-8GB VRAM / unified memory)",
+        "reasoning_mode": "Integrated chain-of-thought (CoT) thinking phase for multi-hop reasoning, STEM calculations, and puzzle solving",
         "hindi_token_efficiency": "High (dedicated Devanagari Byte-Pair vocabulary)",
         "hardware_acceleration": "Apple Silicon Metal GPU accelerated",
     },
@@ -421,6 +468,7 @@ class ModelRegistry:
             else:
                 record.status = str(artifact.status)
                 record.file_size_bytes = artifact.file_size_bytes
+                record.context_window = artifact.context_window
                 record.is_primary = 1 if artifact.is_primary else 0
                 record.is_fallback = 1 if artifact.is_fallback else 0
                 record.is_comparator = 1 if artifact.is_comparator else 0
@@ -462,6 +510,9 @@ class ModelRegistry:
             ).first()
 
             if record:
+                canonical_ref = CANONICAL_MODELS.get(record.id)
+                languages = canonical_ref.languages if canonical_ref else ["en", "hi"]
+                caps = dict(canonical_ref.capabilities) if canonical_ref else {}
                 artifact = ModelArtifact(
                     id=record.id,
                     name=record.name,
@@ -474,7 +525,7 @@ class ModelRegistry:
                     license_status=LicenseStatus(record.license_status),
                     requires_legal_review=(record.license_status != LicenseStatus.APPROVED.value),
                     context_window=record.context_window,
-                    languages=["en", "hi"],
+                    languages=languages,
                     serving_runtime=record.serving_runtime,
                     prompt_template=record.prompt_template,
                     is_primary=bool(record.is_primary),
@@ -482,6 +533,7 @@ class ModelRegistry:
                     is_comparator=bool(getattr(record, "is_comparator", 0)),
                     status=ModelStatus(record.status),
                     sbom=record.sbom_json or {},
+                    capabilities=caps,
                 )
                 self._artifacts[artifact.id] = artifact
                 return artifact
