@@ -169,3 +169,8 @@ REQUEST_TIMEOUT_SECONDS = 30.0
 # Generation concurrency limit (R5)
 MAX_CONCURRENT_GENERATIONS = int(os.getenv("MAX_CONCURRENT_GENERATIONS", "1"))
 
+# Primary local model selection and runtime endpoints
+PRIMARY_MODEL_ID = os.getenv("PRIMARY_MODEL_ID", "qwen3.5-4b-instruct-q4")
+ADAM_MODEL_BACKEND = os.getenv("ADAM_MODEL_BACKEND", "ollama")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+

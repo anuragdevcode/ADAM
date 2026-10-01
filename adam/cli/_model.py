@@ -59,6 +59,55 @@ def seed_models():
     session.close()
 
 
+@model_group.command(name="pull")
+@click.argument("model_id_or_tag", default="qwen3.5:4b")
+def pull_model_cmd(model_id_or_tag: str):
+    """Download and cache approved model weights into local Ollama runtime."""
+    import os
+    import sys
+    import json
+    import httpx
+    from adam.model.registry import ModelRegistry
+    from adam.model.runtime import OllamaModelRuntime
+
+    session = get_session()
+    registry = ModelRegistry(session)
+    registry.seed_defaults()
+    artifact = registry.get(model_id_or_tag)
+    tag = OllamaModelRuntime._resolve_model_tag(artifact) if artifact else model_id_or_tag
+
+    click.echo(f"Initiating Ollama pull for model tag: {tag}...")
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    try:
+        with httpx.Client(timeout=600.0) as client:
+            with client.stream("POST", f"{ollama_host}/api/pull", json={"name": tag}) as resp:
+                if resp.status_code != 200:
+                    click.secho(f"Failed to pull {tag} from Ollama: HTTP {resp.status_code}", fg="red", err=True)
+                    session.close()
+                    sys.exit(1)
+                for line in resp.iter_lines():
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            status = data.get("status", "")
+                            total = data.get("total", 0)
+                            completed = data.get("completed", 0)
+                            if total > 0:
+                                pct = (completed / total) * 100
+                                click.echo(f"\r  {status}: {pct:.1f}% ({completed // (1024*1024)} MB / {total // (1024*1024)} MB)   ", nl=False)
+                            else:
+                                click.echo(f"\r  {status}...   ", nl=False)
+                        except Exception:
+                            pass
+        click.echo("\n")
+        click.secho(f"Successfully cached {tag} in local Ollama runtime.", fg="green", bold=True)
+    except Exception as e:
+        click.secho(f"\nError communicating with Ollama at {ollama_host}: {e}", fg="red", err=True)
+        session.close()
+        sys.exit(1)
+    session.close()
+
+
 @model_group.command(name="list")
 def list_models():
     """List all release-controlled models with quantization, license, and promotion status."""
