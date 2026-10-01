@@ -515,6 +515,23 @@ export interface UserProfile {
   is_admin: boolean;
 }
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  full_name?: string | null;
+  email?: string | null;
+  roles: string[];
+  clearance_level: string;
+  department_id?: string | null;
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: AuthUser;
+}
+
 export interface UserPreferenceData {
   opt_in: boolean;
   purpose?: string | null;

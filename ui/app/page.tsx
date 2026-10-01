@@ -24,7 +24,9 @@ import {
   Cloud,
   Globe,
 } from 'lucide-react';
-import type { DepartmentItem, ModelInfo } from '@/lib/types';
+import SovereignLoadingScreen from '@/components/SovereignLoadingScreen';
+import LoginPage from '@/components/LoginPage';
+import type { DepartmentItem, ModelInfo, AuthUser } from '@/lib/types';
 import {
   fetchModels,
   fetchVocabularies,
@@ -32,6 +34,10 @@ import {
   setStoredGeminiApiKey,
   clearStoredGeminiApiKey,
   triggerModelDiscovery,
+  getStoredAuthToken,
+  getStoredAuthUser,
+  fetchCurrentUser,
+  clearStoredAuthSession,
 } from '@/lib/api';
 
 const DEFAULT_OFFICER_ID = 'officer_dev_001';
@@ -44,6 +50,12 @@ export default function HomePage() {
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>('general');
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+
+  // Sovereign Loading & Authentication Initialization
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [showLoadingScreen, setShowLoadingScreen] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   // Officer Identity & Clearance State
   const [officerUserId, setOfficerUserId] = useState(DEFAULT_OFFICER_ID);
@@ -68,6 +80,82 @@ export default function HomePage() {
 
   const { toast } = useToast();
   const isAirGapped = clearanceLevel === 'RESTRICTED' || clearanceLevel === 'CONFIDENTIAL';
+
+  // Initial authentication verification & sovereign lifecycle check
+  useEffect(() => {
+    let isMounted = true;
+    const initAuth = async () => {
+      // 1. Check local session
+      const token = getStoredAuthToken();
+      const cachedUser = getStoredAuthUser();
+      if (token && cachedUser) {
+        if (isMounted) {
+          setIsAuthenticated(true);
+          setCurrentUser(cachedUser);
+          setOfficerUserId(cachedUser.username || cachedUser.id);
+          setClearanceLevel(cachedUser.clearance_level || 'PUBLIC');
+          if (cachedUser.department_id) {
+            setDepartmentId(cachedUser.department_id);
+          }
+        }
+      }
+
+      // 2. Validate token with backend asynchronously
+      if (token) {
+        try {
+          const verified = await fetchCurrentUser();
+          if (verified && isMounted) {
+            setIsAuthenticated(true);
+            setCurrentUser(verified);
+            setOfficerUserId(verified.username || verified.id);
+            setClearanceLevel(verified.clearance_level || 'PUBLIC');
+            if (verified.department_id) {
+              setDepartmentId(verified.department_id);
+            }
+          }
+        } catch {}
+      }
+
+      // Allow calibrated minimum animation duration (500ms) to ensure smooth aperture render
+      setTimeout(() => {
+        if (isMounted) {
+          setIsInitializing(false);
+        }
+      }, 500);
+    };
+
+    void initAuth();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleLoginSuccess = useCallback((user: AuthUser) => {
+    setIsAuthenticated(true);
+    setCurrentUser(user);
+    setOfficerUserId(user.username || user.id);
+    setClearanceLevel(user.clearance_level || 'PUBLIC');
+    if (user.department_id) {
+      setDepartmentId(user.department_id);
+    }
+    toast.success(`Welcome, ${user.full_name || user.username} (${user.clearance_level} clearance)`);
+  }, [toast]);
+
+  const handleContinueAsGuest = useCallback(() => {
+    setIsAuthenticated(true);
+    setOfficerUserId('citizen_public_guest');
+    setClearanceLevel('PUBLIC');
+    toast.info('Entered in Public Citizen mode (Standard official records)');
+  }, [toast]);
+
+  const handleSignOut = useCallback(() => {
+    clearStoredAuthSession();
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setOfficerUserId(DEFAULT_OFFICER_ID);
+    setClearanceLevel('PUBLIC');
+    toast.info('Signed out of administrative session');
+  }, [toast]);
 
   // Dismiss model menu on outside click or Escape
   useEffect(() => {
@@ -196,22 +284,37 @@ export default function HomePage() {
   }, [handleNewThread]);
 
   return (
-    <main className="w-screen h-screen min-h-[600px] bg-[#f8fafc] dark:bg-[#090d16] text-[#0f172a] dark:text-[#f1f5f9] overflow-hidden select-none">
-      <div className="w-full h-full bg-white dark:bg-[#0d121e] flex overflow-hidden relative">
-        {/* Left Navigation Rail */}
-        <IconRail
-          activeTab={activeNavTab}
-          onSelectTab={(tab) => {
-            setActiveNavTab(tab);
-            setIsHistoryOpen(false);
-          }}
-          onToggleHistory={() => setIsHistoryOpen((v) => !v)}
-          isHistoryOpen={isHistoryOpen}
-          onOpenSettings={() => handleOpenSettings('general')}
-          onOpenShortcuts={() => setShortcutsModalOpen(true)}
-          userName={officerUserId}
-          clearanceLevel={clearanceLevel}
+    <>
+      {showLoadingScreen && (
+        <SovereignLoadingScreen
+          isReady={!isInitializing}
+          onTransitionComplete={() => setShowLoadingScreen(false)}
         />
+      )}
+
+      {!isAuthenticated ? (
+        <LoginPage
+          onLoginSuccess={handleLoginSuccess}
+          onContinueAsGuest={handleContinueAsGuest}
+        />
+      ) : (
+        <main className="w-screen h-screen min-h-[600px] bg-[#f8fafc] dark:bg-[#090d16] text-[#0f172a] dark:text-[#f1f5f9] overflow-hidden select-none animate-in fade-in duration-300">
+          <div className="w-full h-full bg-white dark:bg-[#0d121e] flex overflow-hidden relative">
+            {/* Left Navigation Rail */}
+            <IconRail
+              activeTab={activeNavTab}
+              onSelectTab={(tab) => {
+                setActiveNavTab(tab);
+                setIsHistoryOpen(false);
+              }}
+              onToggleHistory={() => setIsHistoryOpen((v) => !v)}
+              isHistoryOpen={isHistoryOpen}
+              onOpenSettings={() => handleOpenSettings('general')}
+              onOpenShortcuts={() => setShortcutsModalOpen(true)}
+              onSignOut={handleSignOut}
+              userName={currentUser?.full_name || currentUser?.username || officerUserId}
+              clearanceLevel={clearanceLevel}
+            />
 
         {/* Slide-out Session History Drawer */}
         {isHistoryOpen && (
@@ -546,6 +649,8 @@ export default function HomePage() {
           }
         }}
       />
-    </main>
+        </main>
+      )}
+    </>
   );
 }

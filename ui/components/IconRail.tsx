@@ -13,6 +13,7 @@ import {
   Sun,
   Moon,
   HelpCircle,
+  LogOut,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -25,6 +26,7 @@ interface IconRailProps {
   isHistoryOpen: boolean;
   onOpenSettings: () => void;
   onOpenShortcuts?: () => void;
+  onSignOut?: () => void;
   userName: string;
   clearanceLevel: string;
 }
@@ -36,6 +38,7 @@ export default function IconRail({
   isHistoryOpen,
   onOpenSettings,
   onOpenShortcuts,
+  onSignOut,
   userName,
   clearanceLevel,
 }: IconRailProps) {
@@ -233,6 +236,18 @@ export default function IconRail({
             </span>
           )}
         </button>
+
+        {/* Sign Out Trigger */}
+        {onSignOut && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="p-2 rounded-xl text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all"
+            title="Sign Out / Switch Officer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </aside>
   );

@@ -29,10 +29,124 @@ import type {
   AdvancedSettingsResponse,
   AgentExecutionPlan,
   ComputationResultRecord,
+  AuthUser,
+  AuthTokenResponse,
 } from './types';
 
 const API_BASE = '/api';
 const GEMINI_API_KEY_STORAGE_KEY = 'adam_gemini_api_key';
+const AUTH_TOKEN_KEY = 'adam_token';
+const AUTH_USER_KEY = 'adam_user_info';
+
+export function getStoredAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredAuthUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredAuthSession(token: string, user: AuthUser): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  } catch {}
+}
+
+export function clearStoredAuthSession(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+  } catch {}
+}
+
+export async function loginUser(
+  username: string,
+  password: string,
+): Promise<{ ok: boolean; data?: AuthTokenResponse; error?: string }> {
+  try {
+    const resp = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const body = await resp.json();
+    if (!resp.ok) {
+      return { ok: false, error: body.detail || 'Authentication failed. Please verify credentials.' };
+    }
+    const tokenRes = body as AuthTokenResponse;
+    setStoredAuthSession(tokenRes.access_token, tokenRes.user);
+    return { ok: true, data: tokenRes };
+  } catch (err) {
+    return { ok: false, error: `Connection failed (${err}). Ensure ADAM backend is reachable.` };
+  }
+}
+
+export async function registerUser(payload: {
+  username: string;
+  password: string;
+  full_name?: string;
+  email?: string;
+  department_id?: string;
+}): Promise<{ ok: boolean; data?: AuthTokenResponse; error?: string }> {
+  try {
+    const resp = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const body = await resp.json();
+    if (!resp.ok) {
+      return { ok: false, error: body.detail || 'Registration failed.' };
+    }
+    const tokenRes = body as AuthTokenResponse;
+    setStoredAuthSession(tokenRes.access_token, tokenRes.user);
+    return { ok: true, data: tokenRes };
+  } catch (err) {
+    return { ok: false, error: `Registration error (${err}).` };
+  }
+}
+
+export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  const token = getStoredAuthToken();
+  if (!token) return null;
+  try {
+    const resp = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        clearStoredAuthSession();
+      }
+      return null;
+    }
+    const data = await resp.json();
+    return {
+      id: data.user_id,
+      username: data.user_id,
+      roles: data.roles || ['PUBLIC'],
+      clearance_level: data.clearance_level || 'PUBLIC',
+      department_id: data.department_id || null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function getStoredGeminiApiKey(): string | null {
   if (typeof window === 'undefined') return null;
