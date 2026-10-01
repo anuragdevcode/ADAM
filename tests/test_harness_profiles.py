@@ -315,6 +315,10 @@ def test_qwen_profile_thinking_reasoning_mode():
     """Verify Capability 6: Thinking / Reasoning Mode (enable_thinking: true)."""
     profile = QwenHarnessProfile(is_reasoning_variant=True)
 
+    # By default in chat / RAG mode, thinking is disabled to avoid high latency
+    params_default = profile.resolve_parameters(intent="rag")
+    assert params_default.thinking_enabled is False
+
     # Thinking enabled via intent or explicit parameter
     params_thinking = profile.resolve_parameters(intent="reasoning", thinking_budget=2048)
     assert params_thinking.thinking_enabled is True
@@ -324,7 +328,43 @@ def test_qwen_profile_thinking_reasoning_mode():
     params_alias = profile.resolve_parameters(intent="rag", enable_thinking=True)
     assert params_alias.thinking_enabled is True
 
+    # Explicitly disabled thinking overrides default
+    params_disabled = profile.resolve_parameters(intent="reasoning", enable_thinking=False)
+    assert params_disabled.thinking_enabled is False
+
     # Options include thinking budget in num_predict
     ollama_opts = params_thinking.to_ollama_options()
     assert ollama_opts["num_predict"] == 2048 + 2048  # max_tokens (2048) + thinking_budget (2048)
+
+
+def test_autonomous_thinking_recommendation():
+    """Verify autonomous detection when queries benefit from Deep Think mode."""
+    from adam.rag.query import QueryUnderstanding
+
+    # 1. STEM / Calculation queries
+    rec_calc, reason_calc = QueryUnderstanding.detect_thinking_recommendation("Calculate the DA arrears for basic pay 45000")
+    assert rec_calc is True
+    assert "arithmetic" in (reason_calc or "").lower()
+
+    rec_hi_calc, _ = QueryUnderstanding.detect_thinking_recommendation("कर्मचारी के महंगाई भत्ता की गणना कीजिए")
+    assert rec_hi_calc is True
+
+    # 2. Multi-hop comparison and reconciliation
+    rec_comp, reason_comp = QueryUnderstanding.detect_thinking_recommendation("Compare the 2016 and 2023 procurement rules and resolve conflict")
+    assert rec_comp is True
+    assert "multi-hop" in (reason_comp or "").lower()
+
+    rec_hi_comp, _ = QueryUnderstanding.detect_thinking_recommendation("दोनों शासनादेशों के बीच अंतर और संशोधन की तुलना करें")
+    assert rec_hi_comp is True
+
+    # 3. Structured coding / unit test queries
+    rec_code, reason_code = QueryUnderstanding.detect_thinking_recommendation("Write a python script with unit test to validate GO format")
+    assert rec_code is True
+    assert "deductive" in (reason_code or "").lower()
+
+    # 4. Standard conversational / factual query (should NOT trigger suggestion)
+    rec_simple, reason_simple = QueryUnderstanding.detect_thinking_recommendation("What is the official holiday on 26 January?")
+    assert rec_simple is False
+    assert reason_simple is None
+
 

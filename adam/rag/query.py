@@ -96,6 +96,22 @@ class QueryUnderstanding:
         ],
     }
 
+    # Autonomous thinking / reasoning recommendation trigger patterns
+    THINKING_RECOMMENDATION_PATTERNS = {
+        "CALCULATION": [
+            r"\b(?:calculate|computation|compute|formula|percentage|sum\s+of|difference\s+between\s+amounts|deduction|da\s+rate|dearness\s+allowance|hra|pension\s+commutation|gratuity\s+formula|basic\s+pay|arrears?|salary\s+breakup|financial\s+calculation)\b",
+            r"(?:गणना|हिसाब|प्रतिशत|जोड़|अंतर|कटौती|महंगाई\s*भत्ता|पेंशन\s*कम्यूटेशन|ग्रेच्युटी\s*सूत्र|मूल\s*वेतन|बकाया|वेतन\s*गणना)",
+        ],
+        "MULTI_HOP_RECONCILIATION": [
+            r"\b(?:compare|reconcile|reconciliation|difference\s+between\s+(?:order|circular|rule|act|notification)|superseded|amendment\s+history|contradiction|conflict\s+between|versus|vs\.?|overlap\s+between|chronological\s+order\s+of)\b",
+            r"(?:तुलना|सामंजस्य|अंतर|संशोधन\s*इतिहास|विरोधाभास|टकराव|अधिनियम\s*और\s*नियमावली|पारस्परिक\s*संबंध)",
+        ],
+        "COMPLEX_LOGIC_CODING": [
+            r"\b(?:write\s+(?:a\s+)?(?:python|code|script|sql\s+query|function|unit\s+test)|step[- ]by[- ]step\s+logic|deduce|puzzle|multi[- ]step\s+reasoning|verify\s+logic|formal\s+proof)\b",
+            r"(?:कोड\s*लिखें|स्क्रिप्ट|एसक्यूएल|यूनिट\s*टेस्ट|चरणबद्ध\s*तर्क|तार्किक\s*विश्लेषण)",
+        ],
+    }
+
     # Explicit department patterns
     EXPLICIT_DEPT_PATTERNS = [
         (DepartmentId.FINANCE_TREASURY.value, re.compile(
@@ -352,6 +368,53 @@ class QueryUnderstanding:
             is_system_introspection=is_system_introspection,
             introspection_subtopic=introspection_subtopic,
         )
+
+    @classmethod
+    def detect_thinking_recommendation(cls, query: str) -> Tuple[bool, Optional[str]]:
+        """Autonomously determine if a query would benefit from Deep Think / Reasoning Mode.
+
+        Triggers on:
+        - Arithmetic computations, STEM formulas, financial calculations (DA, pension, arrears)
+        - Multi-hop statutory comparisons, amendment reconciliations, order conflicts
+        - Structured logic, unit test drafting, or code generation
+
+        Returns:
+            Tuple of (is_recommended, reason_message)
+        """
+        if not query or not query.strip():
+            return False, None
+
+        q = query.strip()
+        lower_q = q.lower()
+
+        # 1. Financial / STEM / Numerical calculations
+        for pat in cls.THINKING_RECOMMENDATION_PATTERNS["CALCULATION"]:
+            if re.search(pat, lower_q if pat.isascii() else q, re.IGNORECASE):
+                return (
+                    True,
+                    "This query involves arithmetic formulas, numerical rates, or salary/allowance calculations. "
+                    "Deep Think mode unrolls step-by-step calculations for maximum mathematical accuracy.",
+                )
+
+        # 2. Multi-hop comparison and statutory reconciliation
+        for pat in cls.THINKING_RECOMMENDATION_PATTERNS["MULTI_HOP_RECONCILIATION"]:
+            if re.search(pat, lower_q if pat.isascii() else q, re.IGNORECASE):
+                return (
+                    True,
+                    "This query involves multi-hop statutory comparisons or amendment reconciliation across official records. "
+                    "Deep Think mode unrolls intermediate chain-of-thought to resolve overlapping provisions.",
+                )
+
+        # 3. Complex logic and structured coding
+        for pat in cls.THINKING_RECOMMENDATION_PATTERNS["COMPLEX_LOGIC_CODING"]:
+            if re.search(pat, lower_q if pat.isascii() else q, re.IGNORECASE):
+                return (
+                    True,
+                    "This query requires multi-step deductive logic, unit testing, or structured syntax generation. "
+                    "Deep Think mode performs rigorous internal verification.",
+                )
+
+        return False, None
 
     @classmethod
     def _extract_dates(cls, text: str) -> Tuple[Optional[date], Optional[date], Optional[date]]:

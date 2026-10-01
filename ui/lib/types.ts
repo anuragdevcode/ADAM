@@ -175,6 +175,13 @@ export interface ChatMessage {
   computationResults?: ComputationResultRecord[];
   researchSummary?: string | null;
   subagents?: SubagentRecord[];
+  thinking?: string | null;
+  isThinking?: boolean;
+  thinkingSuggestion?: {
+    suggested: boolean;
+    reason: string;
+    prompt?: string;
+  } | null;
 }
 
 export interface StreamCallbacks {
@@ -192,8 +199,15 @@ export interface StreamCallbacks {
     computation_results?: ComputationResultRecord[];
     research_summary?: string | null;
     subagents?: SubagentRecord[];
+    thinking?: string | null;
+    thinking_suggestion?: {
+      suggested: boolean;
+      reason: string;
+      prompt?: string;
+    } | null;
   }) => void;
   onToken?: (text: string) => void;
+  onThinking?: (text: string) => void;
   onCitations?: (citations: Citation[]) => void;
   onBanners?: (banners: string[]) => void;
   onSuggestions?: (suggestions: string[]) => void;
@@ -209,6 +223,12 @@ export interface StreamCallbacks {
     computation_results?: ComputationResultRecord[];
     research_summary?: string | null;
     subagents?: SubagentRecord[];
+    thinking?: string | null;
+    thinking_suggestion?: {
+      suggested: boolean;
+      reason: string;
+      prompt?: string;
+    } | null;
   }) => void;
   onError?: (error: ChatErrorDetails | string) => void;
 }

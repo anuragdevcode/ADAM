@@ -362,3 +362,58 @@ def test_chat_endpoint_error_event_redacts_api_key(test_client):
         assert resp.status_code == 200
         assert secret_key not in resp.text
         assert "[REDACTED_KEY]" in resp.text
+
+
+def test_chat_endpoint_thinking_suggestion_on_complex_query(test_client):
+    """When query requires calculations or multi-hop logic and thinking is off, done event suggests Deep Think."""
+    resp = test_client.post(
+        "/api/chat",
+        json={"query": "Calculate the DA amount for basic pay 50000", "enable_thinking": False},
+        headers={"X-User-Id": "officer_1"},
+    )
+    assert resp.status_code == 200
+    assert "event: done" in resp.text
+
+    # Extract done event payload
+    lines = resp.text.split("\n")
+    done_payload = None
+    for i, line in enumerate(lines):
+        if line == "event: done":
+            for j in range(i + 1, len(lines)):
+                if lines[j].startswith("data:"):
+                    done_payload = json.loads(lines[j][len("data:"):].strip())
+                    break
+            break
+
+    assert done_payload is not None
+    assert "thinking_suggestion" in done_payload
+    suggestion = done_payload["thinking_suggestion"]
+    assert suggestion is not None
+    assert suggestion["suggested"] is True
+    assert "arithmetic" in suggestion["reason"].lower() or "calculation" in suggestion["reason"].lower()
+
+
+def test_chat_endpoint_enable_thinking_flag_passed(test_client):
+    """When enable_thinking=True is provided, thinking suggestion is not emitted."""
+    resp = test_client.post(
+        "/api/chat",
+        json={"query": "Calculate the DA amount for basic pay 50000", "enable_thinking": True},
+        headers={"X-User-Id": "officer_1"},
+    )
+    assert resp.status_code == 200
+    assert "event: done" in resp.text
+
+    lines = resp.text.split("\n")
+    done_payload = None
+    for i, line in enumerate(lines):
+        if line == "event: done":
+            for j in range(i + 1, len(lines)):
+                if lines[j].startswith("data:"):
+                    done_payload = json.loads(lines[j][len("data:"):].strip())
+                    break
+            break
+
+    assert done_payload is not None
+    # Thinking was already enabled, so no suggestion is needed
+    assert done_payload.get("thinking_suggestion") is None
+

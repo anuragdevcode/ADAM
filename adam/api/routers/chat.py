@@ -34,6 +34,7 @@ class ChatRequest(BaseModel):
     backend: Optional[str] = None
     department_id: Optional[str] = None
     api_key: Optional[str] = None
+    enable_thinking: Optional[bool] = None
 
 
 @router.post("/chat")
@@ -46,6 +47,7 @@ async def chat_endpoint(
     x_adam_top_k: Optional[str] = Header(None),
     x_adam_max_tokens: Optional[str] = Header(None),
     x_adam_temperature: Optional[str] = Header(None),
+    x_adam_enable_thinking: Optional[str] = Header(None),
 ):
     """Stream response tokens and citations using Server-Sent Events (SSE)."""
     # Scope department if explicitly requested in payload
@@ -119,6 +121,22 @@ async def chat_endpoint(
         start_event_emitted = False
         captured_session_id = session_id
 
+        effective_enable_thinking: bool = False
+        if req.enable_thinking is not None:
+            effective_enable_thinking = bool(req.enable_thinking)
+        elif x_adam_enable_thinking is not None:
+            effective_enable_thinking = x_adam_enable_thinking.lower() in ("true", "1", "yes")
+
+        from adam.rag.query import QueryUnderstanding
+        thinking_recommended, thinking_reason = QueryUnderstanding.detect_thinking_recommendation(req.query)
+        thinking_suggestion = None
+        if thinking_recommended and not effective_enable_thinking:
+            thinking_suggestion = {
+                "suggested": True,
+                "reason": thinking_reason,
+                "prompt": req.query,
+            }
+
         def on_event(event: OperationalEvent) -> None:
             nonlocal captured_session_id
             if event.data and event.data.get("session_id"):
@@ -130,6 +148,10 @@ async def chat_endpoint(
         def token_callback(chunk: str) -> None:
             if chunk:
                 loop.call_soon_threadsafe(event_queue.put_nowait, ("token", {"text": chunk}, None))
+
+        def thinking_callback(chunk: str) -> None:
+            if chunk:
+                loop.call_soon_threadsafe(event_queue.put_nowait, ("thinking", {"text": chunk}, None))
 
         try:
             from adam.model.policy import validate_air_gapped_model_policy, AirGappedSovereigntyViolationError
@@ -165,6 +187,10 @@ async def chat_endpoint(
                         sig = inspect.signature(target_func)
                         if "token_callback" in sig.parameters:
                             run_kwargs["token_callback"] = token_callback
+                        if "thinking_callback" in sig.parameters:
+                            run_kwargs["thinking_callback"] = thinking_callback
+                        if "enable_thinking" in sig.parameters:
+                            run_kwargs["enable_thinking"] = effective_enable_thinking
                         if "settings_bundle" in sig.parameters and _settings_bundle is not None:
                             run_kwargs["settings_bundle"] = _settings_bundle
                     except Exception:
@@ -192,6 +218,8 @@ async def chat_endpoint(
                             start_event_emitted = True
                         tokens_streamed += 1
                         yield f"event: token\ndata: {json.dumps(payload)}\n\n"
+                    elif kind == "thinking":
+                        yield f"event: thinking\ndata: {json.dumps(payload)}\n\n"
                 except asyncio.TimeoutError:
                     continue
 
@@ -210,6 +238,8 @@ async def chat_endpoint(
                         start_event_emitted = True
                     tokens_streamed += 1
                     yield f"event: token\ndata: {json.dumps(payload)}\n\n"
+                elif kind == "thinking":
+                    yield f"event: thinking\ndata: {json.dumps(payload)}\n\n"
 
             response = await run_task
 
@@ -261,6 +291,7 @@ async def chat_endpoint(
                 "research_summary": getattr(response, "research_summary", None),
                 "subagents": getattr(response, "subagents", []),
                 "thinking": getattr(response, "thinking", None),
+                "thinking_suggestion": thinking_suggestion,
             }
             yield f"event: trail\ndata: {json.dumps(trail_payload)}\n\n"
 
@@ -286,6 +317,7 @@ async def chat_endpoint(
                 "research_summary": getattr(response, "research_summary", None),
                 "subagents": getattr(response, "subagents", []),
                 "thinking": getattr(response, "thinking", None),
+                "thinking_suggestion": thinking_suggestion,
             }
             yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
 

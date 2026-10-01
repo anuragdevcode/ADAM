@@ -29,6 +29,8 @@ import {
   Copy,
   ServerOff,
   Cloud,
+  Brain,
+  Zap,
 } from 'lucide-react';
 
 interface ChatWindowProps {
@@ -223,6 +225,76 @@ const EXAMPLE_CARDS = [
   },
 ];
 
+function ThoughtAccordion({
+  thinking,
+  isThinking,
+}: {
+  thinking?: string | null;
+  isThinking?: boolean;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Auto-expand while thinking tokens are actively generating
+  useEffect(() => {
+    if (isThinking) {
+      setIsExpanded(true);
+    }
+  }, [isThinking]);
+
+  if (!thinking && !isThinking) return null;
+
+  return (
+    <div className="mb-3 rounded-xl border border-purple-200/80 dark:border-purple-900/50 bg-purple-50/40 dark:bg-purple-950/20 overflow-hidden transition-all text-left shadow-xs">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full px-3.5 py-2 flex items-center justify-between text-xs font-medium text-purple-900 dark:text-purple-300 hover:bg-purple-100/50 dark:hover:bg-purple-900/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Brain
+            className={`w-3.5 h-3.5 ${
+              isThinking ? 'text-purple-600 dark:text-purple-400 animate-pulse' : 'text-purple-500'
+            }`}
+          />
+          <span className="font-semibold">
+            {isThinking ? 'Thinking & Unrolling Reasoning...' : 'Thought Process'}
+          </span>
+          {isThinking && (
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500" />
+            </span>
+          )}
+          {!isThinking && thinking && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-mono">
+              Deep Think
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 text-slate-400">
+          <span className="text-[11px] font-normal">{isExpanded ? 'Hide' : 'Show'}</span>
+          <ChevronRight
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+              isExpanded ? 'rotate-90' : ''
+            }`}
+          />
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="px-3.5 pb-3 pt-1 border-t border-purple-100 dark:border-purple-900/40">
+          <div className="text-xs font-mono text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap max-h-72 overflow-y-auto pr-1">
+            {thinking || (isThinking ? 'Analyzing query parameters and unrolling logic...' : '')}
+            {isThinking && (
+              <span className="inline-block w-1.5 h-3.5 ml-1 bg-purple-500 animate-pulse rounded-full align-middle" />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatWindow({
   userId,
   sessionId,
@@ -240,6 +312,7 @@ export default function ChatWindow({
   const [isLoading, setIsLoading] = useState(false);
   const [lastAnswer, setLastAnswer] = useState<VoiceAnswer>({ text: '', seq: 0 });
   const [citationEnabled, setCitationEnabled] = useState(true);
+  const [deepThinkEnabled, setDeepThinkEnabled] = useState(false);
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [deptMenuOpen, setDeptMenuOpen] = useState(false);
 
@@ -282,9 +355,11 @@ export default function ChatWindow({
   }, [sessionId, userId, idPrefix]);
 
   const sendMessage = useCallback(
-    async (queryText: string) => {
+    async (queryText: string, options?: { enableThinking?: boolean }) => {
       const q = queryText.trim();
       if (!q || isLoading) return;
+
+      const effectiveThinking = options?.enableThinking ?? deepThinkEnabled;
 
       const userMsg: ChatMessage = {
         id: `${idPrefix}-${Date.now()}-u`,
@@ -301,6 +376,9 @@ export default function ChatWindow({
         citations: [],
         banners: [],
         suggestions: [],
+        thinking: null,
+        isThinking: effectiveThinking,
+        thinkingSuggestion: null,
       };
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
@@ -320,6 +398,7 @@ export default function ChatWindow({
             clearanceLevel,
             departmentId: selectedDept !== 'ALL' ? selectedDept : null,
             modelId: modelId || null,
+            enableThinking: effectiveThinking,
           },
           {
             onStart: (sid, returnedModelId) => {
@@ -350,10 +429,29 @@ export default function ChatWindow({
                 }),
               );
             },
+            onThinking: (chunk) => {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        thinking: (m.thinking || '') + chunk,
+                        isThinking: true,
+                      }
+                    : m,
+                ),
+              );
+            },
             onToken: (text) => {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === assistantMsgId ? { ...m, content: m.content + text } : m,
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        content: m.content + text,
+                        isThinking: false,
+                      }
+                    : m,
                 ),
               );
             },
@@ -406,6 +504,8 @@ export default function ChatWindow({
                     computationResults: trail.computation_results ?? m.computationResults,
                     researchSummary: trail.research_summary ?? m.researchSummary,
                     subagents: trail.subagents ?? m.subagents,
+                    thinking: trail.thinking ?? m.thinking,
+                    thinkingSuggestion: trail.thinking_suggestion ?? m.thinkingSuggestion,
                   };
                 }),
               );
@@ -417,6 +517,7 @@ export default function ChatWindow({
                     ? {
                         ...m,
                         isStreaming: false,
+                        isThinking: false,
                         isNoAnswer: meta.is_no_answer,
                         isHighRisk: meta.is_high_risk,
                         latencyMs: meta.latency_ms,
@@ -427,6 +528,8 @@ export default function ChatWindow({
                         computationResults: meta.computation_results ?? m.computationResults,
                         researchSummary: meta.research_summary ?? m.researchSummary,
                         subagents: meta.subagents ?? m.subagents,
+                        thinking: meta.thinking ?? m.thinking,
+                        thinkingSuggestion: meta.thinking_suggestion ?? m.thinkingSuggestion,
                       }
                     : m,
                 );
@@ -464,7 +567,7 @@ export default function ChatWindow({
         setIsLoading(false);
       }
     },
-    [isLoading, sessionId, userId, clearanceLevel, selectedDept, modelId, onSessionCreated, idPrefix, citationEnabled],
+    [isLoading, sessionId, userId, clearanceLevel, selectedDept, modelId, onSessionCreated, idPrefix, citationEnabled, deepThinkEnabled],
   );
 
   const handleRetry = useCallback(
@@ -619,6 +722,32 @@ export default function ChatWindow({
                       </div>
                     )}
                   </div>
+
+                  {/* Deep Think Mode Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => setDeepThinkEnabled(!deepThinkEnabled)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                      deepThinkEnabled
+                        ? 'border-purple-500/60 bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:border-purple-500/70 dark:text-purple-300 shadow-xs ring-1 ring-purple-400/30'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                    title={
+                      deepThinkEnabled
+                        ? 'Deep Think reasoning mode active (unrolls multi-step chain-of-thought)'
+                        : 'Enable Deep Think reasoning mode for complex multi-hop queries and calculations'
+                    }
+                  >
+                    <Brain
+                      className={`w-3.5 h-3.5 ${
+                        deepThinkEnabled ? 'text-purple-600 dark:text-purple-400 animate-pulse' : 'text-slate-400'
+                      }`}
+                    />
+                    <span>Deep Think</span>
+                    {deepThinkEnabled && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping" />
+                    )}
+                  </button>
                 </div>
 
                 {/* Right side: Citation Toggle + Voice + Submit */}
@@ -759,6 +888,12 @@ export default function ChatWindow({
                         subagents={msg.subagents}
                       />
 
+                      {/* Deep Think Thoughts Section */}
+                      <ThoughtAccordion
+                        thinking={msg.thinking}
+                        isThinking={msg.isThinking}
+                      />
+
                       {msg.error ? (
                         <AiErrorCard
                           error={msg.error}
@@ -805,6 +940,44 @@ export default function ChatWindow({
                               <li key={i}>{s}</li>
                             ))}
                           </ul>
+                        </div>
+                      )}
+
+                      {/* Autonomous Deep Think Recommendation Banner */}
+                      {msg.thinkingSuggestion?.suggested && !msg.isStreaming && (
+                        <div className="mt-3.5 p-3.5 rounded-xl bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/70 flex items-start justify-between gap-3 text-left shadow-xs">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-900/60 flex items-center justify-center shrink-0 text-purple-700 dark:text-purple-300 mt-0.5">
+                              <Brain className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-xs font-semibold text-purple-900 dark:text-purple-200">
+                                  Deep Think Recommended
+                                </p>
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-200/60 dark:bg-purple-800/60 text-purple-800 dark:text-purple-300">
+                                  Complex Reasoning Detected
+                                </span>
+                              </div>
+                              <p className="text-xs text-purple-700 dark:text-purple-300 mt-1 leading-relaxed">
+                                {msg.thinkingSuggestion.reason}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeepThinkEnabled(true);
+                              const targetPrompt = msg.thinkingSuggestion?.prompt;
+                              if (targetPrompt) {
+                                sendMessage(targetPrompt, { enableThinking: true });
+                              }
+                            }}
+                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>Re-prompt with Deep Think</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -952,6 +1125,32 @@ export default function ChatWindow({
                     </div>
                   )}
                 </div>
+
+                {/* Deep Think Mode Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setDeepThinkEnabled(!deepThinkEnabled)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
+                    deepThinkEnabled
+                      ? 'border-purple-500/60 bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:border-purple-500/70 dark:text-purple-300 shadow-xs ring-1 ring-purple-400/30'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                  title={
+                    deepThinkEnabled
+                      ? 'Deep Think reasoning mode active'
+                      : 'Enable Deep Think reasoning mode'
+                  }
+                >
+                  <Brain
+                    className={`w-3 h-3 ${
+                      deepThinkEnabled ? 'text-purple-600 dark:text-purple-400 animate-pulse' : 'text-slate-400'
+                    }`}
+                  />
+                  <span>Deep Think</span>
+                  {deepThinkEnabled && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping" />
+                  )}
+                </button>
               </div>
 
               <div className="flex items-center gap-2.5">

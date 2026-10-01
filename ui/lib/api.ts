@@ -209,6 +209,7 @@ export async function streamChat(
     modelId?: string | null;
     geminiApiKey?: string | null;
     advancedSettings?: AdvancedSettingsBundle | null;
+    enableThinking?: boolean;
   } = {},
   callbacks: StreamCallbacks = {},
   signal?: AbortSignal,
@@ -231,6 +232,10 @@ export async function streamChat(
     if (activeSettings.generation?.temperature_rag != null) {
       settingsHeaders['X-ADAM-Temperature'] = String(activeSettings.generation.temperature_rag);
     }
+  }
+
+  if (options.enableThinking != null) {
+    settingsHeaders['X-ADAM-Enable-Thinking'] = String(options.enableThinking);
   }
 
   try {
@@ -256,6 +261,7 @@ export async function streamChat(
         model_id: options.modelId || null,
         department_id: options.departmentId || null,
         api_key: geminiKey || null,
+        enable_thinking: options.enableThinking ?? false,
       }),
       signal,
     });
@@ -328,6 +334,9 @@ export async function streamChat(
               break;
             case 'token':
               callbacks.onToken?.(data.text);
+              break;
+            case 'thinking':
+              callbacks.onThinking?.(data.text);
               break;
             case 'citations':
               callbacks.onCitations?.(data as Citation[]);

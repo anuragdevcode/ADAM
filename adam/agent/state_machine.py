@@ -212,6 +212,8 @@ class AgentStateMachine:
         on_event: Optional[Callable[[OperationalEvent], None]] = None,
         trace_id: Optional[str] = None,
         token_callback: Optional[Callable[[str], None]] = None,
+        thinking_callback: Optional[Callable[[str], None]] = None,
+        enable_thinking: Optional[bool] = None,
         settings_bundle=None,
     ) -> AgentResponse:
         """Execute full bounded 7-stage state machine."""
@@ -232,6 +234,13 @@ class AgentStateMachine:
                 temperature = getattr(gs, "temperature_rag", temperature)
                 max_tokens = getattr(gs, "max_tokens_rag", max_tokens)
                 _generation_settings = gs
+
+        if enable_thinking is not None:
+            effective_thinking_enabled: Optional[bool] = enable_thinking
+        elif _generation_settings is not None and getattr(_generation_settings, "thinking_enabled", None) is not None:
+            effective_thinking_enabled = _generation_settings.thinking_enabled
+        else:
+            effective_thinking_enabled = None
 
         # Enforce Phase 04 temperature constraints [0.0, 0.2]
         if temperature < 0.0 or temperature > 0.2:
@@ -910,11 +919,14 @@ class AgentStateMachine:
                     conv_max_tokens = 256 if max_tokens in (512, 1024) else min(max_tokens, 384)
                     if _generation_settings is not None:
                         conv_max_tokens = min(conv_max_tokens, getattr(_generation_settings, "max_tokens_conversational", conv_max_tokens))
-                    harness_params = profile.resolve_parameters(
-                        intent="conversational",
-                        temperature=temperature if temperature > 0.0 else 0.2,
-                        max_tokens=conv_max_tokens,
-                    )
+                    conv_profile_kwargs = {
+                        "intent": "conversational",
+                        "temperature": temperature if temperature > 0.0 else 0.2,
+                        "max_tokens": conv_max_tokens,
+                    }
+                    if effective_thinking_enabled is not None:
+                        conv_profile_kwargs["thinking_enabled"] = effective_thinking_enabled
+                    harness_params = profile.resolve_parameters(**conv_profile_kwargs)
                     user_prompt = profile.format_conversational_prompt(query)
                     system_prompt = profile.resolve_system_prompt("conversational")
 
@@ -928,6 +940,7 @@ class AgentStateMachine:
                         max_tokens=effective_max_tokens,
                         harness_parameters=harness_params,
                         token_callback=token_callback,
+                        thinking_callback=thinking_callback,
                     )
                     answer = gen_result.answer
                     prompt_tokens = gen_result.tokens_prompt
@@ -1014,6 +1027,8 @@ class AgentStateMachine:
                         profile_kwargs["min_p"] = _generation_settings.min_p
                         profile_kwargs["thinking_enabled"] = _generation_settings.thinking_enabled
                         profile_kwargs["thinking_budget"] = _generation_settings.thinking_budget
+                    if effective_thinking_enabled is not None:
+                        profile_kwargs["thinking_enabled"] = effective_thinking_enabled
                     harness_params = profile.resolve_parameters(**profile_kwargs)
 
                     max_passages = _generation_settings.max_rag_prompt_passages if _generation_settings is not None else 4
@@ -1030,6 +1045,7 @@ class AgentStateMachine:
                         max_tokens=effective_max_tokens,
                         harness_parameters=harness_params,
                         token_callback=token_callback,
+                        thinking_callback=thinking_callback,
                     )
                     answer = gen_result.answer
                     prompt_tokens = gen_result.tokens_prompt

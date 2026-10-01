@@ -81,7 +81,11 @@ class QwenHarnessProfile(BaseHarnessProfile):
             temp = overrides.get("temperature", 0.2)
             max_tokens = overrides.get("max_tokens", 1024)
 
-        thinking_flag = overrides.get("thinking_enabled", overrides.get("enable_thinking", True))
+        # In standard conversational / governed RAG mode, thinking mode is disabled by default
+        # to ensure rapid response times without chain-of-thought latency overhead.
+        # Only engage thinking/reasoning mode when explicitly activated by user or for reasoning intents.
+        default_thinking = intent in ("reasoning", "multi_step", "stem", "puzzle")
+        thinking_flag = overrides.get("thinking_enabled", overrides.get("enable_thinking", default_thinking))
         thinking_enabled = self.is_reasoning_variant and bool(thinking_flag)
 
         params = ModelInferenceParameters(
