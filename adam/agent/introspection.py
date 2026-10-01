@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from adam.db.session import get_session
+
 from adam.agent.coordinator import HeavyWorkerCoordinator
 from adam.agent.redaction import SecretRedactor
 from adam.agent.tools import ReadOnlyToolRegistry
@@ -281,7 +283,7 @@ class SystemIntrospectionService:
         """Construct authoritative system snapshot by querying existing singletons and DB state."""
         sess = session or db
         if sess is None:
-            sess = get_session_factory()()
+            sess = get_session()
         if user_context is None:
             user_id = kwargs.get("user_id", "officer_system")
             clearance = kwargs.get("clearance_level", Classification.PUBLIC.value)

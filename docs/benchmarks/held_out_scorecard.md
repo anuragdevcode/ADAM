@@ -1,6 +1,6 @@
 # ADAM Empirical Held-Out Benchmark Scorecard
 
-> **Evaluation Run Date:** `2026-10-01T04:57:11.719238+00:00`  
+> **Evaluation Run Date:** `2026-10-01T05:10:29.851403+00:00`  
 > **Target Jurisdiction:** Uttarakhand State Public Records Intelligence  
 > **Evaluation Mode:** Held-Out Gold Evaluation (Outside Model Tuning Loop)
 
@@ -43,11 +43,11 @@ This benchmark is evaluated over **206 real Uttarakhand Government documents** (
 
 ## 4. Latency Distribution (Retriever Engine)
 
-- **p50 Latency:** `24.93 ms`
-- **p90 Latency:** `25.90 ms`
-- **p95 Latency:** `33.10 ms`
-- **p99 Latency:** `33.10 ms`
-- **Mean Latency:** `22.94 ms`
+- **p50 Latency:** `40.52 ms`
+- **p90 Latency:** `52.50 ms`
+- **p95 Latency:** `179.37 ms`
+- **p99 Latency:** `179.37 ms`
+- **Mean Latency:** `50.59 ms`
 
 ---
 

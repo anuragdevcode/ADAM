@@ -48,18 +48,34 @@ def db_group():
     pass
 
 
+def _get_alembic_config():
+    """Locate alembic.ini in project root and return configured Alembic Config object."""
+    import os
+    from pathlib import Path
+    from alembic.config import Config
+    from adam.config import get_database_url
+
+    ini_path = None
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "alembic.ini"
+        if candidate.exists():
+            ini_path = str(candidate)
+            break
+    if not ini_path or not os.path.exists(ini_path):
+        ini_path = os.path.abspath("alembic.ini")
+
+    alembic_cfg = Config(ini_path)
+    alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+    return alembic_cfg
+
+
 @db_group.command(name="upgrade")
 @click.option("--revision", "-r", default="head", help="Target revision (default: head)")
 def db_upgrade(revision: str):
     """Apply database migrations up to the specified revision."""
-    import os
-    from alembic.config import Config
     from alembic import command
-    from adam.config import get_database_url
 
-    ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
-    alembic_cfg = Config(ini_path)
-    alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+    alembic_cfg = _get_alembic_config()
     click.echo(f"Applying database migrations to revision: {revision}...")
     try:
         command.upgrade(alembic_cfg, revision)
@@ -73,14 +89,9 @@ def db_upgrade(revision: str):
 @click.option("--revision", "-r", required=True, help="Target revision (e.g. -1 or base)")
 def db_downgrade(revision: str):
     """Revert database migrations down to the specified revision."""
-    import os
-    from alembic.config import Config
     from alembic import command
-    from adam.config import get_database_url
 
-    ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
-    alembic_cfg = Config(ini_path)
-    alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+    alembic_cfg = _get_alembic_config()
     click.echo(f"Reverting database migrations down to: {revision}...")
     try:
         command.downgrade(alembic_cfg, revision)
@@ -93,14 +104,9 @@ def db_downgrade(revision: str):
 @db_group.command(name="current")
 def db_current():
     """Display current applied migration revision."""
-    import os
-    from alembic.config import Config
     from alembic import command
-    from adam.config import get_database_url
 
-    ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
-    alembic_cfg = Config(ini_path)
-    alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+    alembic_cfg = _get_alembic_config()
     command.current(alembic_cfg)
 
 

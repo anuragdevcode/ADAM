@@ -15,6 +15,7 @@ from adam.db.models import (
     TextBlock,
     DocumentChunk,
     IngestionJob,
+    IngestionJobItem,
     AuditEvent,
 )
 from adam.extract.pipeline import DocumentExtractionPipeline

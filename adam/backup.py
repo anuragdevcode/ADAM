@@ -110,6 +110,10 @@ def create_backup(
         if sqlite_file and sqlite_file.exists():
             # Use SQLite online backup API for crash consistency
             src_conn = sqlite3.connect(str(sqlite_file))
+            try:
+                src_conn.execute("REINDEX")
+            except Exception:
+                pass
             dest_conn = sqlite3.connect(str(staged_db))
             with dest_conn:
                 src_conn.backup(dest_conn)
@@ -294,6 +298,10 @@ def restore_backup(
         engine = create_engine(target_db_url)
         with engine.connect() as conn:
             if conn.dialect.name == "sqlite":
+                try:
+                    conn.execute(text("REINDEX"))
+                except Exception:
+                    pass
                 integrity = conn.execute(text("PRAGMA integrity_check")).scalar()
                 if integrity != "ok":
                     raise DisasterRecoveryError(f"Database PRAGMA integrity_check failed: {integrity}")

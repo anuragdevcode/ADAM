@@ -60,14 +60,12 @@ python_functions = ["test_*"]
 
 [tool.ruff]
 target-version = "py312"
-line-length = 100
+line-length = 120
+exclude = ["alembic", "build", "dist", ".git", "__pycache__", "ui", "node_modules"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+select = ["E9", "F63", "F7", "F82"]
 ignore = ["E501"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E", "F", "W"]
 
 [tool.mypy]
 python_version = "3.12"
