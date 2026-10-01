@@ -212,7 +212,7 @@ def show_budget(profile: str):
 
 
 @model_group.command(name="benchmark")
-@click.option("--model-id", default="qwen2.5-3b-instruct-q4", help="Model artifact ID or tag (default: qwen2.5-3b-instruct-q4)")
+@click.option("--model-id", default="qwen3.5-4b-instruct-q4", help="Model artifact ID or tag (default: qwen3.5-4b-instruct-q4)")
 @click.option("--backend", default="ollama", help="Inference runtime backend (ollama, deterministic)")
 @click.option("--prompt", default="State the rules for verification of basic pay under the IFMS portal.", help="Evaluation prompt")
 @click.option("--tokens", default=256, type=int, help="Max tokens to generate")

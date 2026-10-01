@@ -182,13 +182,13 @@ async def chat_endpoint(
                     kind, payload, sid = await asyncio.wait_for(event_queue.get(), timeout=0.03)
                     if kind == "status":
                         if not start_event_emitted and sid:
-                            yield f"event: start\ndata: {json.dumps({'session_id': sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                            yield f"event: start\ndata: {json.dumps({'session_id': sid, 'model_id': req.model_id or 'qwen3.5:4b', 'query': req.query, 'trace_id': trace_id})}\n\n"
                             start_event_emitted = True
                         yield f"event: status\ndata: {json.dumps(payload)}\n\n"
                     elif kind == "token":
                         if not start_event_emitted:
                             eff_sid = captured_session_id or req.session_id or trace_id
-                            yield f"event: start\ndata: {json.dumps({'session_id': eff_sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                            yield f"event: start\ndata: {json.dumps({'session_id': eff_sid, 'model_id': req.model_id or 'qwen3.5:4b', 'query': req.query, 'trace_id': trace_id})}\n\n"
                             start_event_emitted = True
                         tokens_streamed += 1
                         yield f"event: token\ndata: {json.dumps(payload)}\n\n"
@@ -200,13 +200,13 @@ async def chat_endpoint(
                 kind, payload, sid = event_queue.get_nowait()
                 if kind == "status":
                     if not start_event_emitted and sid:
-                        yield f"event: start\ndata: {json.dumps({'session_id': sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                        yield f"event: start\ndata: {json.dumps({'session_id': sid, 'model_id': req.model_id or 'qwen3.5:4b', 'query': req.query, 'trace_id': trace_id})}\n\n"
                         start_event_emitted = True
                     yield f"event: status\ndata: {json.dumps(payload)}\n\n"
                 elif kind == "token":
                     if not start_event_emitted:
                         eff_sid = captured_session_id or req.session_id or trace_id
-                        yield f"event: start\ndata: {json.dumps({'session_id': eff_sid, 'model_id': req.model_id or 'qwen2.5:3b', 'query': req.query, 'trace_id': trace_id})}\n\n"
+                        yield f"event: start\ndata: {json.dumps({'session_id': eff_sid, 'model_id': req.model_id or 'qwen3.5:4b', 'query': req.query, 'trace_id': trace_id})}\n\n"
                         start_event_emitted = True
                     tokens_streamed += 1
                     yield f"event: token\ndata: {json.dumps(payload)}\n\n"
@@ -315,7 +315,7 @@ async def chat_endpoint(
                 title = "Local Model Not Downloaded"
                 suggested_action = "pull_model"
                 m = re.search(r"['\"](.*?)['\"]", raw_err)
-                tag = m.group(1) if m else "qwen2.5:3b"
+                tag = m.group(1) if m else "qwen3.5:4b"
                 cmd_hint = f"ollama pull {tag}"
             elif "gemini api key is not configured" in lower_err or "api key cannot be empty" in lower_err:
                 category = "gemini_key_missing"
@@ -337,7 +337,7 @@ async def chat_endpoint(
                 category = "air_gapped_policy_violation"
                 title = "Air-Gapped Sovereignty Policy Enforcement"
                 suggested_action = "switch_to_local_model"
-                cmd_hint = "Switch to local Ollama (qwen2.5:3b)"
+                cmd_hint = "Switch to local Ollama (qwen3.5:4b)"
 
             error_payload = {
                 "message": raw_err,

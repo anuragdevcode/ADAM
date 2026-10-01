@@ -403,6 +403,7 @@ class OllamaModelRuntime(BaseModelRuntime):
     ARTIFACT_MODEL_TAGS = {
         "qwen3-4b-instruct-q4": "qwen3:4b",
         "qwen3-1.7b-instruct-q4": "qwen3:1.7b",
+        "qwen3.5-4b-instruct-q4": "qwen3.5:4b",
         "qwen2.5-3b-instruct-q4": "qwen2.5:3b",
         "gemma-3-4b-it-q4": "gemma3:4b",
         "llama-3.2-3b-instruct-q4": "llama3.2:3b",
@@ -434,7 +435,14 @@ class OllamaModelRuntime(BaseModelRuntime):
         if configured_tag:
             return configured_tag
         art_id = artifact.id.lower()
-        if "qwen2.5" in art_id or "qwen2_5" in art_id:
+        if "qwen3.5" in art_id or "qwen3_5" in art_id:
+            if "7b" in art_id:
+                return "qwen3.5:7b"
+            elif "4b" in art_id:
+                return "qwen3.5:4b"
+            else:
+                return "qwen3.5:4b"
+        elif "qwen2.5" in art_id or "qwen2_5" in art_id:
             if "7b" in art_id:
                 return "qwen2.5:7b"
             elif "1.5b" in art_id or "1_5b" in art_id:
@@ -449,7 +457,7 @@ class OllamaModelRuntime(BaseModelRuntime):
             return "gemma:2b"
         elif "llama" in art_id:
             return "llama3.2:3b"
-        return "qwen2.5:3b"
+        return "qwen3.5:4b"
 
     @staticmethod
     def _strip_reasoning(content: str) -> str:

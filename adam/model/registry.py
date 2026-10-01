@@ -185,18 +185,18 @@ QWEN3_1_7B_INSTRUCT = ModelArtifact(
     },
 )
 
-QWEN2_5_3B_INSTRUCT = ModelArtifact(
-    id="qwen2.5-3b-instruct-q4",
-    name="Qwen/Qwen2.5-3B-Instruct",
-    revision="v2.5-gguf-q4km",
+QWEN3_5_4B_INSTRUCT = ModelArtifact(
+    id="qwen3.5-4b-instruct-q4",
+    name="Qwen/Qwen3.5-4B-Instruct",
+    revision="v3.5-gguf-q4km",
     quantization="Q4_K_M",
     model_format="GGUF",
     checksum_sha256="4d715b706df8b8e0a112dfad96beeeae1c8a14b1f66c071a9ee55de0dfa6c766",
-    file_size_bytes=1_930_000_000,  # ~1.93 GB (target profile for MacBook Air 8GB)
+    file_size_bytes=2_650_000_000,  # ~2.65 GB (updated from Qwen 2.5 3B to Qwen 3.5 4B)
     license_id="Apache-2.0",
     license_status=LicenseStatus.APPROVED,
     requires_legal_review=False,
-    context_window=4096,
+    context_window=8192,
     languages=["en", "hi"],
     serving_runtime="ollama",
     prompt_template=QWEN3_CHATML_TEMPLATE,
@@ -206,8 +206,8 @@ QWEN2_5_3B_INSTRUCT = ModelArtifact(
     status=ModelStatus.REGISTERED,
     sbom={
         "vendor": "Alibaba Cloud / Qwen Team",
-        "base_model": "Qwen2.5-3B-Instruct",
-        "parameters": "3.09B",
+        "base_model": "Qwen3.5-4B-Instruct",
+        "parameters": "4.0B",
         "quantizer": "llama.cpp-kquants / ollama",
         "tokenizer": "BPE tiktoken-derived vocab 151646",
         "training_license": "Apache-2.0",
@@ -217,6 +217,9 @@ QWEN2_5_3B_INSTRUCT = ModelArtifact(
         "hardware_acceleration": "Apple Silicon Metal GPU accelerated",
     },
 )
+
+# Backward-compatible alias for existing references
+QWEN2_5_3B_INSTRUCT = QWEN3_5_4B_INSTRUCT
 
 GEMMA_3_4B_IT = ModelArtifact(
     id="gemma-3-4b-it-q4",
@@ -374,7 +377,7 @@ GEMINI_1_5_FLASH = ModelArtifact(
 CANONICAL_MODELS: Dict[str, ModelArtifact] = {
     QWEN3_4B_INSTRUCT.id: QWEN3_4B_INSTRUCT,
     QWEN3_1_7B_INSTRUCT.id: QWEN3_1_7B_INSTRUCT,
-    QWEN2_5_3B_INSTRUCT.id: QWEN2_5_3B_INSTRUCT,
+    QWEN3_5_4B_INSTRUCT.id: QWEN3_5_4B_INSTRUCT,
     GEMINI_3_6_FLASH.id: GEMINI_3_6_FLASH,
     GEMMA_3_4B_IT.id: GEMMA_3_4B_IT,
     LLAMA_3_2_3B_INSTRUCT.id: LLAMA_3_2_3B_INSTRUCT,
@@ -435,11 +438,17 @@ class ModelRegistry:
             "gemini-1.5-pro": GEMINI_3_6_FLASH.id,
             "gemini-flash": GEMINI_3_6_FLASH.id,
             "gemini": GEMINI_3_6_FLASH.id,
-            "qwen2.5:3b": QWEN2_5_3B_INSTRUCT.id,
-            "qwen2.5-3b": QWEN2_5_3B_INSTRUCT.id,
-            "qwen2.5:latest": QWEN2_5_3B_INSTRUCT.id,
-            "qwen2.5": QWEN2_5_3B_INSTRUCT.id,
-            "qwen2.5-3b-instruct": QWEN2_5_3B_INSTRUCT.id,
+            "qwen3.5:4b": QWEN3_5_4B_INSTRUCT.id,
+            "qwen3.5-4b": QWEN3_5_4B_INSTRUCT.id,
+            "qwen3.5": QWEN3_5_4B_INSTRUCT.id,
+            "qwen3.5-4b-instruct": QWEN3_5_4B_INSTRUCT.id,
+            "qwen3.5-4b-instruct-q4": QWEN3_5_4B_INSTRUCT.id,
+            "qwen2.5:3b": QWEN3_5_4B_INSTRUCT.id,
+            "qwen2.5-3b": QWEN3_5_4B_INSTRUCT.id,
+            "qwen2.5:latest": QWEN3_5_4B_INSTRUCT.id,
+            "qwen2.5": QWEN3_5_4B_INSTRUCT.id,
+            "qwen2.5-3b-instruct": QWEN3_5_4B_INSTRUCT.id,
+            "qwen2.5-3b-instruct-q4": QWEN3_5_4B_INSTRUCT.id,
             "qwen3": QWEN3_4B_INSTRUCT.id,
             "qwen3-4b": QWEN3_4B_INSTRUCT.id,
             "qwen3-1.7b": QWEN3_1_7B_INSTRUCT.id,

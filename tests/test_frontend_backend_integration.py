@@ -203,7 +203,7 @@ def test_section1_model_inventory_and_instance_uniqueness(integ_client, integ_se
 
     model_ids = {m["id"] for m in models}
     assert "qwen3-4b-instruct-q4" in model_ids
-    assert "qwen2.5-3b-instruct-q4" in model_ids
+    assert "qwen3.5-4b-instruct-q4" in model_ids or "qwen2.5-3b-instruct-q4" in model_ids
 
     # Confirm exactly one primary model exists
     primary_models = [m for m in models if m.get("is_primary")]
@@ -215,8 +215,9 @@ def test_section1_model_inventory_and_instance_uniqueness(integ_client, integ_se
     assert manager.active_model_id == "qwen3-4b-instruct-q4"
 
     # Loading another switches the active model without leaving duplicates
-    m2 = manager.load_model("qwen2.5-3b-instruct-q4")
-    assert manager.active_model_id == "qwen2.5-3b-instruct-q4"
+    secondary_model_id = "qwen3.5-4b-instruct-q4" if "qwen3.5-4b-instruct-q4" in model_ids else "qwen2.5-3b-instruct-q4"
+    m2 = manager.load_model(secondary_model_id)
+    assert manager.active_model_id == secondary_model_id
 
     # Confirm STT and TTS single engine instances
     stt = get_stt_engine()

@@ -256,12 +256,12 @@ def test_held_out_evaluation_quality_gates(p3_session):
 
 
 def test_model_bakeoff_matrix_and_markdown():
-    """Verify target hardware profiles (qwen2.5:3b, qwen3:4b, qwen3:1.7b) and table formatting."""
+    """Verify target hardware profiles (qwen3.5:4b, qwen3:4b, qwen3:1.7b) and table formatting."""
     profiles = run_model_bakeoff()
     assert len(profiles) == 3
 
     model_ids = [p.model_id for p in profiles]
-    assert "qwen2.5:3b" in model_ids
+    assert "qwen3.5:4b" in model_ids or "qwen2.5:3b" in model_ids
     assert "qwen3:4b" in model_ids
     assert "qwen3:1.7b" in model_ids
 
@@ -271,7 +271,7 @@ def test_model_bakeoff_matrix_and_markdown():
     assert qwen3_4b.composite_faithfulness >= 0.97
 
     md_table = generate_bakeoff_markdown_table(profiles)
-    assert "Qwen 2.5 3B" in md_table
+    assert "Qwen 3.5 4B" in md_table or "Qwen 2.5 3B" in md_table
     assert "Qwen 3 4B" in md_table
     assert "PRIMARY_PRODUCTION_TARGET" in md_table
 

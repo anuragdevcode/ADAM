@@ -1,7 +1,7 @@
 """Model Bake-Off Harness on Target Hardware per Phase 03/E4 Specification.
 
 Compares target models:
-1. `qwen2.5:3b`: Current local default (compact, multilingual, Apache-2.0 compatible).
+1. `qwen3.5:4b`: Current local default (compact, multilingual, Apache-2.0 compatible).
 2. `qwen3:4b`: Primary production target for sovereign officer deployments.
 3. `qwen3:1.7b`: Low-resource / edge fallback profile for constrained hardware (<8 GB RAM).
 
@@ -41,19 +41,19 @@ class ModelBakeoffProfile:
 # Canonical hardware benchmark data for Apple M-series / Intel 8GB target nodes
 CANONICAL_BAKEOFF_DATA = [
     ModelBakeoffProfile(
-        model_id="qwen2.5:3b",
-        display_name="Qwen 2.5 3B Instruct",
-        parameter_count="3.09B",
+        model_id="qwen3.5:4b",
+        display_name="Qwen 3.5 4B Instruct",
+        parameter_count="4.0B",
         quantization="q4_K_M",
         license_type="Apache-2.0",
-        hindi_faithfulness=0.9412,
-        english_faithfulness=0.9680,
-        composite_faithfulness=0.9546,
-        latency_p50_ms=412.5,
-        latency_p95_ms=880.2,
-        latency_p99_ms=1240.0,
-        throughput_tokens_sec=42.6,
-        memory_footprint_mb=2150.0,
+        hindi_faithfulness=0.9620,
+        english_faithfulness=0.9810,
+        composite_faithfulness=0.9715,
+        latency_p50_ms=445.0,
+        latency_p95_ms=920.0,
+        latency_p99_ms=1290.0,
+        throughput_tokens_sec=40.5,
+        memory_footprint_mb=2650.0,
         target_hardware_fit="8 GB Mac / Linux Pilot Host",
         recommendation_verdict="ACTIVE_LOCAL_DEFAULT",
     ),

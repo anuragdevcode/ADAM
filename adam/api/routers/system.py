@@ -297,7 +297,7 @@ def trigger_model_discovery(
 
     # Also map common Ollama tags to canonical IDs
     canonical_ollama_tags = {
-        "qwen3:4b", "qwen3:1.7b", "qwen2.5:3b", "gemma3:4b", "llama3.2:3b",
+        "qwen3:4b", "qwen3:1.7b", "qwen3.5:4b", "qwen2.5:3b", "gemma3:4b", "llama3.2:3b",
     }
 
     result_models = []

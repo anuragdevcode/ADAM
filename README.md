@@ -27,7 +27,7 @@ ADAM is a platform for turning approved Uttarakhand public records into a connec
 
 ### Model & agent layer
 
-- **Local inference:** Ollama, via an `OllamaModelRuntime` — `qwen2.5:3b` is the default pulled model, with `qwen3:4b` (Apache-2.0) as the primary target and `qwen3:1.7b` kept as a low-memory fallback
+- **Local inference:** Ollama, via an `OllamaModelRuntime` — `qwen3.5:4b` is the default pulled model (with backward compatibility for `qwen2.5:3b`), with `qwen3:4b` (Apache-2.0) as the primary target and `qwen3:1.7b` kept as a low-memory fallback
 - **Model governance:** a `ModelRegistry` tracks approved model artifacts (checksums, licenses, promotion gates); a `SingleModelLifecycleManager` enforces exactly one active model instance at a time — no silently running multiple LLMs concurrently
 - **Graceful degradation:** a deterministic (non-LLM) runtime path takes over when no Ollama model is reachable, so the system degrades instead of failing outright
 - **Agent orchestration (Canonical 7-Stage State Machine):**
@@ -187,7 +187,7 @@ ADAM defaults to local models so a workspace can run fully offline, but model se
 For the default local chat model:
 
 ```bash
-ollama pull qwen2.5:3b
+ollama pull qwen3.5:4b
 ```
 
 With Docker running, ADAM will reach a host Ollama service through `OLLAMA_HOST`. The model selector only enables models that are actually installed. Never commit model files (`*.gguf`, `*.safetensors`, `*.onnx`, etc.); distribute them through Ollama, an artifact registry, or a separately mounted volume.

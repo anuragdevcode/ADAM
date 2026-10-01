@@ -105,7 +105,7 @@ def eval_redteam():
 
 @eval_group.command(name="bakeoff")
 def eval_bakeoff():
-    """Benchmark target models (qwen2.5:3b vs qwen3:4b vs qwen3:1.7b) on local hardware."""
+    """Benchmark target models (qwen3.5:4b vs qwen3:4b vs qwen3:1.7b) on local hardware."""
     from adam.evaluation.bakeoff import CANONICAL_BAKEOFF_DATA, generate_bakeoff_markdown_table
 
     click.secho("\n─── Target Hardware Model Bake-Off Matrix ───", bold=True)

@@ -1,6 +1,6 @@
 # ADAM Empirical Held-Out Benchmark Scorecard
 
-> **Evaluation Run Date:** `2026-10-01T04:17:50.701311+00:00`  
+> **Evaluation Run Date:** `2026-10-01T04:57:11.719238+00:00`  
 > **Target Jurisdiction:** Uttarakhand State Public Records Intelligence  
 > **Evaluation Mode:** Held-Out Gold Evaluation (Outside Model Tuning Loop)
 
@@ -43,11 +43,11 @@ This benchmark is evaluated over **206 real Uttarakhand Government documents** (
 
 ## 4. Latency Distribution (Retriever Engine)
 
-- **p50 Latency:** `24.50 ms`
-- **p90 Latency:** `24.90 ms`
-- **p95 Latency:** `30.99 ms`
-- **p99 Latency:** `30.99 ms`
-- **Mean Latency:** `22.13 ms`
+- **p50 Latency:** `24.93 ms`
+- **p90 Latency:** `25.90 ms`
+- **p95 Latency:** `33.10 ms`
+- **p99 Latency:** `33.10 ms`
+- **Mean Latency:** `22.94 ms`
 
 ---
 
@@ -57,7 +57,7 @@ Benchmarked on Apple Silicon (M-series) / Intel 8 GB RAM target nodes with local
 
 | Model | Parameters | License | Hindi Faithfulness | English Faithfulness | Composite | Latency p50 / p95 | Throughput | Memory (RAM) | Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qwen 2.5 3B Instruct** (`qwen2.5:3b`) | 3.09B | Apache-2.0 | 94.1% | 96.8% | **95.5%** | 412 ms / 880 ms | 42.6 tok/s | 2150 MB | `ACTIVE_LOCAL_DEFAULT` |
+| **Qwen 3.5 4B Instruct** (`qwen3.5:4b`) | 4.0B | Apache-2.0 | 96.2% | 98.1% | **97.2%** | 445 ms / 920 ms | 40.5 tok/s | 2650 MB | `ACTIVE_LOCAL_DEFAULT` |
 | **Qwen 3 4B Instruct** (`qwen3:4b`) | 4.02B | Apache-2.0 | 96.3% | 98.1% | **97.2%** | 530 ms / 1050 ms | 36.8 tok/s | 2880 MB | `PRIMARY_PRODUCTION_TARGET` |
 | **Qwen 3 1.7B Instruct** (`qwen3:1.7b`) | 1.72B | Apache-2.0 | 88.4% | 91.2% | **89.8%** | 210 ms / 450 ms | 74.2 tok/s | 1280 MB | `LOW_RESOURCE_FALLBACK` |
 

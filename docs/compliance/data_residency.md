@@ -11,7 +11,7 @@
 ADAM is architected for strict jurisdictional data residency within the sovereign boundaries of the Republic of India:
 
 1. **Zero External Data Egress:** All model inference, dense vector computation, embedding persistence, and OCR extraction execute locally on premises or within State Data Centre (SDC) infrastructure.
-2. **Local Weight Execution:** Primary generation models (`Qwen/Qwen2.5-3B-Instruct`, `Qwen3-4B-Instruct`) and embedding vectorizers run via locally hosted Ollama or vLLM runtimes without API calls to offshore multi-tenant cloud providers.
+2. **Local Weight Execution:** Primary generation models (`Qwen/Qwen3.5-4B-Instruct`, `Qwen3-4B-Instruct`) and embedding vectorizers run via locally hosted Ollama or vLLM runtimes without API calls to offshore multi-tenant cloud providers.
 3. **No External Telemetry:** All Next.js and library telemetry is disabled (`NEXT_TELEMETRY_DISABLED=1`).
 4. **Air-Gap Capability:** The platform functions fully in physically or logically air-gapped environments without WAN connectivity once initial model weights and container images are staged.
 
