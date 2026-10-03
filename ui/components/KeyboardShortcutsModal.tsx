@@ -52,11 +52,11 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard Shortcuts"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-100"
+        className="relative w-full max-w-lg bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ease-smooth"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -73,7 +73,7 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

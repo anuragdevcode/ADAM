@@ -76,7 +76,7 @@ export default function ReviewView({ userId }: ReviewViewProps) {
         <button
           type="button"
           onClick={load}
-          className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs transition-colors"
+          className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -102,7 +102,7 @@ export default function ReviewView({ userId }: ReviewViewProps) {
             {pages.map((p) => (
               <div
                 key={p.id}
-                className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col gap-3"
+                className="group bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] hover:border-purple-300/70 dark:hover:border-purple-600/70 transition-all duration-200 flex flex-col gap-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -151,7 +151,7 @@ export default function ReviewView({ userId }: ReviewViewProps) {
                     <button
                       type="button"
                       onClick={() => handleStartCorrection(p)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>Correct</span>
@@ -160,7 +160,7 @@ export default function ReviewView({ userId }: ReviewViewProps) {
                       type="button"
                       disabled={p.review_status === 'REVIEWED'}
                       onClick={() => handleApprove(p.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-semibold transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white text-xs font-semibold hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer shadow-xs"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>{p.review_status === 'REVIEWED' ? 'Approved' : 'Approve'}</span>
@@ -175,8 +175,8 @@ export default function ReviewView({ userId }: ReviewViewProps) {
 
       {/* Correction Dialog */}
       {correctingPage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-xl w-full overflow-hidden animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-xl w-full overflow-hidden animate-in zoom-in-95 duration-200 ease-smooth">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#131b2c]/50">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 Correct Document Page {correctingPage.page_number}

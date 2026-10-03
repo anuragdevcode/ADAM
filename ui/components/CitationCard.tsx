@@ -62,7 +62,7 @@ function CitationCardComponent({ citation, index }: CitationCardProps) {
 
   return (
     <div
-      className={`rounded-2xl border p-4 shadow-xs my-2 text-xs sm:text-sm transition-all hover:shadow-md ${
+      className={`rounded-2xl border p-4 shadow-xs my-2 text-xs sm:text-sm animate-in fade-in slide-in-from-bottom-2 duration-200 transition-all hover:shadow-md ${
         isExternal
           ? 'border-sky-100 dark:border-sky-900/60 bg-sky-50/30 dark:bg-sky-950/20 hover:border-sky-300 dark:hover:border-sky-700'
           : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-200/50 dark:hover:border-purple-800/40 hover:shadow-[0_0_18px_-3px_rgba(168,85,247,0.18)] dark:hover:shadow-[0_0_22px_-3px_rgba(168,85,247,0.25)]'
@@ -140,7 +140,7 @@ function CitationCardComponent({ citation, index }: CitationCardProps) {
             href={targetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition-all"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 hover:scale-105 active:scale-95 text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition-all duration-150"
           >
             <Globe className="w-3.5 h-3.5" />
             <span>Visit External Web Source</span>
@@ -151,7 +151,7 @@ function CitationCardComponent({ citation, index }: CitationCardProps) {
             target="_blank"
             rel="noopener noreferrer"
             data-bbox={citation.bbox ? JSON.stringify(citation.bbox) : undefined}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition-all"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 hover:scale-105 active:scale-95 text-white px-3 py-1.5 text-xs font-semibold shadow-xs hover:shadow-[0_0_14px_rgba(168,85,247,0.35)] transition-all duration-150"
           >
             <FileText className="w-3.5 h-3.5" />
             <span>View Source Document</span>

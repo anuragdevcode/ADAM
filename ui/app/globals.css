@@ -13,6 +13,9 @@
   --border-strong: #cbd5e1;
   --muted: #64748b;
   --accent: #7c3aed;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-subtle: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dark {
@@ -248,4 +251,184 @@ textarea:focus-visible {
 
 .animate-drawer-slide-in {
   animation: drawerSlideIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Cohesive Motion & Animation Design System ───────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUpSubtle {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDownSubtle {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zoomInSubtle {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmerSweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulseGently {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+@keyframes badgePop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Base utility bindings */
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: fadeIn;
+}
+
+.slide-in-from-bottom-1,
+.slide-in-from-bottom-2,
+.slide-in-from-bottom-3,
+.slide-in-from-bottom-4 {
+  animation-name: slideUpSubtle;
+}
+
+.slide-in-from-top-2,
+.slide-in-from-top-4 {
+  animation-name: slideDownSubtle;
+}
+
+.slide-in-from-left {
+  animation-name: drawerSlideIn;
+}
+
+.zoom-in-95 {
+  animation-name: zoomInSubtle;
+}
+
+.duration-100 { animation-duration: 100ms; }
+.duration-150 { animation-duration: 150ms; }
+.duration-200 { animation-duration: 200ms; }
+.duration-250 { animation-duration: 250ms; }
+.duration-300 { animation-duration: 300ms; }
+.duration-500 { animation-duration: 500ms; }
+
+.ease-spring {
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ease-smooth {
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ease-subtle {
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tactile micro-interaction classes */
+.btn-tactile {
+  transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 200ms ease,
+              background-color 150ms ease,
+              border-color 150ms ease,
+              color 150ms ease;
+}
+.btn-tactile:hover {
+  transform: scale(1.02);
+}
+.btn-tactile:active {
+  transform: scale(0.97);
+}
+
+.card-interactive {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 180ms ease;
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+}
+.card-interactive:active {
+  transform: translateY(0);
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.08) 25%,
+    rgba(148, 163, 184, 0.18) 50%,
+    rgba(148, 163, 184, 0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmerSweep 1.8s infinite linear;
+}
+
+.dark .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmerSweep 1.8s infinite linear;
+}
+
+/* Accessibility: User-preferred reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

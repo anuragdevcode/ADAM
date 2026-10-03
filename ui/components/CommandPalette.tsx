@@ -379,11 +379,11 @@ export default function CommandPalette({
       role="dialog"
       aria-modal="true"
       aria-label="Command Palette"
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-100"
+        className="relative w-full max-w-2xl bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-200 ease-smooth"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input Bar */}
@@ -446,9 +446,9 @@ export default function CommandPalette({
                       data-index={idx}
                       onClick={() => item.action()}
                       onMouseEnter={() => setSelectedIndex(idx)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-xs transition-colors ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-xs transition-all duration-150 ${
                         isSelected
-                          ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-950 dark:text-purple-200'
+                          ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-950 dark:text-purple-200 translate-x-0.5'
                           : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/40'
                       }`}
                     >

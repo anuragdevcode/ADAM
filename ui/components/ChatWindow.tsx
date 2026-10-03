@@ -936,7 +936,7 @@ export default function ChatWindow({
                     <button
                       type="button"
                       onClick={handleStop}
-                      className="p-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white transition-all shadow-xs animate-in fade-in"
+                      className="p-2 rounded-xl bg-red-600 hover:bg-red-700 hover:scale-105 active:scale-90 text-white transition-all duration-150 shadow-xs animate-in fade-in cursor-pointer"
                       title="Stop generation (Click to cancel)"
                     >
                       <Square className="w-4 h-4 fill-current" />
@@ -946,7 +946,7 @@ export default function ChatWindow({
                       type="button"
                       onClick={() => sendMessage(input)}
                       disabled={!input.trim()}
-                      className="p-2 rounded-xl bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 active:scale-95 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-xs"
+                      className="p-2 rounded-xl bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 hover:scale-105 active:scale-90 disabled:scale-100 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all duration-150 shadow-xs cursor-pointer"
                       title="Send query (Enter)"
                     >
                       <ArrowUp className="w-4 h-4" />
@@ -971,7 +971,7 @@ export default function ChatWindow({
                   <div
                     key={idx}
                     onClick={() => sendMessage(card.query)}
-                    className="group bg-white/90 dark:bg-[#111726]/90 hover:bg-white dark:hover:bg-[#131a2b] hover:-translate-y-0.5 border border-slate-200/80 dark:border-slate-800 hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_20px_-3px_rgba(168,85,247,0.22)] dark:hover:shadow-[0_0_26px_-3px_rgba(168,85,247,0.32)] rounded-2xl p-4 transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[112px] shadow-2xs"
+                    className="group bg-white/90 dark:bg-[#111726]/90 hover:bg-white dark:hover:bg-[#131a2b] hover:-translate-y-0.5 active:scale-[0.98] border border-slate-200/80 dark:border-slate-800 hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_20px_-3px_rgba(168,85,247,0.22)] dark:hover:shadow-[0_0_26px_-3px_rgba(168,85,247,0.32)] rounded-2xl p-4 transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[112px] shadow-2xs"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-2">
@@ -979,7 +979,7 @@ export default function ChatWindow({
                           {card.dept}
                         </span>
                         <div className="text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                          <IconComponent className="w-4 h-4" />
+                          <IconComponent className="w-4 h-4 group-hover:scale-110 transition-transform duration-200 ease-out" />
                         </div>
                       </div>
                       <p className="text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 leading-snug font-medium group-hover:text-purple-950 dark:group-hover:text-white transition-colors">
@@ -990,7 +990,7 @@ export default function ChatWindow({
                       <span className="text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
                         Query record
                       </span>
-                      <ChevronRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+                      <ChevronRight className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition-transform duration-200 ease-out" />
                     </div>
                   </div>
                 );
@@ -1006,7 +1006,7 @@ export default function ChatWindow({
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                  className={`flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-200 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   {/* User Message */}
                   {msg.role === 'user' ? (

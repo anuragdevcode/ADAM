@@ -115,7 +115,7 @@ export default function PrecedentsView() {
               return (
                 <div
                   key={pr.id}
-                  className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs hover:border-purple-300 dark:hover:border-purple-700 transition-all"
+                  className="group bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] hover:border-purple-300/70 dark:hover:border-purple-600/70 transition-all duration-200 cursor-pointer"
                 >
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     {/* Source Document */}
@@ -138,7 +138,7 @@ export default function PrecedentsView() {
                       >
                         {pr.relation_type}
                       </span>
-                      <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-200 shrink-0" />
                     </div>
 
                     {/* Target / Cited Reference */}

@@ -346,7 +346,7 @@ export default function SourcesView() {
             onClick={() => {
               if (fileInputRef.current) fileInputRef.current.click();
             }}
-            className="p-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs transition-all"
+            className="p-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
             title="Directly upload PDF, DOCX, or text files for extraction"
           >
             <Upload className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
@@ -357,7 +357,7 @@ export default function SourcesView() {
             type="button"
             disabled={seedingLoading}
             onClick={handleSeedOfficialSources}
-            className="p-2 px-3 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 active:scale-[0.98] text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50"
+            className="p-2 px-3 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 hover:scale-105 active:scale-95 text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 shadow-xs transition-all duration-150 disabled:opacity-50 cursor-pointer"
             title="Populate authentic Uttarakhand sources (eKosh, UKRD, e-Gazette, ITDA Samples)"
           >
             {seedingLoading ? (
@@ -371,7 +371,7 @@ export default function SourcesView() {
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
-            className="p-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-xs font-semibold text-white flex items-center gap-1.5 shadow-xs transition-all"
+            className="p-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 hover:scale-105 active:scale-95 text-xs font-semibold text-white flex items-center gap-1.5 shadow-xs hover:shadow-[0_0_18px_rgba(168,85,247,0.35)] transition-all duration-150 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Data Source</span>
@@ -380,7 +380,7 @@ export default function SourcesView() {
           <button
             type="button"
             onClick={loadData}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs"
+            className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
             title="Refresh Sources &amp; Jobs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-purple-600' : ''}`} />
@@ -493,7 +493,7 @@ export default function SourcesView() {
                   return (
                     <div
                       key={src.id}
-                      className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between hover:border-purple-300 dark:hover:border-purple-700 transition-all"
+                      className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] hover:border-purple-300/70 dark:hover:border-purple-600/70 transition-all duration-200"
                     >
                       <div>
                         {/* Header Pills */}

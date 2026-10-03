@@ -205,7 +205,7 @@ export default function DocumentsView({
               <div
                 key={d.id}
                 onClick={() => handleSelectDoc(d.id)}
-                className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs hover:shadow-md hover:border-purple-300 dark:hover:border-purple-700 transition-all cursor-pointer flex flex-col justify-between group"
+                className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] hover:border-purple-300/70 dark:hover:border-purple-600/70 transition-all duration-200 cursor-pointer flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -258,8 +258,8 @@ export default function DocumentsView({
 
       {/* Document Detail Modal */}
       {selectedDocId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full overflow-hidden max-h-[85vh] flex flex-col animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full overflow-hidden max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-200 ease-smooth">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-[#131b2c]/50">
               <div className="flex items-center gap-2 min-w-0 pr-4">
                 <FileText className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0" />
@@ -364,10 +364,10 @@ export default function DocumentsView({
 
       {/* Upload Document Modal */}
       {uploadOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
           <form
             onSubmit={handleUploadSubmit}
-            className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95"
+            className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 ease-smooth"
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#131b2c]/50">
               <div className="flex items-center gap-2">

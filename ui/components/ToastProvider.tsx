@@ -74,13 +74,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-lg backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-bottom-3 ${
+              className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-lg backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-bottom-3 ease-spring ${
                 isSuccess
-                  ? 'bg-white/95 dark:bg-[#151c28]/95 border-emerald-200 dark:border-emerald-800/60 text-slate-800 dark:text-slate-100'
+                  ? 'bg-white/95 dark:bg-[#151c28]/95 border-emerald-200 dark:border-emerald-800/60 text-slate-800 dark:text-slate-100 shadow-emerald-500/10'
                   : isError
-                  ? 'bg-white/95 dark:bg-[#151c28]/95 border-rose-200 dark:border-rose-800/60 text-slate-800 dark:text-slate-100'
+                  ? 'bg-white/95 dark:bg-[#151c28]/95 border-rose-200 dark:border-rose-800/60 text-slate-800 dark:text-slate-100 shadow-rose-500/10'
                   : isWarning
-                  ? 'bg-white/95 dark:bg-[#151c28]/95 border-amber-200 dark:border-amber-800/60 text-slate-800 dark:text-slate-100'
+                  ? 'bg-white/95 dark:bg-[#151c28]/95 border-amber-200 dark:border-amber-800/60 text-slate-800 dark:text-slate-100 shadow-amber-500/10'
                   : 'bg-white/95 dark:bg-[#151c28]/95 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100'
               }`}
             >
@@ -101,7 +101,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md transition-colors"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md hover:scale-110 active:scale-90 transition-all duration-150 cursor-pointer"
                 title="Dismiss"
               >
                 <X className="w-3.5 h-3.5" />

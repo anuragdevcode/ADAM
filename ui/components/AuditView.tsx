@@ -6,7 +6,6 @@ import {
   Clock,
   ShieldAlert,
   ChevronDown,
-  ChevronRight,
   Zap,
   RefreshCw,
   CheckCircle2,
@@ -63,7 +62,7 @@ export default function AuditView() {
         <button
           type="button"
           onClick={load}
-          className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs transition-colors"
+          className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-xs hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -74,7 +73,7 @@ export default function AuditView() {
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {/* Empirical Gold Set Benchmark Card */}
         {benchmark && (
-          <div className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-all">
+          <div className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-all duration-200">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center text-purple-700 dark:text-purple-300">
@@ -98,14 +97,10 @@ export default function AuditView() {
               <button
                 type="button"
                 onClick={() => setShowBenchmarkDetails(!showBenchmarkDetails)}
-                className="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-semibold flex items-center gap-1 self-start sm:self-center"
+                className="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-semibold flex items-center gap-1 self-start sm:self-center transition-all cursor-pointer"
               >
                 <span>{showBenchmarkDetails ? 'Hide Details' : 'View Breakdown & RRF Ablation'}</span>
-                {showBenchmarkDetails ? (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5" />
-                )}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showBenchmarkDetails ? 'rotate-180' : ''}`} />
               </button>
             </div>
 
@@ -245,7 +240,7 @@ export default function AuditView() {
               return (
                 <div
                   key={a.id}
-                  className="bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs hover:border-purple-300 dark:hover:border-purple-700 transition-all"
+                  className="group bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] hover:border-purple-300/70 dark:hover:border-purple-600/70 transition-all duration-200"
                 >
                   <div
                     onClick={() => setExpandedId(isExpanded ? null : a.id)}
@@ -287,17 +282,13 @@ export default function AuditView() {
                         <Zap className="w-3 h-3 text-amber-500" />
                         <span>{a.prompt_tokens + a.completion_tokens} tok</span>
                       </div>
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
-                      )}
+                      <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-purple-600' : ''}`} />
                     </div>
                   </div>
 
                   {/* Expanded Diagnostics Drawer */}
                   {isExpanded && (
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs space-y-3">
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#161d2d] text-[11px]">
                           <span className="text-slate-400 block">Retrieval Passes</span>

@@ -341,10 +341,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen((open) => !open)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_16px_-3px_rgba(168,85,247,0.25)] hover:bg-purple-50/20 dark:hover:bg-purple-950/20 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs transition-all"
+                className="group inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_16px_-3px_rgba(168,85,247,0.25)] hover:bg-purple-50/20 dark:hover:bg-purple-950/20 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs hover:scale-[1.02] active:scale-95 transition-all duration-150 cursor-pointer"
                 title="Select active inference runtime or cloud model"
               >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform duration-200" />
                 <span className="font-semibold">{selectedModel?.name || 'ADAM model'}</span>
                 {selectedModel?.quantization && (
                   <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-500 dark:text-slate-400">
@@ -360,12 +360,12 @@ export default function HomePage() {
                     Local
                   </span>
                 )}
-                <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                <ChevronDown className={`w-3 h-3 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180 text-purple-600 dark:text-purple-400' : ''}`} />
               </button>
 
               {/* Model Dropdown Menu */}
               {modelDropdownOpen && (
-                <div className="absolute left-0 top-full mt-2 w-84 bg-white dark:bg-[#131926] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl py-2 z-30 divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="absolute left-0 top-full mt-2 w-84 bg-white dark:bg-[#131926] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl py-2 z-30 divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in zoom-in-95 duration-150 origin-top-left">
                   <div className="px-3.5 py-1 text-[10px] uppercase tracking-wider font-semibold text-slate-400 dark:text-slate-500">
                     Available Runtimes &amp; Models
                   </div>
@@ -510,7 +510,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setCommandPaletteOpen(true)}
-                className="hidden md:inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-[#131926] text-xs text-slate-500 dark:text-slate-400 hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_16px_-3px_rgba(168,85,247,0.22)] hover:bg-white dark:hover:bg-[#161d2d] transition-all"
+                className="hidden md:inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-[#131926] text-xs text-slate-500 dark:text-slate-400 hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_16px_-3px_rgba(168,85,247,0.22)] hover:bg-white dark:hover:bg-[#161d2d] hover:scale-[1.02] active:scale-95 transition-all duration-150 cursor-pointer"
                 title="Search commands, views, models, departments (⌘K)"
               >
                 <Search className="w-3.5 h-3.5 text-slate-400" />
@@ -532,7 +532,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={handleNewThread}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-purple-600 dark:hover:bg-purple-500 active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-purple-600 dark:hover:bg-purple-500 hover:scale-105 active:scale-90 text-white text-xs font-semibold shadow-xs hover:shadow-[0_0_18px_rgba(168,85,247,0.35)] transition-all duration-200 ease-spring cursor-pointer"
                 title="Start a new thread (⌘N)"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -543,7 +543,7 @@ export default function HomePage() {
           </header>
 
           {/* Dynamic Main View Switcher */}
-          <section className="flex-1 overflow-hidden relative">
+          <section key={activeNavTab} className="flex-1 overflow-hidden relative animate-in fade-in duration-200 ease-smooth">
             {activeNavTab === 'home' && (
               <ChatWindow
                 userId={officerUserId}

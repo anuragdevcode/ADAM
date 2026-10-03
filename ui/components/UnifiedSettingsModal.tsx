@@ -387,7 +387,7 @@ export default function UnifiedSettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/50 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-4xl max-h-[92vh] bg-white dark:bg-[#12161f] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-zinc-800 flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-4xl max-h-[92vh] bg-white dark:bg-[#12161f] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-zinc-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 ease-smooth">
         
         {/* Top Header Bar */}
         <div className="px-6 py-4 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between bg-slate-50/60 dark:bg-[#151a26]/70 shrink-0">
@@ -419,7 +419,7 @@ export default function UnifiedSettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
               title="Close (Esc)"
             >
               <X className="w-5 h-5" />
