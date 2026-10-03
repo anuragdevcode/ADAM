@@ -155,7 +155,7 @@ pydantic==2.9.2
 pydantic_core==2.23.4
 pydeck==0.9.1
 pyecharts==2.0.8
-Pygments==2.19.2
+Pygments==2.21.0
 PyJWT==2.15.1
 PyMuPDF==1.27.2.3
 pyparsing==3.2.5
