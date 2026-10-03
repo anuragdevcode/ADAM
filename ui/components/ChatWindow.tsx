@@ -18,6 +18,7 @@ import { Markdown } from '@/lib/markdown';
 import { useToast } from './ToastProvider';
 import {
   Sparkles,
+  Pencil,
   Paperclip,
   ChevronDown,
   ArrowUp,
@@ -330,6 +331,9 @@ export default function ChatWindow({
   });
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [deptMenuOpen, setDeptMenuOpen] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editInput, setEditInput] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -427,7 +431,13 @@ export default function ChatWindow({
   }, [sessionId, userId, idPrefix]);
 
   const sendMessage = useCallback(
-    async (queryText: string, options?: { enableThinking?: boolean }) => {
+    async (
+      queryText: string,
+      options?: {
+        enableThinking?: boolean;
+        baseMessages?: ChatMessage[];
+      },
+    ) => {
       const q = queryText.trim();
       if (!q || isLoading) return;
 
@@ -453,7 +463,10 @@ export default function ChatWindow({
         thinkingSuggestion: null,
       };
 
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setMessages((prev) => {
+        const base = options?.baseMessages !== undefined ? options.baseMessages : prev;
+        return [...base, userMsg, assistantMsg];
+      });
       setInput('');
       setIsLoading(true);
 
@@ -733,9 +746,30 @@ export default function ChatWindow({
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const handleSaveEdit = useCallback(
+    (msgId: string, newContent: string) => {
+      const trimmed = newContent.trim();
+      if (!trimmed || isLoading) return;
+
+      const msgIndex = messages.findIndex((m) => m.id === msgId);
+      if (msgIndex === -1) return;
+
+      const baseMessages = messages.slice(0, msgIndex);
+      setEditingMessageId(null);
+      setEditInput('');
+
+      void sendMessage(trimmed, { baseMessages });
+    },
+    [messages, isLoading, sendMessage],
+  );
+
+  const copyToClipboard = (text: string, label: string = 'Answer', id?: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      toast.success('Answer copied to clipboard');
+      toast.success(`${label} copied to clipboard`);
+      if (id) {
+        setCopiedId(id);
+        setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 2000);
+      }
     });
   };
 
@@ -976,8 +1010,84 @@ export default function ChatWindow({
                 >
                   {/* User Message */}
                   {msg.role === 'user' ? (
-                    <div className="bg-slate-900 dark:bg-[#1a2336] text-white dark:text-slate-100 border border-transparent dark:border-slate-700/60 rounded-2xl rounded-tr-md px-5 py-3 text-sm max-w-xl shadow-xs leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
+                    <div className="group relative flex flex-col items-end max-w-2xl w-full sm:w-auto">
+                      {editingMessageId === msg.id ? (
+                        <div className="w-full min-w-[280px] sm:min-w-[440px] bg-white dark:bg-[#111726] rounded-2xl border border-purple-300/50 dark:border-purple-500/40 p-3.5 shadow-lg reflection-glow">
+                          <textarea
+                            value={editInput}
+                            onChange={(e) => setEditInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSaveEdit(msg.id, editInput);
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setEditingMessageId(null);
+                              }
+                            }}
+                            rows={Math.min(8, Math.max(2, editInput.split('\n').length))}
+                            autoFocus
+                            placeholder="Edit your message…"
+                            className="chat-input w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border-0 border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none resize-none leading-relaxed"
+                          />
+                          <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                              Esc to cancel • Enter to save &amp; re-query
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingMessageId(null)}
+                                className="px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!editInput.trim() || isLoading}
+                                onClick={() => handleSaveEdit(msg.id, editInput)}
+                                className="px-3.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                                <span>Save &amp; Re-query</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="bg-slate-900 dark:bg-[#1a2336] text-white dark:text-slate-100 border border-transparent dark:border-slate-700/60 rounded-2xl rounded-tr-md px-5 py-3 text-sm max-w-xl shadow-xs leading-relaxed whitespace-pre-wrap break-words">
+                            {msg.content}
+                          </div>
+                          {/* User Message Action Toolbar (Edit + Copy) */}
+                          <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingMessageId(msg.id);
+                                setEditInput(msg.content);
+                              }}
+                              disabled={isLoading}
+                              className="p-1 rounded-md text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors disabled:opacity-40"
+                              title="Edit message & re-query"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(msg.content, 'Message', msg.id)}
+                              className="p-1 rounded-md text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                              title="Copy message"
+                            >
+                              {copiedId === msg.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ) : (
                     /* Assistant Message */
@@ -1006,11 +1116,15 @@ export default function ChatWindow({
                         {msg.content && !msg.isStreaming && (
                           <button
                             type="button"
-                            onClick={() => copyToClipboard(msg.content)}
-                            className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ml-1"
+                            onClick={() => copyToClipboard(msg.content, 'Answer', msg.id)}
+                            className="p-1 rounded-md text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ml-1"
                             title="Copy answer"
                           >
-                            <Copy className="w-3.5 h-3.5" />
+                            {copiedId === msg.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         )}
                       </div>

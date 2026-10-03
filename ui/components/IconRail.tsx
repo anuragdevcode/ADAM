@@ -51,7 +51,7 @@ export default function IconRail({
         <button
           type="button"
           onClick={toggleTheme}
-          className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-slate-200/80 dark:border-zinc-700/80 flex items-center justify-center shadow-xs hover:scale-[1.04] active:scale-95 transition-all group"
+          className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-slate-200/80 dark:border-zinc-700/80 hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_18px_-2px_rgba(168,85,247,0.28)] flex items-center justify-center shadow-xs hover:scale-[1.04] active:scale-95 transition-all group"
           title={`Switch to ${resolvedTheme === 'dark' ? 'Light' : 'Dark'} Mode`}
         >
           {resolvedTheme === 'dark' ? (
@@ -66,15 +66,15 @@ export default function IconRail({
           {/* Home / Chat Studio */}
           <div className="relative flex items-center justify-center w-full">
             {activeTab === 'home' && !isHistoryOpen && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md" />
+              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
             )}
             <button
               type="button"
               onClick={() => onSelectTab('home')}
               className={`p-2.5 rounded-xl transition-all ${
                 activeTab === 'home' && !isHistoryOpen
-                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-xs font-semibold'
-                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/60 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)]'
               }`}
               title="Chat Studio (⌘1)"
             >
@@ -88,8 +88,8 @@ export default function IconRail({
             onClick={onToggleHistory}
             className={`p-2.5 rounded-xl transition-all ${
               isHistoryOpen
-                ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-xs'
-                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                ? 'text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/60 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                : 'text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)]'
             }`}
             title="Chat History & Sessions"
           >
@@ -99,15 +99,15 @@ export default function IconRail({
           {/* Document Repository */}
           <div className="relative flex items-center justify-center w-full">
             {activeTab === 'docs' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md" />
+              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
             )}
             <button
               type="button"
               onClick={() => onSelectTab('docs')}
               className={`p-2.5 rounded-xl transition-all ${
                 activeTab === 'docs'
-                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-xs'
-                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/60 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)]'
               }`}
               title="Official Document Repository (⌘2)"
             >
@@ -118,15 +118,15 @@ export default function IconRail({
           {/* Precedent Relationship Graph */}
           <div className="relative flex items-center justify-center w-full">
             {activeTab === 'network' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md" />
+              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
             )}
             <button
               type="button"
               onClick={() => onSelectTab('network')}
               className={`p-2.5 rounded-xl transition-all ${
                 activeTab === 'network'
-                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-xs'
-                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/60 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)]'
               }`}
               title="Precedent Chains & Supersession (⌘3)"
             >
@@ -137,15 +137,15 @@ export default function IconRail({
           {/* Agent State Machine Executions & Audit */}
           <div className="relative flex items-center justify-center w-full">
             {activeTab === 'audit' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md" />
+              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
             )}
             <button
               type="button"
               onClick={() => onSelectTab('audit')}
               className={`p-2.5 rounded-xl transition-all ${
                 activeTab === 'audit'
-                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-xs'
-                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/60 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)]'
               }`}
               title="Agent Execution Audits & Benchmarks (⌘4)"
             >
@@ -156,15 +156,15 @@ export default function IconRail({
           {/* Data Acquisition Sources */}
           <div className="relative flex items-center justify-center w-full">
             {activeTab === 'database' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md" />
+              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
             )}
             <button
               type="button"
               onClick={() => onSelectTab('database')}
               className={`p-2.5 rounded-xl transition-all ${
                 activeTab === 'database'
-                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-xs'
-                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/60 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)]'
               }`}
               title="Data Acquisition & Connectors (⌘5)"
             >
@@ -175,15 +175,15 @@ export default function IconRail({
           {/* Human QA Review Queue */}
           <div className="relative flex items-center justify-center w-full">
             {activeTab === 'review' && (
-              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md" />
+              <span className="absolute left-0 w-1 h-5 bg-purple-600 dark:bg-purple-500 rounded-r-md shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
             )}
             <button
               type="button"
               onClick={() => onSelectTab('review')}
               className={`p-2.5 rounded-xl transition-all ${
                 activeTab === 'review'
-                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-xs'
-                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/60 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)]'
               }`}
               title="Human-in-the-Loop QA Queue (⌘6)"
             >
@@ -200,7 +200,7 @@ export default function IconRail({
           <button
             type="button"
             onClick={onOpenShortcuts}
-            className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all"
+            className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)] transition-all"
             title="Keyboard Shortcuts (⌘/)"
           >
             <HelpCircle className="w-4 h-4" />
@@ -211,7 +211,7 @@ export default function IconRail({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all"
+          className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.22)] transition-all"
           title="Officer Settings & Security Clearance"
         >
           <Settings className="w-4 h-4" />
@@ -221,7 +221,7 @@ export default function IconRail({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="relative group p-0.5 rounded-full transition-transform hover:scale-105 mt-1"
+          className="relative group p-0.5 rounded-full transition-all hover:scale-105 hover:shadow-[0_0_18px_rgba(147,51,234,0.5)] mt-1"
           title={`${userName} (${clearanceLevel} Clearance)`}
         >
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-xs">

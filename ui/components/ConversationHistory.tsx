@@ -97,7 +97,7 @@ export default function ConversationHistory({
 
       {/* Search Input Filter */}
       <div className="p-3 border-b border-slate-100 dark:border-slate-800/80">
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#131926] text-xs text-slate-600 dark:text-slate-300 focus-within:border-purple-400 dark:focus-within:border-purple-600">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#131926] text-xs text-slate-600 dark:text-slate-300 focus-within:border-purple-300/50 dark:focus-within:border-purple-500/40 focus-within:reflection-glow-subtle transition-all">
           <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <input
             type="text"
@@ -131,8 +131,8 @@ export default function ConversationHistory({
                 onClick={() => onSelectSession(s.session_id)}
                 className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer text-xs transition-all ${
                   isSelected
-                    ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-900 dark:text-purple-200 font-medium shadow-xs border border-purple-200/80 dark:border-purple-800/60'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 border border-transparent'
+                    ? 'bg-purple-50/90 dark:bg-purple-950/60 text-purple-900 dark:text-purple-200 font-medium border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 hover:shadow-[0_0_14px_-2px_rgba(168,85,247,0.18)] border border-transparent'
                 }`}
               >
                 <div className="min-w-0 flex-1 pr-2">
