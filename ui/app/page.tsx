@@ -340,7 +340,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen((open) => !open)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-300 dark:hover:border-purple-600/60 hover:bg-purple-50/30 dark:hover:bg-purple-950/20 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-xs transition-all"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_16px_-3px_rgba(168,85,247,0.25)] hover:bg-purple-50/20 dark:hover:bg-purple-950/20 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs transition-all"
                 title="Select active inference runtime or cloud model"
               >
                 <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
@@ -509,7 +509,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setCommandPaletteOpen(true)}
-                className="hidden md:inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#131926] text-xs text-slate-500 dark:text-slate-400 hover:border-purple-300 dark:hover:border-purple-700 hover:bg-white dark:hover:bg-[#161d2d] transition-all"
+                className="hidden md:inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-[#131926] text-xs text-slate-500 dark:text-slate-400 hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_16px_-3px_rgba(168,85,247,0.22)] hover:bg-white dark:hover:bg-[#161d2d] transition-all"
                 title="Search commands, views, models, departments (⌘K)"
               >
                 <Search className="w-3.5 h-3.5 text-slate-400" />

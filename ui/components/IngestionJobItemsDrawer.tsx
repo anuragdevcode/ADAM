@@ -114,7 +114,7 @@ export default function IngestionJobItemsDrawer({ job, onClose }: IngestionJobIt
               placeholder="Search item URL or path…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500"
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
             />
           </div>
         </div>
@@ -136,7 +136,7 @@ export default function IngestionJobItemsDrawer({ job, onClose }: IngestionJobIt
               return (
                 <div
                   key={item.id}
-                  className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-300 dark:hover:border-purple-700 transition-all text-xs flex flex-col gap-1.5 shadow-2xs"
+                  className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-300/40 dark:hover:border-purple-600/40 hover:shadow-[0_0_16px_-3px_rgba(168,85,247,0.2)] dark:hover:shadow-[0_0_20px_-3px_rgba(168,85,247,0.28)] transition-all text-xs flex flex-col gap-1.5 shadow-2xs"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">

@@ -335,7 +335,7 @@ export default function AdvancedSettingsModal({
               onClick={() => setActiveTab(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-semibold transition-all border-b-2 shrink-0 ${
                 activeTab === t.id
-                  ? 'border-purple-600 text-purple-700 dark:text-purple-400 bg-purple-50/60 dark:bg-purple-950/30'
+                  ? 'border-purple-400/60 dark:border-purple-500/50 text-purple-700 dark:text-purple-400 bg-purple-50/60 dark:bg-purple-950/30 shadow-[0_2px_12px_-2px_rgba(168,85,247,0.35)]'
                   : 'border-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
               }`}
             >
@@ -387,7 +387,7 @@ export default function AdvancedSettingsModal({
                         onClick={() => preset !== 'CUSTOM' ? applyPreset(preset) : undefined}
                         className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                           isActive
-                            ? `${pd.border} ${pd.bg} shadow-sm ring-1 ring-purple-200 dark:ring-purple-900/40`
+                            ? `${pd.border} ${pd.bg} reflection-glow-subtle`
                             : 'border-gray-200 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'
                         } ${preset === 'CUSTOM' ? 'cursor-default opacity-80' : ''}`}
                       >
@@ -622,7 +622,7 @@ export default function AdvancedSettingsModal({
                           key={ep.value}
                           onClick={() => patchBundle(b => { b.performance.environment_profile = ep.value as PerformanceSettings['environment_profile']; })}
                           className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
-                            isActive ? 'border-purple-300 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/20 shadow-xs' : 'border-gray-200 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'
+                            isActive ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/70 dark:bg-purple-950/40 reflection-glow-subtle' : 'border-gray-200 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'
                           }`}
                         >
                           <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${isActive ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-300 dark:border-zinc-700'}`}>
@@ -670,7 +670,7 @@ export default function AdvancedSettingsModal({
                           onClick={() => patchBundle(b => { b.voice.default_voice_language = l.value as VoiceSettings['default_voice_language']; })}
                           className={`py-1.5 text-xs rounded-xl border text-center transition-all ${
                             v!.default_voice_language === l.value
-                              ? 'border-purple-400 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold'
+                              ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/80 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold reflection-glow-subtle'
                               : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300'
                           }`}
                         >

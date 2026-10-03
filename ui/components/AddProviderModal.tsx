@@ -99,7 +99,7 @@ export default function AddProviderModal({ onClose, onRegistered }: AddProviderM
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. My LLM Server"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                 />
               </div>
 
@@ -112,7 +112,7 @@ export default function AddProviderModal({ onClose, onRegistered }: AddProviderM
                   value={endpointUrl}
                   onChange={(e) => setEndpointUrl(e.target.value)}
                   placeholder="https://api.example.com/v1"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500 font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all font-mono"
                 />
                 <p className="text-[10px] text-slate-400">Must be a public HTTPS endpoint. Private IPs are blocked.</p>
               </div>
@@ -125,7 +125,7 @@ export default function AddProviderModal({ onClose, onRegistered }: AddProviderM
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="e.g. Production LLM"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                 />
               </div>
 
@@ -140,7 +140,7 @@ export default function AddProviderModal({ onClose, onRegistered }: AddProviderM
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="sk-..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500 font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all font-mono"
                   autoComplete="off"
                 />
                 <p className="text-[10px] text-slate-400">

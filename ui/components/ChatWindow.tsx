@@ -769,7 +769,13 @@ export default function ChatWindow({
             </h2>
 
             {/* Main Floating Search / Prompt Composer Card */}
-            <div className="w-full bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-purple-950/20 p-4 sm:p-5 text-left transition-all focus-within:border-purple-400 dark:focus-within:border-purple-600 focus-within:ring-2 focus-within:ring-purple-400/20 mb-8">
+            <div
+              className={`w-full bg-white dark:bg-[#111726] rounded-2xl border transition-all duration-300 p-4 sm:p-5 text-left mb-8 ${
+                isLoading
+                  ? 'border-purple-300/40 dark:border-purple-500/30 reflection-glow-working'
+                  : 'border-slate-200/90 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-purple-950/10 focus-within:border-purple-300/50 dark:focus-within:border-purple-500/40 focus-within:reflection-glow'
+              }`}
+            >
               <div className="flex items-start gap-3">
                 <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-1 shrink-0" />
                 <textarea
@@ -778,7 +784,7 @@ export default function ChatWindow({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={composerPlaceholder}
-                  className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none resize-none pt-0.5 leading-relaxed"
+                  className="chat-input w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border-0 border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none resize-none pt-0.5 leading-relaxed"
                 />
               </div>
 
@@ -844,10 +850,10 @@ export default function ChatWindow({
                   <button
                     type="button"
                     onClick={handleToggleDeepThink}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-2xs shrink-0 ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shrink-0 ${
                       deepThinkEnabled
-                        ? 'border-purple-500/60 bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:border-purple-500/70 dark:text-purple-300 shadow-xs ring-1 ring-purple-400/30'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/90 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 reflection-glow-subtle'
+                        : 'border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-2xs'
                     }`}
                     title={
                       deepThinkEnabled
@@ -873,8 +879,10 @@ export default function ChatWindow({
                   <label className="flex items-center gap-1.5 cursor-pointer select-none">
                     <div
                       onClick={() => setCitationEnabled(!citationEnabled)}
-                      className={`w-8 h-4.5 rounded-full transition-colors relative flex items-center p-0.5 ${
-                        citationEnabled ? 'bg-purple-600' : 'bg-slate-200 dark:bg-slate-700'
+                      className={`w-8 h-4.5 rounded-full transition-all relative flex items-center p-0.5 cursor-pointer ${
+                        citationEnabled
+                          ? 'bg-purple-600 shadow-[0_0_12px_rgba(168,85,247,0.45)]'
+                          : 'bg-slate-200 dark:bg-slate-700'
                       }`}
                     >
                       <div
@@ -929,11 +937,11 @@ export default function ChatWindow({
                   <div
                     key={idx}
                     onClick={() => sendMessage(card.query)}
-                    className="group bg-white/80 dark:bg-[#111726]/80 hover:bg-white dark:hover:bg-[#141b2c] hover:-translate-y-0.5 hover:shadow-md hover:border-purple-300 dark:hover:border-purple-700/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between min-h-[112px]"
+                    className="group bg-white/90 dark:bg-[#111726]/90 hover:bg-white dark:hover:bg-[#131a2b] hover:-translate-y-0.5 border border-slate-200/80 dark:border-slate-800 hover:border-purple-300/40 dark:hover:border-purple-500/30 hover:shadow-[0_0_20px_-3px_rgba(168,85,247,0.22)] dark:hover:shadow-[0_0_26px_-3px_rgba(168,85,247,0.32)] rounded-2xl p-4 transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[112px] shadow-2xs"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider bg-purple-50 dark:bg-purple-950/50 px-2 py-0.5 rounded-md border border-purple-100 dark:border-purple-900/50">
+                        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider bg-purple-50/80 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200/50 dark:border-purple-800/40 shadow-2xs">
                           {card.dept}
                         </span>
                         <div className="text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
@@ -1194,7 +1202,13 @@ export default function ChatWindow({
       {/* ── DOCKED BOTTOM INPUT (ONLY WHEN CHAT ACTIVE) ─────────────── */}
       {hasMessages && (
         <div className="p-3 sm:p-4 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0c111c] transition-colors">
-          <div className="max-w-3xl w-full mx-auto bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md p-3 focus-within:border-purple-400 dark:focus-within:border-purple-600 focus-within:shadow-lg transition-all">
+          <div
+            className={`max-w-3xl w-full mx-auto bg-white dark:bg-[#111726] rounded-2xl border transition-all duration-300 p-3 ${
+              isLoading
+                ? 'border-purple-300/40 dark:border-purple-500/30 reflection-glow-working'
+                : 'border-slate-200/90 dark:border-slate-800 shadow-md focus-within:border-purple-300/50 dark:focus-within:border-purple-500/40 focus-within:reflection-glow'
+            }`}
+          >
             <div className="flex items-center gap-2.5">
               <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
               <textarea
@@ -1203,7 +1217,7 @@ export default function ChatWindow({
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={composerPlaceholder}
-                className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none resize-none pt-0.5"
+                className="chat-input w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border-0 border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none resize-none pt-0.5"
               />
             </div>
 
@@ -1266,8 +1280,8 @@ export default function ChatWindow({
                   onClick={handleToggleDeepThink}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
                     deepThinkEnabled
-                      ? 'border-purple-500/60 bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:border-purple-500/70 dark:text-purple-300 shadow-xs ring-1 ring-purple-400/30'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/90 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 reflection-glow-subtle'
+                      : 'border-slate-200/90 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-2xs'
                   }`}
                   title={
                     deepThinkEnabled
@@ -1291,8 +1305,10 @@ export default function ChatWindow({
                 <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <div
                     onClick={() => setCitationEnabled(!citationEnabled)}
-                    className={`w-7 h-4 rounded-full transition-colors relative flex items-center p-0.5 ${
-                      citationEnabled ? 'bg-purple-600' : 'bg-slate-200 dark:bg-slate-700'
+                    className={`w-7 h-4 rounded-full transition-all relative flex items-center p-0.5 cursor-pointer ${
+                      citationEnabled
+                        ? 'bg-purple-600 shadow-[0_0_10px_rgba(168,85,247,0.45)]'
+                        : 'bg-slate-200 dark:bg-slate-700'
                     }`}
                   >
                     <div

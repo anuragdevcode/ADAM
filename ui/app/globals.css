@@ -49,9 +49,99 @@ button, input, textarea, select {
   font: inherit;
 }
 
-button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
-  outline: 2px solid rgba(124, 58, 237, 0.5);
-  outline-offset: 1px;
+/* Accessible focus outlines for interactive buttons and selects without harsh lines */
+button:focus-visible, select:focus-visible {
+  outline: 2px solid rgba(168, 85, 247, 0.4);
+  outline-offset: 2px;
+}
+
+/* Eliminate inner text box borders and outlines completely in chat inputs */
+.chat-input,
+.chat-input:focus,
+.chat-input:focus-visible,
+textarea.chat-input {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+textarea:focus,
+textarea:focus-visible {
+  outline: none !important;
+}
+
+/* ── Ethereal Surface Reflection & Volumetric Glow ───────────────────── */
+.reflection-glow {
+  box-shadow: 
+    0 0 0 1px rgba(168, 85, 247, 0.22),
+    0 0 25px -2px rgba(168, 85, 247, 0.22),
+    0 12px 30px -4px rgba(147, 51, 234, 0.12),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+.dark .reflection-glow {
+  box-shadow: 
+    0 0 0 1px rgba(192, 132, 252, 0.25),
+    0 0 35px -2px rgba(168, 85, 247, 0.35),
+    0 16px 40px -6px rgba(124, 58, 237, 0.25),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.reflection-glow-subtle {
+  box-shadow: 
+    0 0 0 1px rgba(168, 85, 247, 0.15),
+    0 0 16px -2px rgba(168, 85, 247, 0.18),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+.dark .reflection-glow-subtle {
+  box-shadow: 
+    0 0 0 1px rgba(192, 132, 252, 0.2),
+    0 0 22px -2px rgba(168, 85, 247, 0.28),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Active working reflection glow when AI model is unrolling thoughts or generating */
+.reflection-glow-working {
+  animation: glow-reflection-pulse 2.8s ease-in-out infinite alternate;
+}
+
+.dark .reflection-glow-working {
+  animation: glow-reflection-pulse-dark 2.8s ease-in-out infinite alternate;
+}
+
+@keyframes glow-reflection-pulse {
+  0% {
+    box-shadow: 
+      0 0 0 1px rgba(168, 85, 247, 0.22),
+      0 0 20px -2px rgba(168, 85, 247, 0.22),
+      0 8px 24px -4px rgba(147, 51, 234, 0.12),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  100% {
+    box-shadow: 
+      0 0 0 1px rgba(168, 85, 247, 0.4),
+      0 0 38px 2px rgba(168, 85, 247, 0.38),
+      0 16px 36px -4px rgba(147, 51, 234, 0.24),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
+  }
+}
+
+@keyframes glow-reflection-pulse-dark {
+  0% {
+    box-shadow: 
+      0 0 0 1px rgba(192, 132, 252, 0.25),
+      0 0 26px 0 rgba(168, 85, 247, 0.26),
+      0 12px 30px -4px rgba(124, 58, 237, 0.2),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  100% {
+    box-shadow: 
+      0 0 0 1px rgba(192, 132, 252, 0.45),
+      0 0 48px 4px rgba(168, 85, 247, 0.48),
+      0 20px 48px -6px rgba(124, 58, 237, 0.35),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+  }
 }
 
 ::selection {

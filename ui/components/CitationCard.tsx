@@ -65,7 +65,7 @@ function CitationCardComponent({ citation, index }: CitationCardProps) {
       className={`rounded-2xl border p-4 shadow-xs my-2 text-xs sm:text-sm transition-all hover:shadow-md ${
         isExternal
           ? 'border-sky-100 dark:border-sky-900/60 bg-sky-50/30 dark:bg-sky-950/20 hover:border-sky-300 dark:hover:border-sky-700'
-          : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-200 dark:hover:border-purple-800/80'
+          : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-purple-200/50 dark:hover:border-purple-800/40 hover:shadow-[0_0_18px_-3px_rgba(168,85,247,0.18)] dark:hover:shadow-[0_0_22px_-3px_rgba(168,85,247,0.25)]'
       }`}
     >
       {/* Header Row */}

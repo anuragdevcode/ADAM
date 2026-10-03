@@ -441,7 +441,7 @@ export default function UnifiedSettingsModal({
                   onClick={() => setActiveTab(t.id)}
                   className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2.5 transition-all text-xs ${
                     isActive
-                      ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-900/60 shadow-xs'
+                      ? 'bg-purple-50/80 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 font-semibold border border-purple-200/50 dark:border-purple-800/40 reflection-glow-subtle'
                       : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/60'
                   }`}
                 >
@@ -483,7 +483,7 @@ export default function UnifiedSettingsModal({
                       value={tempUserId}
                       onChange={(e) => setTempUserId(e.target.value)}
                       placeholder="officer_dev_001"
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none focus:border-purple-500"
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                     />
                     <p className="text-[10px] text-slate-400 dark:text-zinc-500">Binds audit logs and private conversation threads.</p>
                   </div>
@@ -496,7 +496,7 @@ export default function UnifiedSettingsModal({
                     <select
                       value={departmentId}
                       onChange={(e) => onUpdateDepartmentId(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-500"
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                     >
                       <option value="ALL">All State Departments (General Scope)</option>
                       {departments.map((d) => (
@@ -525,7 +525,7 @@ export default function UnifiedSettingsModal({
                           onClick={() => onUpdateClearanceLevel(lvl.id)}
                           className={`p-3 rounded-2xl border cursor-pointer transition-all ${
                             isSelected
-                              ? 'border-purple-500 dark:border-purple-500 bg-purple-50/60 dark:bg-purple-950/40 shadow-xs ring-1 ring-purple-300 dark:ring-purple-900/60'
+                              ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/70 dark:bg-purple-950/50 reflection-glow-subtle'
                               : 'border-slate-200/80 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900/60'
                           }`}
                         >
@@ -565,7 +565,7 @@ export default function UnifiedSettingsModal({
                         onClick={() => setLanguagePref(l.id)}
                         className={`px-3 py-1 rounded-xl text-xs font-medium border transition-all ${
                           languagePref === l.id
-                            ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold'
+                            ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/80 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold reflection-glow-subtle'
                             : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300'
                         }`}
                       >
@@ -617,7 +617,7 @@ export default function UnifiedSettingsModal({
                             onClick={() => (preset !== 'CUSTOM' ? applyPreset(preset) : undefined)}
                             className={`p-3 rounded-2xl border transition-all ${
                               isActive
-                                ? `${pd.border} ${pd.bg} ring-1 ring-purple-300 dark:ring-purple-900 shadow-xs`
+                                ? `${pd.border} ${pd.bg} reflection-glow-subtle`
                                 : 'border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:border-slate-300'
                             } ${preset !== 'CUSTOM' ? 'cursor-pointer' : 'cursor-default opacity-85'}`}
                           >
@@ -788,7 +788,7 @@ export default function UnifiedSettingsModal({
                         value={geminiKeyInput}
                         onChange={(e) => setGeminiKeyInput(e.target.value)}
                         placeholder="AIzaSy..."
-                        className="w-full px-3 py-1.5 pr-8 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none focus:border-purple-500"
+                        className="w-full px-3 py-1.5 pr-8 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                       />
                       <button
                         type="button"
@@ -840,7 +840,7 @@ export default function UnifiedSettingsModal({
                         value={providerName}
                         onChange={(e) => setProviderName(e.target.value)}
                         placeholder="e.g. ollama_local"
-                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-500"
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                       />
                     </div>
                     <div>
@@ -850,7 +850,7 @@ export default function UnifiedSettingsModal({
                         value={providerUrl}
                         onChange={(e) => setProviderUrl(e.target.value)}
                         placeholder="http://localhost:11434/v1"
-                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-500"
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                       />
                     </div>
                     <div className="sm:col-span-2">
@@ -860,7 +860,7 @@ export default function UnifiedSettingsModal({
                         value={providerKey}
                         onChange={(e) => setProviderKey(e.target.value)}
                         placeholder="Bearer token or leave blank for local"
-                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-500"
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-slate-900 dark:text-zinc-100 outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all"
                       />
                     </div>
                   </div>
@@ -900,7 +900,7 @@ export default function UnifiedSettingsModal({
                               onClick={() => patchBundle((b) => { b.performance.environment_profile = ep.value as PerformanceSettings['environment_profile']; })}
                               className={`p-3 rounded-2xl border cursor-pointer transition-all ${
                                 isActive
-                                  ? 'border-purple-500 bg-purple-50/60 dark:bg-purple-950/40 ring-1 ring-purple-300 dark:ring-purple-900 shadow-xs'
+                                  ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/70 dark:bg-purple-950/50 reflection-glow-subtle'
                                   : 'border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:border-slate-300'
                               }`}
                             >
@@ -963,7 +963,7 @@ export default function UnifiedSettingsModal({
                             onClick={() => patchBundle((b) => { b.voice.default_voice_language = vl.value as VoiceSettings['default_voice_language']; })}
                             className={`py-1.5 text-xs rounded-xl border text-center transition-all ${
                               bundle.voice.default_voice_language === vl.value
-                                ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold'
+                                ? 'border-purple-300/50 dark:border-purple-500/40 bg-purple-50/80 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold reflection-glow-subtle'
                                 : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300'
                             }`}
                           >

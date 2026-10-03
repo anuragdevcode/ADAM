@@ -198,7 +198,7 @@ export default function ReviewView({ userId }: ReviewViewProps) {
                 rows={8}
                 value={correctionText}
                 onChange={(e) => setCorrectionText(e.target.value)}
-                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-mono text-slate-800 dark:text-slate-100 outline-none focus:border-purple-400 leading-relaxed resize-none"
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-mono text-slate-800 dark:text-slate-100 outline-none focus:border-purple-300/50 dark:focus:border-purple-500/40 focus:reflection-glow-subtle transition-all leading-relaxed resize-none"
               />
             </div>
 

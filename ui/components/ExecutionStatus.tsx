@@ -835,10 +835,10 @@ function ExecutionStatusComponent({
                     <div
                       className={`absolute -left-[19px] top-0.5 w-3 h-3 rounded-full border-2 bg-white dark:bg-slate-900 ${
                         isFailed
-                          ? 'border-red-500'
+                          ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]'
                           : isWarning
-                          ? 'border-amber-500'
-                          : 'border-purple-500'
+                          ? 'border-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                          : 'border-purple-400 dark:border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.45)]'
                       }`}
                     />
 
