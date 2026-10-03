@@ -90,7 +90,14 @@ class HeavyWorkerCoordinator:
             return next(iter(self._active_tasks.values()))
 
     def _get_lockfile_paths(self) -> tuple[Path, Path]:
-        storage_dir = getattr(self.budget_manager, "storage_dir", Path(".adam_storage"))
+        env_dir = os.environ.get("ADAM_STORAGE_DIR")
+        if env_dir:
+            storage_dir = Path(env_dir)
+        elif os.environ.get("PYTEST_CURRENT_TEST"):
+            import tempfile
+            storage_dir = Path(tempfile.gettempdir()) / "adam_test_storage"
+        else:
+            storage_dir = getattr(self.budget_manager, "storage_dir", Path(".adam_storage"))
         locks_dir = storage_dir / "locks"
         locks_dir.mkdir(parents=True, exist_ok=True)
         return locks_dir / "heavy_worker.lock", locks_dir / "heavy_worker.json"

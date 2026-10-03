@@ -176,6 +176,7 @@ export function clearStoredGeminiApiKey(): void {
 }
 
 const ADVANCED_SETTINGS_STORAGE_KEY = 'adam_advanced_settings';
+export const ADAM_SETTINGS_UPDATED_EVENT = 'adam-settings-updated';
 
 export function getStoredAdvancedSettings(): AdvancedSettingsBundle | null {
   if (typeof window === 'undefined') return null;
@@ -191,7 +192,62 @@ export function setStoredAdvancedSettings(bundle: AdvancedSettingsBundle): void 
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(ADVANCED_SETTINGS_STORAGE_KEY, JSON.stringify(bundle));
+    window.dispatchEvent(new CustomEvent(ADAM_SETTINGS_UPDATED_EVENT, { detail: bundle }));
   } catch {}
+}
+
+export function updateStoredThinkingEnabled(enabled: boolean): AdvancedSettingsBundle {
+  if (typeof window === 'undefined') {
+    return {} as AdvancedSettingsBundle;
+  }
+  const existing = getStoredAdvancedSettings();
+  let updated: AdvancedSettingsBundle;
+  if (existing) {
+    updated = {
+      ...existing,
+      generation: {
+        ...existing.generation,
+        thinking_enabled: enabled,
+      },
+    };
+  } else {
+    updated = {
+      preset: 'BALANCED',
+      generation: {
+        temperature_rag: 0.05,
+        temperature_conversational: 0.1,
+        max_tokens_rag: 2048,
+        max_tokens_conversational: 1536,
+        top_p: 0.9,
+        top_k_sampling: 40,
+        min_p: 0.05,
+        context_size: 8192,
+        max_rag_prompt_passages: 10,
+        thinking_enabled: enabled,
+        thinking_budget: 1024,
+      },
+      retrieval: {
+        top_k: 5,
+        enable_rerank: true,
+        bm25_weight: 0.4,
+        vector_min_similarity: 0.35,
+        min_score_threshold: 0.3,
+        min_passages: 1,
+        max_passages: 8,
+      },
+      performance: {
+        environment_profile: 'DEV_SERVER',
+        cache_ttl_seconds: 3600,
+        cache_max_entries: 500,
+      },
+      voice: {
+        default_voice_language: 'hi',
+        tts_enabled_default: false,
+      },
+    };
+  }
+  setStoredAdvancedSettings(updated);
+  return updated;
 }
 
 /**
@@ -234,8 +290,15 @@ export async function streamChat(
     }
   }
 
-  if (options.enableThinking != null) {
-    settingsHeaders['X-ADAM-Enable-Thinking'] = String(options.enableThinking);
+  const effectiveThinking =
+    options.enableThinking != null
+      ? options.enableThinking
+      : activeSettings?.generation?.thinking_enabled ?? false;
+
+  settingsHeaders['X-ADAM-Enable-Thinking'] = String(effectiveThinking);
+
+  if (signal?.aborted) {
+    return;
   }
 
   try {
@@ -261,11 +324,15 @@ export async function streamChat(
         model_id: options.modelId || null,
         department_id: options.departmentId || null,
         api_key: geminiKey || null,
-        enable_thinking: options.enableThinking ?? false,
+        enable_thinking: effectiveThinking,
       }),
       signal,
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    const isAbort = signal?.aborted || (err instanceof Error && err.name === 'AbortError');
+    if (isAbort) {
+      return;
+    }
     callbacks.onError?.({
       title: 'Connection Failure',
       message: `Unable to connect to the ADAM service (${err}). Please verify the backend server is running.`,
@@ -273,6 +340,10 @@ export async function streamChat(
       suggestedAction: 'retry',
       raw: String(err),
     });
+    return;
+  }
+
+  if (signal?.aborted) {
     return;
   }
 
@@ -302,85 +373,103 @@ export async function streamChat(
   let buffer = '';
   let currentEvent = '';
 
-  while (true) {
-    let done: boolean;
-    let value: Uint8Array | undefined;
+  const onAbort = () => {
     try {
-      ({ done, value } = await reader.read());
-    } catch {
-      break;
-    }
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
+      reader.cancel();
+    } catch {}
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
 
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        currentEvent = line.slice(7).trim();
-      } else if (line.startsWith('data: ')) {
-        const rawData = line.slice(6).trim();
-        try {
-          const data = JSON.parse(rawData);
-          switch (currentEvent) {
-            case 'status':
-              callbacks.onStatus?.(data as OperationalStatusEvent);
-              break;
-            case 'trail':
-              callbacks.onTrail?.(data);
-              break;
-            case 'start':
-              callbacks.onStart?.(data.session_id, data.model_id);
-              break;
-            case 'token':
-              callbacks.onToken?.(data.text);
-              break;
-            case 'thinking':
-              callbacks.onThinking?.(data.text);
-              break;
-            case 'citations':
-              callbacks.onCitations?.(data as Citation[]);
-              break;
-            case 'banners':
-              callbacks.onBanners?.(data as string[]);
-              break;
-            case 'suggestions':
-              callbacks.onSuggestions?.(data as string[]);
-              break;
-            case 'plan':
-              callbacks.onPlan?.(data as AgentExecutionPlan);
-              break;
-            case 'calculations':
-              callbacks.onCalculations?.(data as ComputationResultRecord[]);
-              break;
-            case 'research':
-              callbacks.onResearch?.(data as { summary?: string | null; subagents?: import('@/lib/types').SubagentRecord[] });
-              break;
-            case 'done':
-              callbacks.onDone?.(data);
-              break;
-            case 'error':
-              if (data && typeof data === 'object') {
-                const errDetails: ChatErrorDetails = {
-                  title: data.title || 'AI Model Execution Error',
-                  message: data.message || 'An unexpected error occurred during inference.',
-                  category: data.category || 'general',
-                  suggestedAction: data.suggested_action || 'retry',
-                  commandHint: data.command_hint || null,
-                  raw: data.message || '',
-                };
-                callbacks.onError?.(errDetails);
-              } else {
-                callbacks.onError?.(String(data));
-              }
-              break;
-          }
-        } catch {
-          // ignore malformed lines
+  try {
+    while (true) {
+      if (signal?.aborted) break;
+
+      let done: boolean;
+      let value: Uint8Array | undefined;
+      try {
+        ({ done, value } = await reader.read());
+      } catch (err: unknown) {
+        if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+          break;
         }
-        currentEvent = '';
+        break;
+      }
+      if (done || signal?.aborted) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (signal?.aborted) break;
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const rawData = line.slice(6).trim();
+          try {
+            const data = JSON.parse(rawData);
+            switch (currentEvent) {
+              case 'status':
+                callbacks.onStatus?.(data as OperationalStatusEvent);
+                break;
+              case 'trail':
+                callbacks.onTrail?.(data);
+                break;
+              case 'start':
+                callbacks.onStart?.(data.session_id, data.model_id);
+                break;
+              case 'token':
+                callbacks.onToken?.(data.text);
+                break;
+              case 'thinking':
+                callbacks.onThinking?.(data.text);
+                break;
+              case 'citations':
+                callbacks.onCitations?.(data as Citation[]);
+                break;
+              case 'banners':
+                callbacks.onBanners?.(data as string[]);
+                break;
+              case 'suggestions':
+                callbacks.onSuggestions?.(data as string[]);
+                break;
+              case 'plan':
+                callbacks.onPlan?.(data as AgentExecutionPlan);
+                break;
+              case 'calculations':
+                callbacks.onCalculations?.(data as ComputationResultRecord[]);
+                break;
+              case 'research':
+                callbacks.onResearch?.(data as { summary?: string | null; subagents?: import('@/lib/types').SubagentRecord[] });
+                break;
+              case 'done':
+                callbacks.onDone?.(data);
+                break;
+              case 'error':
+                if (signal?.aborted) break;
+                if (data && typeof data === 'object') {
+                  const errDetails: ChatErrorDetails = {
+                    title: data.title || 'AI Model Execution Error',
+                    message: data.message || 'An unexpected error occurred during inference.',
+                    category: data.category || 'general',
+                    suggestedAction: data.suggested_action || 'retry',
+                    commandHint: data.command_hint || null,
+                    raw: data.message || '',
+                  };
+                  callbacks.onError?.(errDetails);
+                } else {
+                  callbacks.onError?.(String(data));
+                }
+                break;
+            }
+          } catch {
+            // ignore malformed lines
+          }
+          currentEvent = '';
+        }
       }
     }
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 

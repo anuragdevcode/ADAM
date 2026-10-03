@@ -10,6 +10,7 @@ Per Phase 04 specification:
 """
 
 import hashlib
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ from adam.model.runtime import (
     DeterministicModelRuntime,
     SingleModelLifecycleManager,
     ModelGenerationResult,
+    GenerationCancelledError,
 )
 from adam.observability.events import (
     OperationalEventType,
@@ -215,8 +217,11 @@ class AgentStateMachine:
         thinking_callback: Optional[Callable[[str], None]] = None,
         enable_thinking: Optional[bool] = None,
         settings_bundle=None,
+        abort_event: Optional[threading.Event] = None,
     ) -> AgentResponse:
         """Execute full bounded 7-stage state machine."""
+        if abort_event is not None and abort_event.is_set():
+            raise GenerationCancelledError("Agent execution was cancelled before start.")
         start_time = time.perf_counter()
         user = user_context or UserContext()
         emitter = OperationalEventEmitter(on_event=on_event, trace_id=trace_id)
@@ -774,6 +779,7 @@ class AgentStateMachine:
                     max_tokens=effective_max_tokens,
                     harness_parameters=harness_params,
                     token_callback=token_callback,
+                    abort_event=abort_event,
                 )
                 answer = gen_result.answer
                 prompt_tokens = gen_result.tokens_prompt
@@ -941,6 +947,7 @@ class AgentStateMachine:
                         harness_parameters=harness_params,
                         token_callback=token_callback,
                         thinking_callback=thinking_callback,
+                        abort_event=abort_event,
                     )
                     answer = gen_result.answer
                     prompt_tokens = gen_result.tokens_prompt
@@ -1046,6 +1053,7 @@ class AgentStateMachine:
                         harness_parameters=harness_params,
                         token_callback=token_callback,
                         thinking_callback=thinking_callback,
+                        abort_event=abort_event,
                     )
                     answer = gen_result.answer
                     prompt_tokens = gen_result.tokens_prompt

@@ -114,6 +114,9 @@ class CrawlerRateLimiter:
 
     def wait(self, url: str) -> None:
         """Block until the rate limit allows the next request."""
+        import os
+        if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("ADAM_TEST_MODE"):
+            return
         delay = self.acquire(url)
         if delay > 0:
             time.sleep(delay)

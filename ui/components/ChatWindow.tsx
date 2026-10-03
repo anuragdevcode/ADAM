@@ -1,8 +1,14 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useId } from 'react';
-import { streamChat, getSessionHistory } from '@/lib/api';
-import type { ChatMessage, DepartmentItem, ChatErrorDetails } from '@/lib/types';
+import {
+  streamChat,
+  getSessionHistory,
+  getStoredAdvancedSettings,
+  updateStoredThinkingEnabled,
+  ADAM_SETTINGS_UPDATED_EVENT,
+} from '@/lib/api';
+import type { ChatMessage, DepartmentItem, ChatErrorDetails, AdvancedSettingsBundle } from '@/lib/types';
 import CitationCard from './CitationCard';
 import CurrencyBanner from './CurrencyBanner';
 import ExecutionStatus from './ExecutionStatus';
@@ -15,6 +21,7 @@ import {
   Paperclip,
   ChevronDown,
   ArrowUp,
+  Square,
   Check,
   ChevronRight,
   FileText,
@@ -312,7 +319,15 @@ export default function ChatWindow({
   const [isLoading, setIsLoading] = useState(false);
   const [lastAnswer, setLastAnswer] = useState<VoiceAnswer>({ text: '', seq: 0 });
   const [citationEnabled, setCitationEnabled] = useState(true);
-  const [deepThinkEnabled, setDeepThinkEnabled] = useState(false);
+  const [deepThinkEnabled, setDeepThinkEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = getStoredAdvancedSettings();
+      if (stored?.generation?.thinking_enabled != null) {
+        return stored.generation.thinking_enabled;
+      }
+    }
+    return false;
+  });
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [deptMenuOpen, setDeptMenuOpen] = useState(false);
 
@@ -321,6 +336,63 @@ export default function ChatWindow({
   const locallyStartedSession = useRef<string | null>(null);
   const idPrefix = useId();
   const { toast } = useToast();
+
+  // Keep deepThinkEnabled synchronized with AdvancedSettings / UnifiedSettings / storage events
+  useEffect(() => {
+    const stored = getStoredAdvancedSettings();
+    if (stored?.generation?.thinking_enabled != null) {
+      setDeepThinkEnabled(stored.generation.thinking_enabled);
+    }
+
+    const handleSettingsUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<AdvancedSettingsBundle>;
+      if (customEvent.detail?.generation?.thinking_enabled != null) {
+        setDeepThinkEnabled(customEvent.detail.generation.thinking_enabled);
+      } else {
+        const current = getStoredAdvancedSettings();
+        if (current?.generation?.thinking_enabled != null) {
+          setDeepThinkEnabled(current.generation.thinking_enabled);
+        }
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'adam_advanced_settings') {
+        const current = getStoredAdvancedSettings();
+        if (current?.generation?.thinking_enabled != null) {
+          setDeepThinkEnabled(current.generation.thinking_enabled);
+        }
+      }
+    };
+
+    window.addEventListener(ADAM_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(ADAM_SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  const handleToggleDeepThink = useCallback(() => {
+    setDeepThinkEnabled((prev) => {
+      const next = !prev;
+      updateStoredThinkingEnabled(next);
+      return next;
+    });
+  }, []);
+
+  const handleStop = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+  }, []);
+
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -541,6 +613,7 @@ export default function ChatWindow({
               });
             },
             onError: (err) => {
+              if (ctrl.signal.aborted) return;
               const errorObj: ChatErrorDetails =
                 typeof err === 'string'
                   ? {
@@ -563,8 +636,46 @@ export default function ChatWindow({
           },
           ctrl.signal,
         );
+      } catch (err: unknown) {
+        const isAbort = ctrl.signal.aborted || (err instanceof Error && err.name === 'AbortError');
+        if (!isAbort) {
+          const errMessage = err instanceof Error ? err.message : String(err);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content: '',
+                    isStreaming: false,
+                    error: {
+                      title: 'Unexpected Client Error',
+                      message: errMessage,
+                      category: 'general',
+                      suggestedAction: 'retry',
+                      raw: String(err),
+                    },
+                  }
+                : m,
+            ),
+          );
+        }
       } finally {
+        if (ctrl.signal.aborted) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content: m.content?.trim() ? m.content : 'Generation stopped.',
+                    isStreaming: false,
+                    isThinking: false,
+                  }
+                : m,
+            ),
+          );
+        }
         setIsLoading(false);
+        abortRef.current = null;
       }
     },
     [isLoading, sessionId, userId, clearanceLevel, selectedDept, modelId, onSessionCreated, idPrefix, citationEnabled, deepThinkEnabled],
@@ -614,7 +725,11 @@ export default function ChatWindow({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage(input);
+      if (isLoading) {
+        handleStop();
+      } else {
+        sendMessage(input);
+      }
     }
   };
 
@@ -637,21 +752,24 @@ export default function ChatWindow({
     <div className="flex flex-col h-full bg-white dark:bg-[#0c111c] overflow-hidden relative transition-colors">
       {/* ── EMPTY / WELCOME STATE ────────────────────────────────────── */}
       {!hasMessages ? (
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 flex flex-col items-center justify-center min-h-0 bg-[radial-gradient(ellipse_at_top,#faf7ff_0%,#fff_50%)] dark:bg-[radial-gradient(ellipse_at_top,#1a1429_0%,#0c111c_55%)]">
-          <div className="max-w-3xl w-full flex flex-col items-center text-center my-auto">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 sm:py-12 flex flex-col items-center min-h-0 bg-[radial-gradient(ellipse_at_top,#faf7ff_0%,#fff_50%)] dark:bg-[radial-gradient(ellipse_at_top,#1a1429_0%,#0c111c_55%)]">
+          <div className="max-w-3xl w-full flex flex-col items-center text-center my-auto py-2">
             {/* Signature Sovereign 3D Orb */}
-            <div className="sovereign-orb mb-5 shadow-xl" />
+            <div className="relative mb-5 flex items-center justify-center group">
+              <div className="absolute -inset-2.5 rounded-full bg-purple-500/20 dark:bg-purple-600/30 blur-lg transition-all group-hover:scale-110" />
+              <div className="sovereign-orb relative shadow-xl shadow-purple-500/25" />
+            </div>
 
             {/* Greetings & Header */}
-            <h1 className="text-3xl sm:text-4xl font-semibold text-slate-900 dark:text-slate-100 tracking-tight mb-2">
-              Welcome, {userName}
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 dark:text-slate-100 tracking-tight mb-2">
+              Welcome, {userName || 'Administrative Officer'}
             </h1>
-            <h2 className="text-lg sm:text-xl font-normal text-slate-600 dark:text-slate-400 mb-8">
+            <h2 className="text-sm sm:text-base lg:text-lg font-normal text-slate-600 dark:text-slate-400 mb-6 sm:mb-8">
               Uttarakhand State Administrative <span className="text-purple-600 dark:text-purple-400 font-semibold">Intelligence</span>
             </h2>
 
             {/* Main Floating Search / Prompt Composer Card */}
-            <div className="w-full bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg p-4 text-left transition-all focus-within:border-purple-400 dark:focus-within:border-purple-600 focus-within:shadow-xl mb-8">
+            <div className="w-full bg-white dark:bg-[#111726] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-purple-950/20 p-4 sm:p-5 text-left transition-all focus-within:border-purple-400 dark:focus-within:border-purple-600 focus-within:ring-2 focus-within:ring-purple-400/20 mb-8">
               <div className="flex items-start gap-3">
                 <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-1 shrink-0" />
                 <textarea
@@ -660,32 +778,31 @@ export default function ChatWindow({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={composerPlaceholder}
-                  disabled={isLoading}
                   className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none resize-none pt-0.5 leading-relaxed"
                 />
               </div>
 
               {/* Bottom Actions Toolbar inside prompt card */}
-              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex-wrap gap-2">
-                {/* Left side: Attach + Department filter */}
-                <div className="flex items-center gap-2 relative">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                {/* Left side: Attach + Department filter + Deep Think */}
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={onOpenUpload}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-2xs shrink-0"
                     title="Upload official order PDF for verification"
                   >
                     <Paperclip className="w-3.5 h-3.5 text-slate-400" />
                     <span>Attach Order</span>
                   </button>
 
-                  <div className="relative">
+                  <div className="relative shrink-0">
                     <button
                       type="button"
                       onClick={() => setDeptMenuOpen(!deptMenuOpen)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-2xs"
                     >
-                      <span className="max-w-[130px] truncate">{currentDeptLabel}</span>
+                      <span className="max-w-[110px] sm:max-w-[140px] truncate">{currentDeptLabel}</span>
                       <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
                     </button>
 
@@ -726,8 +843,8 @@ export default function ChatWindow({
                   {/* Deep Think Mode Toggle Button */}
                   <button
                     type="button"
-                    onClick={() => setDeepThinkEnabled(!deepThinkEnabled)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                    onClick={handleToggleDeepThink}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-2xs shrink-0 ${
                       deepThinkEnabled
                         ? 'border-purple-500/60 bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:border-purple-500/70 dark:text-purple-300 shadow-xs ring-1 ring-purple-400/30'
                         : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131926] text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -750,8 +867,8 @@ export default function ChatWindow({
                   </button>
                 </div>
 
-                {/* Right side: Citation Toggle + Voice + Submit */}
-                <div className="flex items-center gap-3">
+                {/* Right side: Citation Toggle + Voice + Submit/Stop */}
+                <div className="flex items-center gap-3 ml-auto sm:ml-0 shrink-0">
                   {/* Citation Switch */}
                   <label className="flex items-center gap-1.5 cursor-pointer select-none">
                     <div
@@ -772,16 +889,27 @@ export default function ChatWindow({
                   {/* Voice Controls */}
                   <VoiceControls voice={voice} hasAnswer={!!lastAnswer.text} />
 
-                  {/* Submit Up-Arrow Button */}
-                  <button
-                    type="button"
-                    onClick={() => sendMessage(input)}
-                    disabled={isLoading || !input.trim()}
-                    className="p-2 rounded-xl bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 active:scale-95 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-xs"
-                    title="Send query (Enter)"
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </button>
+                  {/* Submit / Stop Button */}
+                  {isLoading ? (
+                    <button
+                      type="button"
+                      onClick={handleStop}
+                      className="p-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white transition-all shadow-xs animate-in fade-in"
+                      title="Stop generation (Click to cancel)"
+                    >
+                      <Square className="w-4 h-4 fill-current" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => sendMessage(input)}
+                      disabled={!input.trim()}
+                      className="p-2 rounded-xl bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 active:scale-95 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-xs"
+                      title="Send query (Enter)"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -793,27 +921,34 @@ export default function ChatWindow({
               </p>
             </div>
 
-            {/* 4 Cards Grid with Real GO Queries */}
-            <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-left">
+            {/* 4 Cards Grid - 2 Columns on Tablet/Desktop, comfortable padding & min-height */}
+            <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
               {EXAMPLE_CARDS.map((card, idx) => {
                 const IconComponent = card.icon;
                 return (
                   <div
                     key={idx}
                     onClick={() => sendMessage(card.query)}
-                    className="bg-white/80 dark:bg-[#111726]/80 hover:bg-white dark:hover:bg-[#141b2c] hover:-translate-y-0.5 hover:shadow-md border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between h-32 group"
+                    className="group bg-white/80 dark:bg-[#111726]/80 hover:bg-white dark:hover:bg-[#141b2c] hover:-translate-y-0.5 hover:shadow-md hover:border-purple-300 dark:hover:border-purple-700/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between min-h-[112px]"
                   >
                     <div>
-                      <span className="text-[10px] font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wide block mb-1">
-                        {card.dept}
-                      </span>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug font-medium group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors line-clamp-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider bg-purple-50 dark:bg-purple-950/50 px-2 py-0.5 rounded-md border border-purple-100 dark:border-purple-900/50">
+                          {card.dept}
+                        </span>
+                        <div className="text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <p className="text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 leading-snug font-medium group-hover:text-purple-950 dark:group-hover:text-white transition-colors">
                         {card.title}
                       </p>
                     </div>
-                    <div className="flex items-center justify-between text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 pt-2 border-t border-slate-100 dark:border-slate-800/60">
-                      <IconComponent className="w-4 h-4" />
-                      <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center justify-between text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 pt-2.5 mt-2 border-t border-slate-100 dark:border-slate-800/60 text-[11px] font-medium">
+                      <span className="text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
+                        Query record
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
                     </div>
                   </div>
                 );
@@ -1068,7 +1203,6 @@ export default function ChatWindow({
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={composerPlaceholder}
-                disabled={isLoading}
                 className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none resize-none pt-0.5"
               />
             </div>
@@ -1129,7 +1263,7 @@ export default function ChatWindow({
                 {/* Deep Think Mode Toggle Button */}
                 <button
                   type="button"
-                  onClick={() => setDeepThinkEnabled(!deepThinkEnabled)}
+                  onClick={handleToggleDeepThink}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
                     deepThinkEnabled
                       ? 'border-purple-500/60 bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:border-purple-500/70 dark:text-purple-300 shadow-xs ring-1 ring-purple-400/30'
@@ -1172,15 +1306,26 @@ export default function ChatWindow({
 
                 <VoiceControls voice={voice} hasAnswer={!!lastAnswer.text} />
 
-                <button
-                  type="button"
-                  onClick={() => sendMessage(input)}
-                  disabled={isLoading || !input.trim()}
-                  className="p-1.5 rounded-lg bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 active:scale-95 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all"
-                  title="Send query (Enter)"
-                >
-                  <ArrowUp className="w-3.5 h-3.5" />
-                </button>
+                {isLoading ? (
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    className="p-1.5 rounded-lg bg-red-600 hover:bg-red-700 active:scale-95 text-white transition-all shadow-xs animate-in fade-in"
+                    title="Stop generation (Click to cancel)"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => sendMessage(input)}
+                    disabled={!input.trim()}
+                    className="p-1.5 rounded-lg bg-slate-900 dark:bg-purple-600 text-white hover:bg-slate-800 dark:hover:bg-purple-500 active:scale-95 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-all"
+                    title="Send query (Enter)"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

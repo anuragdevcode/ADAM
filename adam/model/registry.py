@@ -88,6 +88,13 @@ class ModelArtifact:
     capabilities: Dict[str, Any] = field(default_factory=dict)
     display_group: str = ""                      # LOCAL | REMOTE | "" for canonical
     provider_display: str = ""                   # e.g. "Ollama" | "Gemini"
+    runtime_context_window: Optional[int] = None  # Safe hardware-aware context window cap
+
+    def get_runtime_context_window(self) -> int:
+        """Resolve hardware-safe runtime context window for local serving."""
+        from adam.config import get_safe_context_window
+        target = self.runtime_context_window or self.context_window
+        return get_safe_context_window(target)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -103,6 +110,7 @@ class ModelArtifact:
             "license_status": str(self.license_status),
             "requires_legal_review": self.requires_legal_review,
             "context_window": self.context_window,
+            "runtime_context_window": self.runtime_context_window or self.context_window,
             "languages": self.languages,
             "serving_runtime": self.serving_runtime,
             "is_primary": self.is_primary,
@@ -197,6 +205,7 @@ QWEN3_5_4B_INSTRUCT = ModelArtifact(
     license_status=LicenseStatus.APPROVED,
     requires_legal_review=False,
     context_window=262_144,  # Ultra-Long Context: 256k tokens native ingestion
+    runtime_context_window=4096,  # Safe hardware-aware runtime default for edge/MacBook Air
     languages=["en", "hi", "sa", "ur", "pa", "bn", "mr", "gu", "ta", "te", "kn", "ml"],
     serving_runtime="ollama",
     prompt_template=QWEN3_CHATML_TEMPLATE,

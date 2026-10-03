@@ -1,10 +1,12 @@
 import asyncio
 import json
+import logging
 import os
 import re
+import threading
 import uuid
 from typing import AsyncGenerator, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -13,9 +15,12 @@ from adam.agent.state_machine import AgentStateMachine
 from adam.api.deps import get_db, get_user_context
 from adam.config import MAX_CONCURRENT_GENERATIONS
 from adam.model.registry import ModelRegistry
+from adam.model.runtime import GenerationCancelledError
 from adam.observability.events import OperationalEvent
 from adam.observability.serializer import PublicEventSerializer
 from adam.rag.models import UserContext
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,6 +45,7 @@ class ChatRequest(BaseModel):
 @router.post("/chat")
 async def chat_endpoint(
     req: ChatRequest,
+    request: Request,
     db: Session = Depends(get_db),
     user_ctx: UserContext = Depends(get_user_context),
     x_gemini_api_key: Optional[str] = Header(None),
@@ -63,7 +69,7 @@ async def chat_endpoint(
             detail="Chat generation capacity saturated (backpressure limit reached). Please try again shortly.",
         )
 
-    effective_gemini_key = x_gemini_api_key or req.api_key
+    effective_gemini_key = (x_gemini_api_key if isinstance(x_gemini_api_key, str) else None) or req.api_key
 
     # Build AdvancedSettingsBundle from optional headers
     _settings_bundle = None
@@ -73,30 +79,30 @@ async def chat_endpoint(
             PRESET_BUNDLES, AdvancedSettingsPreset, DEFAULT_BUNDLE,
         )
         user_id = getattr(user_ctx, "user_id", "anonymous") or "anonymous"
-        if user_id == "anonymous" and not x_adam_settings_preset:
+        if user_id == "anonymous" and not (isinstance(x_adam_settings_preset, str) and x_adam_settings_preset):
             _settings_bundle = AdvancedSettingsBundle.from_dict(DEFAULT_BUNDLE.to_dict())
         else:
             manager = AdvancedSettingsManager(db, user_id=user_id)
             _settings_bundle = manager.load()
 
         # Apply per-request header overrides
-        if x_adam_settings_preset:
+        if isinstance(x_adam_settings_preset, str) and x_adam_settings_preset:
             try:
                 preset = AdvancedSettingsPreset(x_adam_settings_preset.upper())
                 _settings_bundle = AdvancedSettingsBundle.from_dict(PRESET_BUNDLES[preset].to_dict())
             except (ValueError, KeyError):
                 pass
-        if x_adam_top_k:
+        if isinstance(x_adam_top_k, str) and x_adam_top_k:
             try:
                 _settings_bundle.retrieval.top_k = max(3, min(20, int(x_adam_top_k)))
             except (ValueError, TypeError):
                 pass
-        if x_adam_max_tokens:
+        if isinstance(x_adam_max_tokens, str) and x_adam_max_tokens:
             try:
                 _settings_bundle.generation.max_tokens_rag = max(256, min(4096, int(x_adam_max_tokens)))
             except (ValueError, TypeError):
                 pass
-        if x_adam_temperature:
+        if isinstance(x_adam_temperature, str) and x_adam_temperature:
             try:
                 _settings_bundle.generation.temperature_rag = max(0.0, min(0.2, float(x_adam_temperature)))
             except (ValueError, TypeError):
@@ -120,11 +126,12 @@ async def chat_endpoint(
         trace_id = session_id or f"tr_{uuid.uuid4().hex[:12]}"
         start_event_emitted = False
         captured_session_id = session_id
+        cancel_event = threading.Event()
 
         effective_enable_thinking: bool = False
         if req.enable_thinking is not None:
             effective_enable_thinking = bool(req.enable_thinking)
-        elif x_adam_enable_thinking is not None:
+        elif isinstance(x_adam_enable_thinking, str):
             effective_enable_thinking = x_adam_enable_thinking.lower() in ("true", "1", "yes")
 
         from adam.rag.query import QueryUnderstanding
@@ -146,10 +153,14 @@ async def chat_endpoint(
                 loop.call_soon_threadsafe(event_queue.put_nowait, ("status", serialized, captured_session_id))
 
         def token_callback(chunk: str) -> None:
+            if cancel_event.is_set():
+                raise GenerationCancelledError("Client disconnected during token streaming")
             if chunk:
                 loop.call_soon_threadsafe(event_queue.put_nowait, ("token", {"text": chunk}, None))
 
         def thinking_callback(chunk: str) -> None:
+            if cancel_event.is_set():
+                raise GenerationCancelledError("Client disconnected during thinking streaming")
             if chunk:
                 loop.call_soon_threadsafe(event_queue.put_nowait, ("thinking", {"text": chunk}, None))
 
@@ -193,6 +204,8 @@ async def chat_endpoint(
                             run_kwargs["enable_thinking"] = effective_enable_thinking
                         if "settings_bundle" in sig.parameters and _settings_bundle is not None:
                             run_kwargs["settings_bundle"] = _settings_bundle
+                        if "abort_event" in sig.parameters:
+                            run_kwargs["abort_event"] = cancel_event
                     except Exception:
                         pass
                     return agent.run(**run_kwargs)
@@ -204,6 +217,11 @@ async def chat_endpoint(
             # Stream operational status events and live tokens in real time as state machine transitions
             tokens_streamed = 0
             while not run_task.done():
+                if await request.is_disconnected():
+                    logger.info("Client disconnected from chat stream; cancelling run_task")
+                    cancel_event.set()
+                    run_task.cancel()
+                    break
                 try:
                     kind, payload, sid = await asyncio.wait_for(event_queue.get(), timeout=0.03)
                     if kind == "status":
@@ -223,6 +241,16 @@ async def chat_endpoint(
                 except asyncio.TimeoutError:
                     continue
 
+            # If client disconnected or run_task was cancelled, clean up immediately
+            if await request.is_disconnected() or run_task.cancelled():
+                cancel_event.set()
+                run_task.cancel()
+                try:
+                    await run_task
+                except (asyncio.CancelledError, GenerationCancelledError, Exception):
+                    pass
+                return
+
             # Drain any remaining queued events
             while not event_queue.empty():
                 kind, payload, sid = event_queue.get_nowait()
@@ -241,7 +269,11 @@ async def chat_endpoint(
                 elif kind == "thinking":
                     yield f"event: thinking\ndata: {json.dumps(payload)}\n\n"
 
-            response = await run_task
+            try:
+                response = await run_task
+            except (asyncio.CancelledError, GenerationCancelledError):
+                logger.info("run_task cancelled; stopping chat generation cleanly.")
+                return
 
             # 1. Start Event (ensure emitted if not already done)
             if not start_event_emitted:
@@ -252,9 +284,11 @@ async def chat_endpoint(
             # If no live tokens were streamed (e.g. non-streaming fallback runtime or mock),
             # stream the full answer word-by-word.
             if tokens_streamed == 0 and response.answer:
+                token_delay = 0.0 if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("ADAM_TEST_MODE") else 0.015
                 for chunk in re.findall(r"\s*\S+\s*", response.answer):
                     yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
-                    await asyncio.sleep(0.015)
+                    if token_delay > 0:
+                        await asyncio.sleep(token_delay)
 
             # 3. Citations Event
             citations_data = [cit.to_dict() for cit in response.citations]
@@ -321,6 +355,19 @@ async def chat_endpoint(
             }
             yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
 
+        except asyncio.CancelledError:
+            logger.info("Chat stream generator received CancelledError; cleaning up.")
+            cancel_event.set()
+            if "run_task" in locals() and not run_task.done():
+                run_task.cancel()
+                try:
+                    await run_task
+                except (asyncio.CancelledError, GenerationCancelledError, Exception):
+                    pass
+            raise
+        except GenerationCancelledError as gce:
+            logger.info("Chat generation cancelled cleanly: %s", gce)
+            return
         except Exception as e:
             while not event_queue.empty():
                 try:
@@ -382,6 +429,9 @@ async def chat_endpoint(
             }
             yield f"event: error\ndata: {json.dumps(error_payload)}\n\n"
         finally:
+            cancel_event.set()
+            if "run_task" in locals() and not run_task.done():
+                run_task.cancel()
             _CHAT_SEMAPHORE.release()
 
     return StreamingResponse(

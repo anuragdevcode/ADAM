@@ -17,6 +17,8 @@ import {
   fetchAdvancedSettings,
   saveAdvancedSettings,
   resetAdvancedSettings,
+  setStoredAdvancedSettings,
+  ADAM_SETTINGS_UPDATED_EVENT,
 } from '@/lib/api';
 
 interface AdvancedSettingsModalProps {
@@ -198,6 +200,31 @@ export default function AdvancedSettingsModal({
     if (isOpen) { setActiveTab('presets'); load(); }
   }, [isOpen, load]);
 
+  // Sync bundle with external updates (e.g. ChatWindow Deep Think toggle)
+  useEffect(() => {
+    const handleSettingsUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<AdvancedSettingsBundle>;
+      if (customEvent.detail?.generation) {
+        setBundle((prev) => {
+          if (!prev) return customEvent.detail;
+          if (prev.generation.thinking_enabled === customEvent.detail.generation.thinking_enabled) {
+            return prev;
+          }
+          return {
+            ...prev,
+            generation: {
+              ...prev.generation,
+              thinking_enabled: customEvent.detail.generation.thinking_enabled,
+            },
+          };
+        });
+      }
+    };
+
+    window.addEventListener(ADAM_SETTINGS_UPDATED_EVENT, handleSettingsUpdate);
+    return () => window.removeEventListener(ADAM_SETTINGS_UPDATED_EVENT, handleSettingsUpdate);
+  }, []);
+
   if (!isOpen) return null;
 
   const defaults = settingsData?.defaults ?? null;
@@ -221,13 +248,18 @@ export default function AdvancedSettingsModal({
     }
     next.preset = matchedPreset;
     setBundle(next);
+    setStoredAdvancedSettings(next);
+    onSettingsChange?.(next);
   }
 
   function applyPreset(preset: AdvancedSettingsPreset) {
     if (!presets) return;
     const p = presets[preset];
     if (!p) return;
-    setBundle({ ...JSON.parse(JSON.stringify(p)), preset });
+    const next = { ...JSON.parse(JSON.stringify(p)), preset };
+    setBundle(next);
+    setStoredAdvancedSettings(next);
+    onSettingsChange?.(next);
   }
 
   async function handleSave() {
@@ -236,6 +268,7 @@ export default function AdvancedSettingsModal({
     const ok = await saveAdvancedSettings(userId, bundle, optIn);
     setSaving(false);
     if (ok) {
+      setStoredAdvancedSettings(bundle);
       setSavedOk(true);
       onSettingsChange?.(bundle);
       setTimeout(() => { setSavedOk(false); onClose(); }, 700);
@@ -246,6 +279,7 @@ export default function AdvancedSettingsModal({
     const def = await resetAdvancedSettings(userId);
     if (def) {
       setBundle(JSON.parse(JSON.stringify(def)));
+      setStoredAdvancedSettings(def);
       onSettingsChange?.(def);
     }
   }

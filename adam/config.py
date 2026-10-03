@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Optional
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -173,4 +174,105 @@ MAX_CONCURRENT_GENERATIONS = int(os.getenv("MAX_CONCURRENT_GENERATIONS", "1"))
 PRIMARY_MODEL_ID = os.getenv("PRIMARY_MODEL_ID", "qwen3.5-4b-instruct-q4")
 ADAM_MODEL_BACKEND = os.getenv("ADAM_MODEL_BACKEND", "ollama")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+
+
+# ── Hardware Memory Auto-Detection & Safe Context Window (Apple Silicon M2 / Low RAM) ──
+
+def get_system_ram_bytes() -> Optional[int]:
+    """Detect total system physical RAM in bytes across platforms."""
+    # 1. psutil if installed
+    try:
+        import psutil
+        return int(psutil.virtual_memory().total)
+    except Exception:
+        pass
+    # 2. POSIX sysconf (macOS, Linux, BSD)
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        if pages > 0 and page_size > 0:
+            return int(pages * page_size)
+    except Exception:
+        pass
+    # 3. macOS / BSD sysctl
+    try:
+        import subprocess
+        out = subprocess.check_output(["sysctl", "-n", "hw.memsize"], stderr=subprocess.DEVNULL)
+        val = int(out.strip())
+        if val > 0:
+            return val
+    except Exception:
+        pass
+    # 4. Linux /proc/meminfo
+    try:
+        meminfo = Path("/proc/meminfo")
+        if meminfo.exists():
+            for line in meminfo.read_text(encoding="utf-8").splitlines():
+                if line.startswith("MemTotal:"):
+                    parts = line.split()
+                    kb = int(parts[1])
+                    return kb * 1024
+    except Exception:
+        pass
+    return None
+
+
+def get_safe_context_window(requested_ctx: Optional[int] = None) -> int:
+    """Calculate a hardware-aware safe context window cap in tokens for local LLM runtimes.
+
+    Prevents Ollama Metal unified memory pre-allocation from causing swap thrashing
+    or kernel out-of-memory crashes on memory-constrained devices (e.g. 8GB Apple Silicon).
+
+    Hardware Tiers:
+      - Total RAM <= 8GB (or unresolvable): default 4,096 tokens (hard max 8,192).
+        A 4B Q4 model is ~2.65GB; a 4K KV cache is ~250MB, leaving ~5GB for macOS & apps.
+      - Total RAM <= 16GB: default 8,192 tokens (hard max 16,384).
+      - Total RAM <= 32GB: default 16,384 tokens (hard max 32,768).
+      - Total RAM > 32GB: default 32,768 tokens (hard max 65,536).
+
+    Overrides:
+      `ADAM_CONTEXT_WINDOW` or `OLLAMA_NUM_CTX` environment variables take precedence.
+    """
+    env_override = os.getenv("ADAM_CONTEXT_WINDOW") or os.getenv("OLLAMA_NUM_CTX")
+    if env_override:
+        try:
+            val = int(env_override.strip())
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+
+    ram_bytes = get_system_ram_bytes()
+    if ram_bytes is not None:
+        ram_gb = ram_bytes / (1024 ** 3)
+    else:
+        ram_gb = 8.0  # Conservative default when detection fails
+
+    if ram_gb <= 9.0:  # <= ~8GB machines (e.g. 8GB MacBook Air M2)
+        default_ctx = 4096
+        max_ctx = 8192
+    elif ram_gb <= 18.0:  # <= ~16GB machines
+        default_ctx = 8192
+        max_ctx = 16384
+    elif ram_gb <= 34.0:  # <= ~32GB machines
+        default_ctx = 16384
+        max_ctx = 32768
+    else:  # High-RAM workstations & servers
+        default_ctx = 32768
+        max_ctx = 65536
+
+    if requested_ctx is None or requested_ctx <= 0:
+        return default_ctx
+
+    # If requested context is greater than the hardware safe maximum,
+    # or is an unconstrained native ultra-long window (>= 32k tokens), clamp safely.
+    if requested_ctx > max_ctx:
+        if requested_ctx >= 32768:
+            return default_ctx
+        return max_ctx
+
+    return requested_ctx
+
+
+DEFAULT_SAFE_CONTEXT_WINDOW = get_safe_context_window()
 

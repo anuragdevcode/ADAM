@@ -39,6 +39,8 @@ import {
   validateGeminiKey,
   registerProvider,
   fetchSystemIntrospection,
+  setStoredAdvancedSettings,
+  ADAM_SETTINGS_UPDATED_EVENT,
 } from '@/lib/api';
 import { useToast } from './ToastProvider';
 
@@ -199,6 +201,31 @@ export default function UnifiedSettingsModal({
     }
   }, [isOpen, initialTab, userId, sessionId, clearanceLevel, geminiApiKey]);
 
+  // Sync bundle with external updates (e.g. ChatWindow Deep Think toggle)
+  useEffect(() => {
+    const handleSettingsUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<AdvancedSettingsBundle>;
+      if (customEvent.detail?.generation) {
+        setBundle((prev) => {
+          if (!prev) return customEvent.detail;
+          if (prev.generation.thinking_enabled === customEvent.detail.generation.thinking_enabled) {
+            return prev;
+          }
+          return {
+            ...prev,
+            generation: {
+              ...prev.generation,
+              thinking_enabled: customEvent.detail.generation.thinking_enabled,
+            },
+          };
+        });
+      }
+    };
+
+    window.addEventListener(ADAM_SETTINGS_UPDATED_EVENT, handleSettingsUpdate);
+    return () => window.removeEventListener(ADAM_SETTINGS_UPDATED_EVENT, handleSettingsUpdate);
+  }, []);
+
   if (!isOpen) return null;
 
   const isAirGapped = clearanceLevel === 'RESTRICTED' || clearanceLevel === 'CONFIDENTIAL';
@@ -237,13 +264,18 @@ export default function UnifiedSettingsModal({
     }
     next.preset = matchedPreset;
     setBundle(next);
+    setStoredAdvancedSettings(next);
+    onSettingsChange?.(next);
   };
 
   const applyPreset = (preset: AdvancedSettingsPreset) => {
     if (!advData?.presets) return;
     const p = advData.presets[preset];
     if (!p) return;
-    setBundle({ ...JSON.parse(JSON.stringify(p)), preset });
+    const next = { ...JSON.parse(JSON.stringify(p)), preset };
+    setBundle(next);
+    setStoredAdvancedSettings(next);
+    onSettingsChange?.(next);
     toast.info(`Switched to ${PRESET_DISPLAY[preset]?.label} preset`);
   };
 
@@ -253,6 +285,7 @@ export default function UnifiedSettingsModal({
     const ok = await saveAdvancedSettings(userId, bundle, true);
     setSavingAdv(false);
     if (ok) {
+      setStoredAdvancedSettings(bundle);
       onSettingsChange?.(bundle);
       toast.success('Inference and retrieval parameters updated');
     } else {
@@ -264,6 +297,7 @@ export default function UnifiedSettingsModal({
     const def = await resetAdvancedSettings(userId);
     if (def) {
       setBundle(JSON.parse(JSON.stringify(def)));
+      setStoredAdvancedSettings(def);
       onSettingsChange?.(def);
       toast.info('Settings restored to Balanced default');
     }

@@ -1,9 +1,26 @@
 """Shared pytest fixtures and mock test environments."""
 
 import hashlib
+import os
+import tempfile
 from datetime import datetime, timezone, date
 from pathlib import Path
 from typing import Dict, Any
+
+# Ensure tests use an isolated database and storage to prevent interference with live local server or corruption
+if not os.environ.get("DATABASE_URL"):
+    _test_db = Path(tempfile.gettempdir()) / "adam_pytest.db"
+    try:
+        if _test_db.exists():
+            _test_db.unlink()
+    except OSError:
+        pass
+    os.environ["DATABASE_URL"] = f"sqlite:///{_test_db}"
+
+if not os.environ.get("ADAM_STORAGE_DIR"):
+    _test_storage = Path(tempfile.gettempdir()) / "adam_test_storage"
+    _test_storage.mkdir(parents=True, exist_ok=True)
+    os.environ["ADAM_STORAGE_DIR"] = str(_test_storage)
 
 import httpx
 import pytest

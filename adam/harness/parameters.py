@@ -40,7 +40,7 @@ class ModelInferenceParameters:
     images: Optional[List[str]] = None
     custom_options: Dict[str, Any] = field(default_factory=dict)
 
-    def to_ollama_options(self) -> Dict[str, Any]:
+    def to_ollama_options(self, enforce_hardware_cap: bool = False) -> Dict[str, Any]:
         """Convert parameters to Ollama /api/chat 'options' payload."""
         import os
 
@@ -48,12 +48,21 @@ class ModelInferenceParameters:
         if self.thinking_enabled:
             total_predict += self.thinking_budget
 
+        effective_ctx = self.context_size
+        if enforce_hardware_cap:
+            from adam.config import get_safe_context_window
+            effective_ctx = get_safe_context_window(effective_ctx)
+
+        cpu_count = os.cpu_count() or 4
         options: Dict[str, Any] = {
             "temperature": self.temperature,
             "top_p": self.top_p,
             "top_k": self.top_k,
             "num_predict": total_predict,
-            "num_ctx": self.context_size,
+            "num_ctx": effective_ctx,
+            "num_batch": 512,
+            "f16_kv": True,
+            "num_thread": min(6, max(2, cpu_count)),
         }
         if self.min_p > 0.0:
             options["min_p"] = self.min_p
@@ -61,9 +70,8 @@ class ModelInferenceParameters:
             options["stop"] = list(self.stop_sequences)
 
         # Set optimal physical core count for CPU threads if not overridden
-        if "num_thread" not in self.custom_options:
-            cpu_count = os.cpu_count() or 4
-            options["num_thread"] = min(8, max(2, cpu_count))
+        if "num_thread" in self.custom_options:
+            options["num_thread"] = self.custom_options["num_thread"]
 
         options.update(self.custom_options)
         return options

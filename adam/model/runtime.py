@@ -40,6 +40,11 @@ class TemperatureOutOfBoundsError(ValueError):
     pass
 
 
+class GenerationCancelledError(RuntimeError):
+    """Raised when model generation is aborted or cancelled by the client or caller."""
+    pass
+
+
 @dataclass
 class ModelGenerationResult:
     """Strict output schema for model generation."""
@@ -132,6 +137,10 @@ class DeterministicModelRuntime(BaseModelRuntime):
         **kwargs: Any,
     ) -> ModelGenerationResult:
         start_time = time.perf_counter()
+        abort_event = kwargs.get("abort_event") or kwargs.get("cancel_event")
+        if abort_event is not None and abort_event.is_set():
+            raise GenerationCancelledError(f"Deterministic generation for '{self.artifact.id}' was cancelled.")
+
         valid_temp = self.validate_temperature(temperature)
         sys_prompt = system_prompt or self.artifact.system_prompt_default
 
@@ -547,6 +556,9 @@ class OllamaModelRuntime(BaseModelRuntime):
 
         harness_parameters = kwargs.get("harness_parameters")
         resolved_images = images or kwargs.get("images")
+        abort_event: Optional[threading.Event] = kwargs.get("abort_event") or kwargs.get("cancel_event")
+        from adam.config import get_safe_context_window
+
         if harness_parameters is not None:
             from adam.harness.parameters import ModelInferenceParameters
             if isinstance(harness_parameters, ModelInferenceParameters):
@@ -558,6 +570,13 @@ class OllamaModelRuntime(BaseModelRuntime):
 
             valid_temp = params.temperature
             options = params.to_ollama_options()
+            # Enforce hardware-aware num_ctx clamp and optimized options
+            options["num_ctx"] = get_safe_context_window(options.get("num_ctx", self.artifact.context_window))
+            options.setdefault("num_batch", 512)
+            options.setdefault("f16_kv", True)
+            if "num_thread" not in params.custom_options:
+                cpu_count = os.cpu_count() or 4
+                options["num_thread"] = min(6, cpu_count)
             effective_max_tokens = params.max_tokens
             if getattr(params, "images", None) and not resolved_images:
                 resolved_images = params.images
@@ -569,11 +588,15 @@ class OllamaModelRuntime(BaseModelRuntime):
             valid_temp = self.validate_temperature(temperature)
             stops = stop_sequences or ["<|im_end|>", "<|endoftext|>", "\n\nUser:", "\n\nQuestion:", "\n\nHuman:", "\n\nReference Records:"]
             cpu_count = os.cpu_count() or 4
+            target_ctx = getattr(self.artifact, "runtime_context_window", None) or self.artifact.context_window
+            safe_ctx = get_safe_context_window(target_ctx)
             options = {
                 "temperature": valid_temp,
                 "num_predict": max_tokens,
-                "num_ctx": min(self.artifact.context_window, 262_144),
-                "num_thread": min(8, max(2, cpu_count)),
+                "num_ctx": safe_ctx,
+                "num_batch": 512,
+                "f16_kv": True,
+                "num_thread": min(6, cpu_count),
                 "stop": stops,
             }
             effective_max_tokens = max_tokens
@@ -600,6 +623,9 @@ class OllamaModelRuntime(BaseModelRuntime):
         thinking_callback = kwargs.get("thinking_callback")
 
         try:
+            if abort_event is not None and abort_event.is_set():
+                raise GenerationCancelledError(f"Generation for '{self.model_tag}' was cancelled.")
+
             if token_callback is not None:
                 payload["stream"] = True
                 collected_content: List[str] = []
@@ -610,6 +636,8 @@ class OllamaModelRuntime(BaseModelRuntime):
                 with self._get_client().stream("POST", "/api/chat", json=payload) as resp:
                     resp.raise_for_status()
                     for line in resp.iter_lines():
+                        if abort_event is not None and abort_event.is_set():
+                            raise GenerationCancelledError(f"Generation for '{self.model_tag}' was cancelled.")
                         if not line:
                             continue
                         try:
@@ -628,6 +656,8 @@ class OllamaModelRuntime(BaseModelRuntime):
                                 prompt_tokens = chunk_data["prompt_eval_count"]
                             if chunk_data.get("eval_count"):
                                 completion_tokens = chunk_data["eval_count"]
+                        except GenerationCancelledError:
+                            raise
                         except Exception:
                             continue
 
@@ -636,6 +666,8 @@ class OllamaModelRuntime(BaseModelRuntime):
                 prompt_tokens = prompt_tokens or max(1, len(user_prompt.split()) * 4 // 3)
                 completion_tokens = completion_tokens or max(1, len(raw_content.split()) * 4 // 3)
             else:
+                if abort_event is not None and abort_event.is_set():
+                    raise GenerationCancelledError(f"Generation for '{self.model_tag}' was cancelled.")
                 resp = self._get_client().post("/api/chat", json=payload)
                 resp.raise_for_status()
                 data = resp.json()
@@ -701,7 +733,11 @@ class OllamaModelRuntime(BaseModelRuntime):
                 thinking=thinking_trace,
             )
 
+        except GenerationCancelledError:
+            raise
         except Exception as e:
+            if abort_event is not None and abort_event.is_set():
+                raise GenerationCancelledError(f"Physical Ollama generation was cancelled: {e}")
             raise RuntimeError(
                 f"Physical Ollama generation failed for model '{self.model_tag}': {e}. "
                 f"Ensure Ollama server is running on '{self.host}' and model is pulled ('ollama pull {self.model_tag}')."
