@@ -64,7 +64,7 @@ export default function ConversationHistory({
   });
 
   return (
-    <aside className="w-72 h-full flex flex-col border-r border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-[#0c111c]/95 select-none shrink-0 z-10 transition-colors">
+    <aside className="w-72 h-full flex flex-col border-r border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-[#0c111c]/95 select-none shrink-0 z-10 transition-colors animate-drawer-slide-in shadow-[8px_0_24px_-4px_rgba(0,0,0,0.06)] dark:shadow-[8px_0_30px_-4px_rgba(0,0,0,0.4)] backdrop-blur-sm">
       {/* Top Header */}
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-200/80 dark:border-slate-800">
         <div className="flex items-center gap-2">

@@ -309,6 +309,7 @@ export default function HomePage() {
               }}
               onToggleHistory={() => setIsHistoryOpen((v) => !v)}
               isHistoryOpen={isHistoryOpen}
+              onNewThread={handleNewThread}
               onOpenSettings={() => handleOpenSettings('general')}
               onOpenShortcuts={() => setShortcutsModalOpen(true)}
               onSignOut={handleSignOut}
