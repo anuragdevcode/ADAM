@@ -118,7 +118,7 @@ nltk==3.8.1
 nodeenv==1.11.0
 notebook==7.4.7
 notebook_shim==0.2.4
-numpy==1.26.4
+numpy==2.5.3
 ollama==0.6.2
 onnxruntime==1.30.0
 packageurl-python==0.17.6
