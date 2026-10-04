@@ -1,10 +1,12 @@
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, Header, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, Header, HTTPException, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
+from adam.api.deps import get_user_context
 from adam.api.voice.speech_text import clean_for_speech
 from adam.api.voice.stt import SttError, FasterWhisperEngine, GeminiSttEngine, get_stt_engine
 from adam.api.voice.tts import TtsError, GeminiTtsEngine, get_tts_engine
+from adam.rag.models import UserContext
 
 router = APIRouter()
 
@@ -19,15 +21,15 @@ class SynthesizeRequest(BaseModel):
 
 @router.get("/voice/status")
 def voice_status(
-    x_clearance_level: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ):
     """Report which speech engines the server can offer under active clearance policy.
 
     The UI uses this to decide between server-side speech (Groq / ElevenLabs /
     local engines) and the browser's built-in Web Speech API.
     """
-    stt_engine = get_stt_engine(clearance_level=x_clearance_level)
-    tts_engine = get_tts_engine(clearance_level=x_clearance_level)
+    stt_engine = get_stt_engine(clearance_level=user_ctx.clearance_level)
+    tts_engine = get_tts_engine(clearance_level=user_ctx.clearance_level)
     return {
         "stt": {
             "available": stt_engine.provider != "none",
@@ -48,13 +50,13 @@ async def transcribe_audio(
     language_hint: str = Form("hi"),
     api_key: Optional[str] = Form(None),
     x_gemini_api_key: Optional[str] = Header(None),
-    x_clearance_level: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ):
     audio_bytes = await file.read()
     if not audio_bytes:
         raise HTTPException(status_code=422, detail="The uploaded recording is empty.")
     effective_key = x_gemini_api_key or api_key
-    stt_engine = get_stt_engine(api_key=effective_key, clearance_level=x_clearance_level)
+    stt_engine = get_stt_engine(api_key=effective_key, clearance_level=user_ctx.clearance_level)
     if stt_engine.provider == "none":
         raise HTTPException(status_code=503, detail=STT_UNAVAILABLE_DETAIL)
     try:
@@ -81,9 +83,9 @@ async def transcribe_audio(
 def synthesize_speech(
     req: SynthesizeRequest,
     x_gemini_api_key: Optional[str] = Header(None),
-    x_clearance_level: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ):
-    tts_engine = get_tts_engine(api_key=x_gemini_api_key, clearance_level=x_clearance_level)
+    tts_engine = get_tts_engine(api_key=x_gemini_api_key, clearance_level=user_ctx.clearance_level)
     speech_text = clean_for_speech(req.text)
     if not speech_text:
         raise HTTPException(status_code=422, detail="There is no readable text to speak.")

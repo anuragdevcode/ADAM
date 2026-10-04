@@ -597,6 +597,7 @@ class OllamaModelRuntime(BaseModelRuntime):
                 "num_batch": 512,
                 "f16_kv": True,
                 "num_thread": min(6, cpu_count),
+                "presence_penalty": float(kwargs.get("presence_penalty", 0.0)),
                 "stop": stops,
             }
             effective_max_tokens = max_tokens
@@ -837,6 +838,7 @@ class LlamaCppServerRuntime(BaseModelRuntime):
             "model": self.artifact.id,
             "messages": messages,
             "temperature": temperature,
+            "presence_penalty": float(kwargs.get("presence_penalty", 0.0)),
             "max_tokens": min(max_tokens, self.artifact.context_window),
             "stream": False,
         }

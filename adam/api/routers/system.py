@@ -105,7 +105,7 @@ def get_prometheus_metrics(
 def get_models(
     db: Session = Depends(get_db),
     x_gemini_api_key: Optional[str] = Header(None),
-    x_clearance_level: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> List[Dict[str, Any]]:
     """Return all approved release-controlled models from the model registry, enforcing air-gap sovereignty."""
     registry = ModelRegistry(db)
@@ -121,7 +121,7 @@ def get_models(
     ]
 
     is_air_gapped_clearance = bool(
-        x_clearance_level and x_clearance_level.strip().upper() in ("RESTRICTED", "CONFIDENTIAL")
+        user_ctx.clearance_level and user_ctx.clearance_level.strip().upper() in ("RESTRICTED", "CONFIDENTIAL")
     )
 
     result = []
@@ -557,19 +557,9 @@ from adam.rag.models import UserContext
 def get_system_introspection(
     session_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
-    x_user_role: Optional[str] = Header("PUBLIC"),
-    x_clearance_level: Optional[str] = Header(None),
-    x_department_id: Optional[str] = Header(None),
+    user_context: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Return authoritative system self-model snapshot sanitized for user clearance."""
-    user_context = UserContext(
-        user_id=x_user_id or "anonymous",
-        roles=[x_user_role] if x_user_role else ["PUBLIC"],
-        department_id=x_department_id,
-        clearance_level=x_clearance_level or Classification.PUBLIC.value,
-    )
-
     snapshot = SystemIntrospectionService.get_system_snapshot(
         session=db,
         user_context=user_context,
@@ -586,14 +576,13 @@ def get_system_introspection(
 def get_last_execution_diagnostics(
     session_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
-    x_clearance_level: Optional[str] = Header(None),
+    user_context: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Return diagnostic telemetry for the most recent execution in the session or for user."""
     audit_snap = SystemIntrospectionService._get_last_execution_audit(
         session=db,
         session_id=session_id,
-        user_id=x_user_id,
+        user_id=user_context.user_id,
     )
     if not audit_snap:
         return {"found": False, "message": "No previous execution audit found for this session."}
@@ -622,7 +611,7 @@ def get_last_execution_diagnostics(
 @router.get("/system/advanced-settings")
 def get_advanced_settings(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Return current advanced settings for the user, all preset bundles, default values, and metadata."""
     from adam.settings.advanced_settings import (
@@ -633,7 +622,7 @@ def get_advanced_settings(
         AdvancedSettingsPreset,
     )
 
-    user_id = x_user_id or "anonymous"
+    user_id = user_ctx.user_id
     manager = AdvancedSettingsManager(db, user_id=user_id)
     current = manager.load()
 
@@ -662,12 +651,12 @@ class AdvancedSettingsRequest(BaseModel):
 def save_advanced_settings(
     req: AdvancedSettingsRequest,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Validate and persist advanced settings for the user."""
     from adam.settings.advanced_settings import AdvancedSettingsManager, AdvancedSettingsBundle
 
-    user_id = x_user_id or "anonymous"
+    user_id = user_ctx.user_id
     bundle = AdvancedSettingsBundle.from_dict({
         "preset": req.preset,
         "generation": req.generation,
@@ -690,12 +679,12 @@ def save_advanced_settings(
 @router.delete("/system/advanced-settings")
 def reset_advanced_settings(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Reset advanced settings to BALANCED defaults."""
     from adam.settings.advanced_settings import AdvancedSettingsManager
 
-    user_id = x_user_id or "anonymous"
+    user_id = user_ctx.user_id
     manager = AdvancedSettingsManager(db, user_id=user_id)
     default = manager.reset()
     return {"reset": True, "settings": default.to_dict()}
@@ -706,21 +695,11 @@ def reset_advanced_settings(
 @router.get("/system/capabilities")
 def get_capabilities(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
-    x_user_role: Optional[str] = Header("PUBLIC"),
-    x_clearance_level: Optional[str] = Header(None),
-    x_department_id: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Return all registered capabilities filtered by caller clearance and role."""
     from adam.capabilities.registry import CapabilityRegistry
-    from adam.rag.models import UserContext
 
-    user_ctx = UserContext(
-        user_id=x_user_id or "anonymous",
-        roles=[x_user_role] if x_user_role else ["PUBLIC"],
-        clearance_level=x_clearance_level or Classification.PUBLIC.value,
-        department_id=x_department_id,
-    )
     caps = CapabilityRegistry.list_capabilities(user_context=user_ctx, filter_unavailable=True)
     return {
         "user_clearance": user_ctx.clearance_level,
@@ -733,17 +712,11 @@ def get_capabilities(
 def get_capability_detail(
     capability_id: str,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
-    x_clearance_level: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Return comprehensive typed descriptor for a capability."""
     from adam.capabilities.registry import CapabilityRegistry
-    from adam.rag.models import UserContext
 
-    user_ctx = UserContext(
-        user_id=x_user_id or "anonymous",
-        clearance_level=x_clearance_level or Classification.PUBLIC.value,
-    )
     cap = CapabilityRegistry.get(capability_id)
     if not cap:
         from fastapi import HTTPException
@@ -766,22 +739,12 @@ class McpCallRequest(BaseModel):
 def call_mcp_tool(
     req: McpCallRequest,
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
-    x_user_role: Optional[str] = Header("PUBLIC"),
-    x_clearance_level: Optional[str] = Header(None),
-    x_department_id: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """Execute a registered capability via standard MCP tools/call gateway."""
     from adam.capabilities.mcp import AdamMcpServer
     from adam.capabilities.registry import CapabilityRegistry
-    from adam.rag.models import UserContext
 
-    user_ctx = UserContext(
-        user_id=x_user_id or "anonymous",
-        roles=[x_user_role] if x_user_role else ["PUBLIC"],
-        clearance_level=x_clearance_level or Classification.PUBLIC.value,
-        department_id=x_department_id,
-    )
     server = AdamMcpServer(registry=CapabilityRegistry)
     return server.call_tool(
         name=req.name,
@@ -794,20 +757,12 @@ def call_mcp_tool(
 @router.get("/system/mcp/tools")
 def get_mcp_tools(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
-    x_user_role: Optional[str] = Header("PUBLIC"),
-    x_clearance_level: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """List all authorized capabilities in standard Model Context Protocol (MCP) format."""
     from adam.capabilities.mcp import AdamMcpServer
     from adam.capabilities.registry import CapabilityRegistry
-    from adam.rag.models import UserContext
 
-    user_ctx = UserContext(
-        user_id=x_user_id or "anonymous",
-        roles=[x_user_role] if x_user_role else ["PUBLIC"],
-        clearance_level=x_clearance_level or Classification.PUBLIC.value,
-    )
     server = AdamMcpServer(registry=CapabilityRegistry)
     return server.list_tools(user_context=user_ctx)
 
@@ -815,17 +770,11 @@ def get_mcp_tools(
 @router.get("/system/mcp/resources")
 def get_mcp_resources(
     db: Session = Depends(get_db),
-    x_user_id: Optional[str] = Header("anonymous"),
-    x_clearance_level: Optional[str] = Header(None),
+    user_ctx: UserContext = Depends(get_user_context),
 ) -> Dict[str, Any]:
     """List accessible document collections and resources in standard MCP format."""
     from adam.capabilities.mcp import AdamMcpServer
     from adam.capabilities.registry import CapabilityRegistry
-    from adam.rag.models import UserContext
 
-    user_ctx = UserContext(
-        user_id=x_user_id or "anonymous",
-        clearance_level=x_clearance_level or Classification.PUBLIC.value,
-    )
     server = AdamMcpServer(registry=CapabilityRegistry)
     return server.list_resources(user_context=user_ctx, db_session=db)

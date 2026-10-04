@@ -22,6 +22,10 @@ if not os.environ.get("ADAM_STORAGE_DIR"):
     _test_storage.mkdir(parents=True, exist_ok=True)
     os.environ["ADAM_STORAGE_DIR"] = str(_test_storage)
 
+# Allow legacy unit tests that provide raw mock headers (X-User-Role) to run without token fixtures.
+# Phase 1 and security hardening suites explicitly monkeypatch ADAM_TRUST_UNVERIFIED_HEADERS=false.
+os.environ.setdefault("ADAM_TRUST_UNVERIFIED_HEADERS", "true")
+
 import httpx
 import pytest
 from sqlalchemy import create_engine

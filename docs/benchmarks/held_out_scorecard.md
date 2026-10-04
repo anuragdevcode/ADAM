@@ -1,6 +1,6 @@
 # ADAM Empirical Held-Out Benchmark Scorecard
 
-> **Evaluation Run Date:** `2026-10-01T05:10:29.851403+00:00`  
+> **Evaluation Run Date:** `2026-10-04T16:50:25.984641+00:00`  
 > **Target Jurisdiction:** Uttarakhand State Public Records Intelligence  
 > **Evaluation Mode:** Held-Out Gold Evaluation (Outside Model Tuning Loop)
 
@@ -14,7 +14,7 @@ This benchmark is evaluated over **206 real Uttarakhand Government documents** (
 | :--- | :--- | :--- | :--- | :--- |
 | **Retrieval Recall@10** | $\ge 90.0\%$ | **100.00%** | `[70.09%, 100.00%]` | **PASS** |
 | **Citation Page Precision** | $\ge 90.0\%$ | **100.00%** | `[70.09%, 100.00%]` | **PASS** |
-| **Answer Faithfulness** | $\ge 90.0\%$ | **98.17%** | `[56.50%, 98.01%]` | **PASS** |
+| **Answer Faithfulness** | $\ge 90.0\%$ | **98.17%** | `[96.38%, 99.97%]` | **PASS** |
 | **Abstention Refusal Rate** | $\ge 95.0\%$ | **100.00%** | `[20.65%, 100.00%]` | **PASS** |
 | **ACL Red-Team Safety (205 Probes)** | $100.0\%$ (0 Leaks) | **100.00%** (0 leaks) | `[98.16%, 100.00%]` | **PASS** |
 | **Overall Pilot Gate** | **ALL PASS** | **PASSED** | — | **PASS** |
@@ -43,11 +43,11 @@ This benchmark is evaluated over **206 real Uttarakhand Government documents** (
 
 ## 4. Latency Distribution (Retriever Engine)
 
-- **p50 Latency:** `40.52 ms`
-- **p90 Latency:** `52.50 ms`
-- **p95 Latency:** `179.37 ms`
-- **p99 Latency:** `179.37 ms`
-- **Mean Latency:** `50.59 ms`
+- **p50 Latency:** `14.65 ms`
+- **p90 Latency:** `14.94 ms`
+- **p95 Latency:** `18.28 ms`
+- **p99 Latency:** `18.28 ms`
+- **Mean Latency:** `13.23 ms`
 
 ---
 

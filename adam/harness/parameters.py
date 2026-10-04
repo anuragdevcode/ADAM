@@ -32,6 +32,8 @@ class ModelInferenceParameters:
     top_p: float = 0.9
     top_k: int = 40
     min_p: float = 0.05
+    presence_penalty: float = 0.0
+    frequency_penalty: float = 0.0
     max_tokens: int = 512
     context_size: int = 4096
     thinking_enabled: bool = False
@@ -63,7 +65,10 @@ class ModelInferenceParameters:
             "num_batch": 512,
             "f16_kv": True,
             "num_thread": min(6, max(2, cpu_count)),
+            "presence_penalty": self.presence_penalty,
         }
+        if self.frequency_penalty != 0.0:
+            options["repeat_penalty"] = 1.0 + self.frequency_penalty
         if self.min_p > 0.0:
             options["min_p"] = self.min_p
         if self.stop_sequences:
@@ -82,6 +87,8 @@ class ModelInferenceParameters:
             "top_p": self.top_p,
             "top_k": self.top_k,
             "min_p": self.min_p,
+            "presence_penalty": self.presence_penalty,
+            "frequency_penalty": self.frequency_penalty,
             "max_tokens": self.max_tokens,
             "context_size": self.context_size,
             "thinking_enabled": self.thinking_enabled,

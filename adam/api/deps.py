@@ -116,7 +116,7 @@ def get_user_context(
 
     # 4. Backward-compatible dev/testing escape hatch (strictly disabled in production)
     env = os.getenv("ADAM_ENV", "development").lower()
-    allow_unverified = os.getenv("ADAM_TRUST_UNVERIFIED_HEADERS", "true").lower() in ("true", "1")
+    allow_unverified = os.getenv("ADAM_TRUST_UNVERIFIED_HEADERS", "false").lower() in ("true", "1")
     if allow_unverified and env not in ("production", "prod"):
         clearance = x_clearance_level if x_clearance_level in valid_levels else Classification.PUBLIC.value
         roles = [x_user_role]
@@ -130,15 +130,14 @@ def get_user_context(
             allow_web_research=policy.allow_web_research,
         )
 
-
     # 5. Unauthenticated / Forged Headers Fallback: default-deny roles & clearance
     # Any attacker sending forged headers like `X-User-Role: ADMIN` without token/signature
     # is stripped of privileges and given default PUBLIC permissions.
     policy = get_role_policy(["PUBLIC"])
     return UserContext(
-        user_id=x_user_id if x_user_id != "anonymous" else "anonymous",
+        user_id=x_user_id if (allow_unverified and x_user_id != "anonymous") else "anonymous",
         roles=["PUBLIC"],
-        department_id=x_department_id,
+        department_id=x_department_id if allow_unverified else None,
         clearance_level=Classification.PUBLIC.value,
         can_access_web=policy.can_access_web,
         allow_web_research=policy.allow_web_research,

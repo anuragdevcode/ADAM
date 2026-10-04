@@ -31,6 +31,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-adam}:${POSTGRES_PASSWORD:-adam_dev_password}@postgres:5432/${POSTGRES_DB:-adam}
       STORAGE_DIR: /app/.adam_storage
       SIGNING_SECRET: ${SIGNING_SECRET:-adam-local-development-only-change-me}
+      MEMORY_ENCRYPTION_KEY: ${MEMORY_ENCRYPTION_KEY:-adam-dev-memory-encryption-key-separate-from-signing}
       ADAM_MODEL_BACKEND: ${ADAM_MODEL_BACKEND:-ollama}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       MAX_CONTEXT_TOKENS: ${MAX_CONTEXT_TOKENS:-4096}
@@ -72,6 +73,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-adam}:${POSTGRES_PASSWORD:-adam_dev_password}@postgres:5432/${POSTGRES_DB:-adam}
       STORAGE_DIR: /app/.adam_storage
       SIGNING_SECRET: ${SIGNING_SECRET:-adam-local-development-only-change-me}
+      MEMORY_ENCRYPTION_KEY: ${MEMORY_ENCRYPTION_KEY:-adam-dev-memory-encryption-key-separate-from-signing}
       ADAM_MODEL_BACKEND: ${ADAM_MODEL_BACKEND:-ollama}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
     volumes:

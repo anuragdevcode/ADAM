@@ -268,11 +268,73 @@ def compute_wilson_ci(
     ci_lower = max(0.0, center - margin)
     ci_upper = min(1.0, center + margin)
 
+    est = round(p, 4)
+    low = min(round(ci_lower, 4), est)
+    high = max(round(ci_upper, 4), est)
+
     return {
-        "estimate": round(p, 4),
-        "ci_lower": round(ci_lower, 4),
-        "ci_upper": round(ci_upper, 4),
+        "estimate": est,
+        "ci_lower": low,
+        "ci_upper": high,
         "k": k,
+        "n": n,
+        "confidence": confidence,
+    }
+
+
+def compute_continuous_ci(
+    values: List[float],
+    confidence: float = 0.95,
+) -> Dict[str, float]:
+    """Compute confidence interval for continuous bounded scores (e.g. answer faithfulness).
+
+    Uses sample mean and standard error of the mean:
+    CI = [mean - z * se, mean + z * se] clamped to [0.0, 1.0],
+    strictly guaranteeing that ci_lower <= estimate <= ci_upper.
+    """
+    if not values:
+        return {
+            "estimate": 1.0,
+            "ci_lower": 1.0,
+            "ci_upper": 1.0,
+            "n": 0,
+            "confidence": confidence,
+        }
+    n = len(values)
+    mean = sum(values) / n
+    est = round(mean, 4)
+
+    if n <= 1:
+        return {
+            "estimate": est,
+            "ci_lower": round(max(0.0, est - 0.05), 4),
+            "ci_upper": round(min(1.0, est + 0.05), 4),
+            "n": n,
+            "confidence": confidence,
+        }
+
+    # Standard normal quantile z
+    if abs(confidence - 0.99) < 0.005:
+        z = 2.57583
+    elif abs(confidence - 0.90) < 0.005:
+        z = 1.64485
+    else:
+        z = 1.95996  # default 95%
+
+    variance = sum((x - mean) ** 2 for x in values) / (n - 1)
+    std_err = math.sqrt(variance / n) if variance > 0.0 else 0.0
+    margin = z * std_err
+
+    ci_lower = max(0.0, mean - margin)
+    ci_upper = min(1.0, mean + margin)
+
+    low = min(round(ci_lower, 4), est)
+    high = max(round(ci_upper, 4), est)
+
+    return {
+        "estimate": est,
+        "ci_lower": low,
+        "ci_upper": high,
         "n": n,
         "confidence": confidence,
     }

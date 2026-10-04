@@ -46,8 +46,9 @@ def api_db(api_engine):
 
 
 @pytest.fixture()
-def test_client(api_db):
+def test_client(api_db, monkeypatch):
     """FastAPI test client with get_db overridden to use the test session."""
+    monkeypatch.setenv("ADAM_TRUST_UNVERIFIED_HEADERS", "true")
     from adam.api.app import create_app
     from adam.api import deps
 
@@ -92,7 +93,11 @@ def session_with_turns(api_db, active_session):
 
 def test_list_sessions_empty_for_unknown_user(test_client):
     """GET /api/sessions for a user with no sessions returns empty list."""
-    resp = test_client.get("/api/sessions", params={"user_id": "nobody_at_all"})
+    resp = test_client.get(
+        "/api/sessions",
+        params={"user_id": "nobody_at_all"},
+        headers={"X-User-Id": "nobody_at_all"},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
@@ -104,6 +109,7 @@ def test_list_sessions_returns_active_sessions(test_client, active_session):
     resp = test_client.get(
         "/api/sessions",
         params={"user_id": "officer_sess_test"},
+        headers={"X-User-Id": "officer_sess_test"},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -118,6 +124,7 @@ def test_list_sessions_response_has_required_fields(test_client, active_session)
     resp = test_client.get(
         "/api/sessions",
         params={"user_id": "officer_sess_test"},
+        headers={"X-User-Id": "officer_sess_test"},
     )
     assert resp.status_code == 200
     record = next(s for s in resp.json() if s["session_id"] == active_session.id)
@@ -127,6 +134,23 @@ def test_list_sessions_response_has_required_fields(test_client, active_session)
     assert "turn_count" in record
     assert "created_at" in record
     assert "expires_at" in record
+
+
+def test_list_sessions_unauthenticated_idor_forbidden(test_client, active_session):
+    """An unauthenticated (anonymous) or different user cannot list another user's sessions."""
+    resp = test_client.get(
+        "/api/sessions",
+        params={"user_id": "officer_sess_test"},
+        headers={"X-User-Id": "anonymous"},
+    )
+    assert resp.status_code == 403
+
+    resp2 = test_client.get(
+        "/api/sessions",
+        params={"user_id": "officer_sess_test"},
+        headers={"X-User-Id": "another_officer"},
+    )
+    assert resp2.status_code == 403
 
 
 # ── Session History ────────────────────────────────────────────────────────────
@@ -175,6 +199,7 @@ def test_delete_session_removes_session(test_client, active_session):
     resp = test_client.get(
         "/api/sessions",
         params={"user_id": "officer_sess_test"},
+        headers={"X-User-Id": "officer_sess_test"},
     )
     assert resp.status_code == 200
     assert any(s["session_id"] == active_session.id for s in resp.json())

@@ -34,7 +34,7 @@ def get_sessions(
     if user_id:
         if user_ctx.is_admin():
             target_user_id = user_id
-        elif user_ctx.user_id != "anonymous" and user_id != user_ctx.user_id:
+        elif user_id != user_ctx.user_id:
             raise HTTPException(status_code=403, detail="Forbidden: Cannot list sessions for another user.")
         else:
             target_user_id = user_id
@@ -67,12 +67,11 @@ def get_sessions(
 @router.get("/sessions/{session_id}/history")
 def get_session_history(
     session_id: str,
-    x_user_id: str = Header(default="anonymous"),
     user_ctx: UserContext = Depends(get_user_context),
     db: Session = Depends(get_db),
 ):
     """Return decrypted conversation turns for an authorized session owner."""
-    effective_user_id = user_ctx.user_id if user_ctx.user_id != "anonymous" else x_user_id
+    effective_user_id = user_ctx.user_id
     if user_ctx.is_admin():
         # Admin can view any session
         session_row = db.query(ChatSession).filter(ChatSession.id == session_id).first()
@@ -121,12 +120,11 @@ def get_session_history(
 @router.delete("/sessions/{session_id}")
 def delete_session_endpoint(
     session_id: str,
-    x_user_id: str = Header(default="anonymous"),
     user_ctx: UserContext = Depends(get_user_context),
     db: Session = Depends(get_db),
 ):
     """Delete a session and all its encrypted turns. Only the owning user or admin may delete."""
-    effective_user_id = user_ctx.user_id if user_ctx.user_id != "anonymous" else x_user_id
+    effective_user_id = user_ctx.user_id
     if user_ctx.is_admin():
         session_row = db.query(ChatSession).filter(ChatSession.id == session_id).first()
         if session_row:

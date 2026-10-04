@@ -276,6 +276,27 @@ def test_model_bakeoff_matrix_and_markdown():
     assert "PRIMARY_PRODUCTION_TARGET" in md_table
 
 
+def test_model_bakeoff_live_inference():
+    """Verify live inference runs probes when model runtime is provided."""
+    from unittest.mock import MagicMock
+    from adam.model.registry import QWEN3_5_4B_INSTRUCT
+
+    mock_runtime = MagicMock()
+    mock_runtime.artifact = QWEN3_5_4B_INSTRUCT
+    mock_res = MagicMock()
+    mock_res.answer = "The Dearness Allowance is 50 percent for state employees under order 101."
+    mock_res.tokens_completion = 42
+    mock_runtime.generate.return_value = mock_res
+
+    profiles = run_model_bakeoff(live_inference=True, model_runtime=mock_runtime)
+    assert len(profiles) >= 3
+    live_p = profiles[0]
+    assert live_p.recommendation_verdict == "LIVE_BENCHMARKED"
+    assert "Live Measured" in live_p.display_name
+    assert live_p.english_faithfulness > 0.0
+    assert mock_runtime.generate.called
+
+
 # ── 7. CLI Commands (adam eval heldout / redteam / bakeoff) ──────────────────
 
 

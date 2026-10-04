@@ -13,6 +13,7 @@ services:
       ADAM_ENV: production
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-adam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@postgres:5432/${POSTGRES_DB:-adam}
       SIGNING_SECRET: ${SIGNING_SECRET:?SIGNING_SECRET must be set in production}
+      MEMORY_ENCRYPTION_KEY: ${MEMORY_ENCRYPTION_KEY:?MEMORY_ENCRYPTION_KEY must be set in production}
       ADAM_ALLOW_HOSTED_VOICE: ${ADAM_ALLOW_HOSTED_VOICE:-false}
     volumes: !override
       - adam_storage:/app/.adam_storage
@@ -26,6 +27,7 @@ services:
       ADAM_ENV: production
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-adam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@postgres:5432/${POSTGRES_DB:-adam}
       SIGNING_SECRET: ${SIGNING_SECRET:?SIGNING_SECRET must be set in production}
+      MEMORY_ENCRYPTION_KEY: ${MEMORY_ENCRYPTION_KEY:?MEMORY_ENCRYPTION_KEY must be set in production}
     volumes: !override
       - adam_storage:/app/.adam_storage
 

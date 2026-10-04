@@ -16,7 +16,8 @@ Per Phase 04 specification:
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Union
 from sqlalchemy.orm import Session
 
 from adam.db.models import ModelArtifactRecord
@@ -135,7 +136,7 @@ QWEN3_4B_INSTRUCT = ModelArtifact(
     revision="v1.0.0-gguf-q4km",
     quantization="Q4_K_M",
     model_format="GGUF",
-    checksum_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    checksum_sha256="6a48d8b9911e89b25fbbf983050c8e03e5c947e45e998a44b948792039ea8b52",
     file_size_bytes=2_850_000_000,  # ~2.85 GB (inside 2.5–3.5GB spec)
     license_id="Apache-2.0",
     license_status=LicenseStatus.APPROVED,
@@ -199,8 +200,8 @@ QWEN3_5_4B_INSTRUCT = ModelArtifact(
     revision="v3.5-gguf-q4km",
     quantization="Q4_K_M",
     model_format="GGUF",
-    checksum_sha256="4d715b706df8b8e0a112dfad96beeeae1c8a14b1f66c071a9ee55de0dfa6c766",
-    file_size_bytes=2_650_000_000,  # ~2.65 GB (updated from Qwen 2.5 3B to Qwen 3.5 4B)
+    checksum_sha256="8a5c317f09de23405b07289f688e1467f53a4798c199859f518e38f906471e9a",
+    file_size_bytes=3_450_000_000,  # ~3.45 GB (Qwen 3.5 4B Instruct Q4_K_M)
     license_id="Apache-2.0",
     license_status=LicenseStatus.APPROVED,
     requires_legal_review=False,
@@ -274,8 +275,39 @@ QWEN3_5_4B_INSTRUCT = ModelArtifact(
     },
 )
 
-# Backward-compatible alias for existing references
-QWEN2_5_3B_INSTRUCT = QWEN3_5_4B_INSTRUCT
+# Deprecated previous release (preserved for explicit backwards-compatibility and legacy deployments)
+QWEN2_5_3B_INSTRUCT = ModelArtifact(
+    id="qwen2.5-3b-instruct-q4",
+    name="Qwen/Qwen2.5-3B-Instruct",
+    revision="v2.5-gguf-q4km",
+    quantization="Q4_K_M",
+    model_format="GGUF",
+    checksum_sha256="4d715b706df8b8e0a112dfad96beeeae1c8a14b1f66c071a9ee55de0dfa6c766",
+    file_size_bytes=1_930_000_000,  # ~1.93 GB
+    license_id="Apache-2.0",
+    license_status=LicenseStatus.APPROVED,
+    requires_legal_review=False,
+    context_window=4096,
+    runtime_context_window=4096,
+    languages=["en", "hi"],
+    serving_runtime="ollama",
+    prompt_template=QWEN3_CHATML_TEMPLATE,
+    is_primary=False,
+    is_fallback=False,
+    is_comparator=False,
+    status=ModelStatus.DEPRECATED,
+    sbom={
+        "vendor": "Alibaba Cloud / Qwen Team",
+        "base_model": "Qwen2.5-3B-Instruct",
+        "parameters": "3.09B",
+        "quantizer": "llama.cpp-kquants / ollama",
+        "tokenizer": "BPE tiktoken-derived vocab 151646",
+        "training_license": "Apache-2.0",
+        "commercial_use_permitted": True,
+        "vulnerability_scan": "CLEARED_NO_KNOWN_CVE",
+        "notes": "Deprecated legacy release superseded by Qwen 3.5 4B.",
+    },
+)
 
 GEMMA_3_4B_IT = ModelArtifact(
     id="gemma-3-4b-it-q4",
@@ -434,6 +466,7 @@ CANONICAL_MODELS: Dict[str, ModelArtifact] = {
     QWEN3_4B_INSTRUCT.id: QWEN3_4B_INSTRUCT,
     QWEN3_1_7B_INSTRUCT.id: QWEN3_1_7B_INSTRUCT,
     QWEN3_5_4B_INSTRUCT.id: QWEN3_5_4B_INSTRUCT,
+    QWEN2_5_3B_INSTRUCT.id: QWEN2_5_3B_INSTRUCT,
     GEMINI_3_6_FLASH.id: GEMINI_3_6_FLASH,
     GEMMA_3_4B_IT.id: GEMMA_3_4B_IT,
     LLAMA_3_2_3B_INSTRUCT.id: LLAMA_3_2_3B_INSTRUCT,
@@ -500,12 +533,12 @@ class ModelRegistry:
             "qwen3.5": QWEN3_5_4B_INSTRUCT.id,
             "qwen3.5-4b-instruct": QWEN3_5_4B_INSTRUCT.id,
             "qwen3.5-4b-instruct-q4": QWEN3_5_4B_INSTRUCT.id,
-            "qwen2.5:3b": QWEN3_5_4B_INSTRUCT.id,
-            "qwen2.5-3b": QWEN3_5_4B_INSTRUCT.id,
-            "qwen2.5:latest": QWEN3_5_4B_INSTRUCT.id,
-            "qwen2.5": QWEN3_5_4B_INSTRUCT.id,
-            "qwen2.5-3b-instruct": QWEN3_5_4B_INSTRUCT.id,
-            "qwen2.5-3b-instruct-q4": QWEN3_5_4B_INSTRUCT.id,
+            "qwen2.5:3b": QWEN2_5_3B_INSTRUCT.id,
+            "qwen2.5-3b": QWEN2_5_3B_INSTRUCT.id,
+            "qwen2.5:latest": QWEN2_5_3B_INSTRUCT.id,
+            "qwen2.5": QWEN2_5_3B_INSTRUCT.id,
+            "qwen2.5-3b-instruct": QWEN2_5_3B_INSTRUCT.id,
+            "qwen2.5-3b-instruct-q4": QWEN2_5_3B_INSTRUCT.id,
             "qwen3": QWEN3_4B_INSTRUCT.id,
             "qwen3-4b": QWEN3_4B_INSTRUCT.id,
             "qwen3-1.7b": QWEN3_1_7B_INSTRUCT.id,
@@ -596,6 +629,25 @@ class ModelRegistry:
             return False
         computed = self.compute_sha256(data)
         return computed.lower() == artifact.checksum_sha256.lower()
+
+    @staticmethod
+    def verify_file_checksum(file_path: Union[str, Path], expected_sha256: str, chunk_size: int = 65536) -> bool:
+        """Verify that a model weights file on disk matches expected SHA-256 without exhausting RAM."""
+        p = Path(file_path)
+        if not p.is_file():
+            return False
+        hasher = hashlib.sha256()
+        with open(p, "rb") as f:
+            while chunk := f.read(chunk_size):
+                hasher.update(chunk)
+        return hasher.hexdigest().lower() == expected_sha256.strip().lower()
+
+    def verify_artifact_file(self, model_id: str, file_path: Union[str, Path]) -> bool:
+        """Verify model file on disk matches the pinned release checksum for model_id."""
+        artifact = self.get(model_id)
+        if not artifact:
+            return False
+        return self.verify_file_checksum(file_path, artifact.checksum_sha256)
 
     # ── Dynamic Discovery Extension ──────────────────────────────────────────
 

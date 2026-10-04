@@ -112,6 +112,55 @@ def test_checksum_verification():
     assert registry.verify_checksum("custom-test-model", b"tampered-bytes") is False
 
 
+def test_file_checksum_streaming_verification(tmp_path):
+    """Verify streaming file checksum verification matches expected release SHA-256."""
+    registry = ModelRegistry()
+    test_content = b"streaming-file-model-weights-content-for-sha256-test"
+    weights_file = tmp_path / "model_weights.gguf"
+    weights_file.write_bytes(test_content)
+
+    test_hash = registry.compute_sha256(test_content)
+    assert registry.verify_file_checksum(weights_file, test_hash) is True
+    assert registry.verify_file_checksum(weights_file, "wrong" * 16) is False
+
+    artifact = ModelArtifact(
+        id="test-file-model",
+        name="Test/File-Model",
+        revision="v1.0",
+        quantization="Q4_K_M",
+        model_format="GGUF",
+        checksum_sha256=test_hash,
+        file_size_bytes=len(test_content),
+        license_id="Apache-2.0",
+        license_status=LicenseStatus.APPROVED,
+        requires_legal_review=False,
+        context_window=2048,
+        languages=["en"],
+        serving_runtime="ollama",
+        prompt_template="{system_prompt}\n{user_prompt}",
+    )
+    registry.register_artifact(artifact)
+    assert registry.verify_artifact_file("test-file-model", weights_file) is True
+
+
+def test_qwen2_5_and_qwen3_5_alias_separation():
+    """Verify Qwen 2.5 tags route to deprecated Qwen 2.5 artifact without silently aliasing to Qwen 3.5."""
+    registry = ModelRegistry()
+    q25 = registry.get("qwen2.5:3b")
+    assert q25 is not None
+    assert q25.id == "qwen2.5-3b-instruct-q4"
+    assert q25.status == ModelStatus.DEPRECATED
+
+    q35 = registry.get("qwen3.5:4b")
+    assert q35 is not None
+    assert q35.id == "qwen3.5-4b-instruct-q4"
+    assert q35.status == ModelStatus.REGISTERED
+
+    # Ensure checksums and sizes are distinct
+    assert q25.checksum_sha256 != q35.checksum_sha256
+    assert q35.file_size_bytes > q25.file_size_bytes
+
+
 def test_single_model_concurrent_load_enforcement():
     """Enforce: 'Do not load multiple LLMs concurrently.'"""
     registry = ModelRegistry()

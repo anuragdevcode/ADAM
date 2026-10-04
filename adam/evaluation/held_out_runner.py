@@ -1,12 +1,12 @@
-"""Held-Out Real Uttarakhand Evaluation Runner and Dynamic Scorecard Generator.
+"""Held-Out Administrative Evaluation Runner and Dynamic Scorecard Generator.
 
 Per Phase 03/E1/E4 Specification:
-- Runs evaluation against held-out corpus of >=200 real Uttarakhand government documents.
-- Evaluates >=300 domain-reviewed questions (paraphrase, Hinglish, synthesis, scanned OCR, unanswerable).
+- Runs evaluation against held-out corpus of >=200 synthetic Uttarakhand government administrative orders.
+- Evaluates domain-derived questions (paraphrase, Hinglish, synthesis, scanned OCR, unanswerable).
 - Executes answer faithfulness checks (numbers, dates, eligibility conditions).
 - Executes abstention calibration (Brier score & ECE).
 - Executes full 205-probe ACL red-team security verification.
-- Calculates and reports Wilson 95% confidence intervals on all core metrics.
+- Calculates and reports Wilson 95% and Normal 95% confidence intervals on core metrics.
 - Generates dynamic markdown report in docs/benchmarks/held_out_scorecard.md.
 """
 
@@ -39,6 +39,7 @@ from adam.evaluation.held_out_dataset import (
 )
 from adam.evaluation.metrics import (
     compute_abstention_calibration,
+    compute_continuous_ci,
     compute_latency_percentiles,
     compute_wilson_ci,
 )
@@ -326,7 +327,7 @@ def evaluate_held_out_dataset(
     precision_ci = compute_wilson_ci(precision_hits, answerable_count, confidence=0.95)
 
     mean_faithfulness = (sum(faithfulness_scores) / len(faithfulness_scores)) if faithfulness_scores else 1.0
-    faith_ci = compute_wilson_ci(int(mean_faithfulness * len(faithfulness_scores)), len(faithfulness_scores), confidence=0.95)
+    faith_ci = compute_continuous_ci(faithfulness_scores, confidence=0.95)
 
     refusal_rate = (no_answer_refusals / no_answer_count) if no_answer_count > 0 else 1.0
     refusal_ci = compute_wilson_ci(no_answer_refusals, no_answer_count, confidence=0.95)

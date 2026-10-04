@@ -326,12 +326,12 @@ This architecture allows plugging an external OpenTelemetry or Langfuse exporter
 ## Empirical RAG Benchmarks & Scorecards
 
 ADAM's retrieval, citations, and hallucination guardrails are empirically evaluated across two complementary suites:
-1. **Held-Out Production Scale Benchmark (Phase 3):** Evaluated over **206 real Uttarakhand Government public orders** across **320 domain-reviewed queries** (without verbatim order numbers), featuring Hinglish queries, multi-document synthesis, scanned Hindi OCR variations, abstention calibration, and a 205-probe ACL red team. All numbers are published with **Wilson score 95% confidence intervals** ($z=1.96$) in [`docs/benchmarks/held_out_scorecard.md`](file:///Users/anuragksingh/Desktop/ADAM/docs/benchmarks/held_out_scorecard.md).
+1. **Held-Out Administrative Benchmark (Phase 3):** Evaluated over a held-out corpus of **206 synthetic Uttarakhand Government administrative orders** generated across 22 department templates with domain-derived queries (without verbatim order numbers), featuring Hinglish queries, multi-document synthesis, scanned Hindi OCR variations, abstention calibration, and a 205-probe ACL red team. All numbers are published with **Wilson score / normal 95% confidence intervals** ($z=1.96$) in [`docs/benchmarks/held_out_scorecard.md`](file:///Users/anuragksingh/Desktop/ADAM/docs/benchmarks/held_out_scorecard.md).
 2. **Synthetic Smoke Test (215 queries / 10 docs):** Baseline invariant test suite exercising canonical edge cases, amendments, and citation page mappings.
 
-### Held-Out Evaluation Quality Gates (Real Orders, Wilson 95% CI)
+### Held-Out Evaluation Quality Gates (Wilson / Normal 95% CI)
 
-| Evaluation Gate | Pilot Standard | Held-Out Result | Wilson 95% Confidence Interval | Gate Verdict |
+| Evaluation Gate | Pilot Standard | Held-Out Result | Wilson / Normal 95% Confidence Interval | Gate Verdict |
 | :--- | :--- | :--- | :--- | :--- |
 | **Retrieval Recall@10** | $\ge 90.0\%$ | **98.15%** | `[90.23%, 99.67%]` | **PASS** |
 | **Citation Page Precision** | $\ge 90.0\%$ | **90.74%** | `[80.09%, 95.98%]` | **PASS** |
