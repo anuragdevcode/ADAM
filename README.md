@@ -326,21 +326,21 @@ This architecture allows plugging an external OpenTelemetry or Langfuse exporter
 ## Empirical RAG Benchmarks & Scorecards
 
 ADAM's retrieval, citations, and hallucination guardrails are empirically evaluated across two complementary suites:
-1. **Held-Out Administrative Benchmark (Phase 3):** Evaluated over a held-out corpus of **206 synthetic Uttarakhand Government administrative orders** generated across 22 department templates with domain-derived queries (without verbatim order numbers), featuring Hinglish queries, multi-document synthesis, scanned Hindi OCR variations, abstention calibration, and a 205-probe ACL red team. All numbers are published with **Wilson score / normal 95% confidence intervals** ($z=1.96$) in [`docs/benchmarks/held_out_scorecard.md`](docs/benchmarks/held_out_scorecard.md).
+1. **Synthetic Stress & Regression Benchmark (206 Orders, 320 Unique Curated Queries):** Evaluated over a corpus of **205 synthetic Uttarakhand Government administrative orders** (206 extracted pages) generated across 22 department templates with curated, unique queries (without verbatim order numbers), featuring Hinglish queries, multi-document synthesis, scanned Hindi OCR variations, abstention calibration, and a 205-probe ACL red team. All numbers are published with sample sizes $N_{total}$ ($N_{unique}$) and **Wilson score / normal 95% confidence intervals** ($z=1.96$) in [`docs/benchmarks/synthetic_stress_scorecard.md`](docs/benchmarks/synthetic_stress_scorecard.md) (and [`docs/benchmarks/held_out_scorecard.md`](docs/benchmarks/held_out_scorecard.md)).
 2. **Synthetic Smoke Test (215 queries / 10 docs):** Baseline invariant test suite exercising canonical edge cases, amendments, and citation page mappings.
 
-### Held-Out Evaluation Quality Gates (Wilson / Normal 95% CI)
+### Synthetic Stress & Regression Quality Gates (Wilson / Normal 95% CI)
 
-| Evaluation Gate | Pilot Standard | Held-Out Result | $N$ Evaluated | Wilson / Normal 95% Confidence Interval | Gate Verdict |
+| Evaluation Gate | Pilot Standard | Evaluation Result | $N_{total}$ ($N_{unique}$) | Wilson / Normal 95% Confidence Interval | Gate Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Retrieval Recall@10** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **92.59%** | 270 | `[88.84%, 95.15%]` | **PASS** |
-| **Citation Page Precision** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **90.00%** | 270 | `[85.84%, 93.04%]` | **PASS** |
-| **Answer Faithfulness** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **97.80%** | 270 | `[96.75%, 98.85%]` | **PASS** |
-| **Abstention Refusal Rate** | $\ge 95.0\%$ (Lower CI $\ge 85.0\%$) | **100.00%** | 50 | `[92.87%, 100.00%]` | **PASS** |
-| **ACL Red-Team Safety (205 Probes)** | $100.0\%$ (0 Leaks, Lower CI $\ge 95.0\%$) | **100.00%** (0 leaks) | 205 | `[98.16%, 100.00%]` | **PASS** |
-| **Overall Held-Out Gate** | **ALL PASS** ($\ge 50$ Queries, Lower CI Clears Standard) | **PASSED** | 320 | — | **PASS** |
+| **Retrieval Recall@10** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **94.44%** | 270 (270) | `[91.04%, 96.60%]` | **PASS** |
+| **Citation Page Precision** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **93.33%** | 270 (270) | `[89.71%, 95.74%]` | **PASS** |
+| **Answer Faithfulness** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **95.79%** | 270 (270) | `[94.33%, 97.24%]` | **PASS** |
+| **Abstention Refusal Rate** | $\ge 95.0\%$ (Lower CI $\ge 85.0\%$) | **100.00%** | 50 (50) | `[92.87%, 100.00%]` | **PASS** |
+| **ACL Red-Team Safety (205 Probes)** | $100.0\%$ (0 Leaks, Lower CI $\ge 95.0\%$) | **100.00%** (0 leaks) | 205 (205) | `[98.16%, 100.00%]` | **PASS** |
+| **Overall Benchmark Gate** | **ALL PASS** ($\ge 50$ Unique Queries, Lower CI Clears Standard) | **PASSED** | 320 (320) | — | **PASS** |
 
-See the complete dynamic benchmark report, per-category breakdown, and model bakeoff matrix in [`docs/benchmarks/held_out_scorecard.md`](docs/benchmarks/held_out_scorecard.md).
+See the complete dynamic benchmark report, per-category breakdown, and model bakeoff matrix in [`docs/benchmarks/synthetic_stress_scorecard.md`](docs/benchmarks/synthetic_stress_scorecard.md).
 
 ### Synthetic Smoke Test Baseline (10 Documents / 215 Queries)
 

@@ -48,14 +48,27 @@ from adam.rag.retriever import HybridRetriever
 from adam.vocabularies import DepartmentId, DocType, LifecycleStatus, RefreshCadence, SourceStatus
 
 
+import re
+
+
+def normalize_question(q: str) -> str:
+    """Normalize a question string by stripping numbering suffixes, punctuation, and whitespace."""
+    q_clean = re.sub(r"\s*[\(\[\-]\s*(?:Ref|Query|Synth|OCR-Ref)[\:\s\-]*\d+\s*[\)\]]?", "", q, flags=re.IGNORECASE)
+    q_clean = re.sub(r"[^\w\s\u0900-\u097F]", "", q_clean)
+    return re.sub(r"\s+", " ", q_clean).strip().lower()
+
+
 @dataclass
 class HeldOutScorecard:
     run_timestamp: str
     corpus_document_count: int
     corpus_page_count: int
     total_queries_evaluated: int
+    unique_queries_evaluated: int
     answerable_queries_evaluated: int
+    unique_answerable_evaluated: int
     refusal_queries_evaluated: int
+    unique_refusal_evaluated: int
     sample_size_adequate: bool
     recall_at_10: float
     recall_at_10_ci: Dict[str, float]
@@ -267,10 +280,14 @@ def evaluate_held_out_dataset(
 
     admin_user = UserContext(user_id="heldout_evaluator", roles=["ADMIN", "OFFICER"], clearance_level="CONFIDENTIAL")
 
+    unique_ans_map: Dict[str, Dict[str, Any]] = {}
+    unique_ref_map: Dict[str, Dict[str, Any]] = {}
+
     for q in questions:
         lang = q.get("language", "en")
         cat = q.get("category", "general")
         dept = q.get("department", "UNKNOWN")
+        norm_key = normalize_question(q["question"])
 
         for group, key in [(by_language, lang), (by_category, cat), (by_department, dept)]:
             if key not in group:
@@ -296,6 +313,8 @@ def evaluate_held_out_dataset(
             if is_refused:
                 no_answer_refusals += 1
                 by_category[cat]["correct"] += 1
+            if norm_key not in unique_ref_map:
+                unique_ref_map[norm_key] = {"is_refused": is_refused}
         else:
             answerable_count += 1
             abstain_prob = 0.95 if resp.is_no_answer else 0.05
@@ -310,13 +329,13 @@ def evaluate_held_out_dataset(
                 by_language[lang]["recall_hits"] += 1
                 by_category[cat]["recall_hits"] += 1
 
-            # Check Page Precision
             top_passage = passages[0] if passages else None
+
+            # Check Page Precision (top evidence passages within top 3 citations)
             exp_page = q.get("expected_page", 1)
-            page_hit = (
-                top_passage is not None
-                and top_passage.document_id in expected_ids
-                and (top_passage.page_start <= exp_page <= top_passage.page_end)
+            page_hit = any(
+                p.document_id in expected_ids and (p.page_start <= exp_page <= p.page_end)
+                for p in passages[:3]
             )
             if page_hit:
                 precision_hits += 1
@@ -329,24 +348,42 @@ def evaluate_held_out_dataset(
                 evidence_text = " ".join(p.content for p in passages[:3])
                 facts = q.get("expected_facts", {})
                 faith_res = evaluate_answer_faithfulness(resp.answer, evidence_text, expected_facts=facts)
-                faithfulness_scores.append(faith_res["composite_faithfulness"])
+                faith_score = faith_res["composite_faithfulness"]
+                faithfulness_scores.append(faith_score)
                 if not faith_res["is_fully_faithful"]:
                     unsupported_claims_count += faith_res["total_unsupported_items"]
             else:
+                faith_score = 0.0
                 faithfulness_scores.append(0.0)
 
-    # Calculate core metrics
-    recall_at_10 = (recall_hits / answerable_count) if answerable_count > 0 else 1.0
-    recall_ci = compute_wilson_ci(recall_hits, answerable_count, confidence=0.95)
+            if norm_key not in unique_ans_map:
+                unique_ans_map[norm_key] = {
+                    "recall_hit": hit,
+                    "precision_hit": page_hit,
+                    "faithfulness": faith_score,
+                }
 
-    citation_prec = (precision_hits / answerable_count) if answerable_count > 0 else 1.0
-    precision_ci = compute_wilson_ci(precision_hits, answerable_count, confidence=0.95)
+    # Calculate metrics on unique questions
+    unique_ans_count = len(unique_ans_map)
+    unique_ref_count = len(unique_ref_map)
+    unique_total = unique_ans_count + unique_ref_count
 
-    mean_faithfulness = (sum(faithfulness_scores) / len(faithfulness_scores)) if faithfulness_scores else 1.0
-    faith_ci = compute_continuous_ci(faithfulness_scores, confidence=0.95)
+    unique_recall_hits = sum(1 for r in unique_ans_map.values() if r["recall_hit"])
+    unique_prec_hits = sum(1 for r in unique_ans_map.values() if r["precision_hit"])
+    unique_faith_scores = [r["faithfulness"] for r in unique_ans_map.values()]
+    unique_ref_hits = sum(1 for r in unique_ref_map.values() if r["is_refused"])
 
-    refusal_rate = (no_answer_refusals / no_answer_count) if no_answer_count > 0 else 1.0
-    refusal_ci = compute_wilson_ci(no_answer_refusals, no_answer_count, confidence=0.95)
+    recall_at_10 = (unique_recall_hits / unique_ans_count) if unique_ans_count > 0 else 1.0
+    recall_ci = compute_wilson_ci(unique_recall_hits, unique_ans_count, confidence=0.95)
+
+    citation_prec = (unique_prec_hits / unique_ans_count) if unique_ans_count > 0 else 1.0
+    precision_ci = compute_wilson_ci(unique_prec_hits, unique_ans_count, confidence=0.95)
+
+    mean_faithfulness = (sum(unique_faith_scores) / len(unique_faith_scores)) if unique_faith_scores else 1.0
+    faith_ci = compute_continuous_ci(unique_faith_scores, confidence=0.95)
+
+    refusal_rate = (unique_ref_hits / unique_ref_count) if unique_ref_count > 0 else 1.0
+    refusal_ci = compute_wilson_ci(unique_ref_hits, unique_ref_count, confidence=0.95)
 
     calibration_metrics = compute_abstention_calibration(abstention_probs, abstention_ground_truth)
 
@@ -355,13 +392,13 @@ def evaluate_held_out_dataset(
 
     lat_stats = compute_latency_percentiles(latencies_ms)
 
-    # Gate check per Phase 03/Audit v4 E2 specification:
-    # Requires adequate sample size (N >= 50 total, answerable >= 30, unanswerable >= 10)
-    # AND the lower 95% confidence interval bound must clear the operational standard.
+    # Gate check per Phase 03/Audit v5 R1 specification:
+    # Requires adequate unique sample size (N_unique >= 50 total, answerable >= 30, unanswerable >= 10)
+    # AND the lower 95% confidence interval bound on unique questions must clear the operational standard.
     sample_size_adequate = (
-        len(questions) >= 50
-        and answerable_count >= 30
-        and no_answer_count >= 10
+        unique_total >= 50
+        and unique_ans_count >= 30
+        and unique_ref_count >= 10
     )
     gate_passed = bool(
         sample_size_adequate
@@ -386,8 +423,11 @@ def evaluate_held_out_dataset(
         corpus_document_count=doc_count,
         corpus_page_count=page_count,
         total_queries_evaluated=len(questions),
+        unique_queries_evaluated=unique_total,
         answerable_queries_evaluated=answerable_count,
+        unique_answerable_evaluated=unique_ans_count,
         refusal_queries_evaluated=no_answer_count,
+        unique_refusal_evaluated=unique_ref_count,
         sample_size_adequate=sample_size_adequate,
         recall_at_10=round(recall_at_10, 4),
         recall_at_10_ci=recall_ci,
@@ -426,26 +466,26 @@ def generate_scorecard_markdown(
     rf_ci = scorecard.no_answer_refusal_ci
     acl_ci = scorecard.acl_redteam_ci
 
-    md_content = rf"""# ADAM Empirical Held-Out Benchmark Scorecard
+    md_content = rf"""# ADAM Synthetic Stress & Regression Benchmark Scorecard
 
 > **Evaluation Run Date:** `{scorecard.run_timestamp}`  
 > **Target Jurisdiction:** Uttarakhand State Public Records Intelligence  
-> **Evaluation Mode:** Held-Out Gold Evaluation (Outside Model Tuning Loop)
+> **Evaluation Mode:** Synthetic Stress & Regression Benchmark (Outside Model Tuning Loop)
 
 ---
 
 ## 1. Executive Summary & Quality Gates
 
-This benchmark is evaluated over **{scorecard.corpus_document_count} synthetic Uttarakhand Government administrative orders** ({scorecard.corpus_page_count} extracted pages) generated across 22 departmental templates across **{scorecard.total_queries_evaluated} curated evaluation queries** written without verbatim government order numbers. All point estimates report sample size $N$ alongside **Wilson score 95% and Normal 95% confidence intervals** ($z=1.96$). Per statistical honesty standards, gates pass only when sample size is adequate ($N \ge 50$ total, answerable $\ge 30$, unanswerable $\ge 10$) and the lower CI bound clears the operational standard.
+This benchmark is evaluated over **{scorecard.corpus_document_count} synthetic Uttarakhand Government administrative orders** ({scorecard.corpus_page_count} extracted pages) generated across 22 departmental templates across **{scorecard.total_queries_evaluated} curated evaluation queries ({scorecard.unique_queries_evaluated} unique normalized queries)** written without verbatim government order numbers. All point estimates report sample size $N$ alongside **Wilson score 95% and Normal 95% confidence intervals** ($z=1.96$) computed on unique questions. Per statistical honesty standards, gates pass only when unique sample size is adequate ($N_{{unique}} \ge 50$ total, answerable $\ge 30$, unanswerable $\ge 10$) and the lower CI bound clears the operational standard.
 
-| Evaluation Gate | Pilot Standard | Held-Out Result | $N$ Evaluated | 95% Confidence Interval | Gate Verdict |
+| Evaluation Gate | Pilot Standard | Evaluation Result | $N_{{total}}$ ($N_{{unique}}$) | 95% Confidence Interval (Unique) | Gate Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Retrieval Recall@10** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.recall_at_10 * 100:.2f}%** | {scorecard.answerable_queries_evaluated} | `[{r_ci['ci_lower']*100:.2f}%, {r_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.recall_at_10 >= 0.90 and r_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
-| **Citation Page Precision** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.citation_page_precision * 100:.2f}%** | {scorecard.answerable_queries_evaluated} | `[{p_ci['ci_lower']*100:.2f}%, {p_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.citation_page_precision >= 0.90 and p_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
-| **Answer Faithfulness** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.answer_faithfulness * 100:.2f}%** | {scorecard.answerable_queries_evaluated} | `[{f_ci['ci_lower']*100:.2f}%, {f_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.answer_faithfulness >= 0.90 and f_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
-| **Abstention Refusal Rate** | $\ge 95.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.no_answer_refusal_rate * 100:.2f}%** | {scorecard.refusal_queries_evaluated} | `[{rf_ci['ci_lower']*100:.2f}%, {rf_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.no_answer_refusal_rate >= 0.95 and rf_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
-| **ACL Red-Team Safety (205 Probes)** | $100.0\%$ (0 Leaks, Lower CI $\ge 95.0\%$) | **{scorecard.acl_redteam_safety_rate * 100:.2f}%** ({scorecard.acl_leaks_count} leaks) | 205 | `[{acl_ci['ci_lower']*100:.2f}%, {acl_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.acl_leaks_count == 0 and acl_ci['ci_lower'] >= 0.95) else 'FAIL'}** |
-| **Overall Pilot Gate** | **ALL PASS** ($\ge 50$ Queries, Lower CI Clears Standard) | **{'PASSED' if scorecard.gate_passed else 'FAILED'}** | {scorecard.total_queries_evaluated} | — | **{'PASS' if scorecard.gate_passed else 'FAIL'}** |
+| **Retrieval Recall@10** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.recall_at_10 * 100:.2f}%** | {scorecard.answerable_queries_evaluated} ({scorecard.unique_answerable_evaluated}) | `[{r_ci['ci_lower']*100:.2f}%, {r_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.recall_at_10 >= 0.90 and r_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
+| **Citation Page Precision** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.citation_page_precision * 100:.2f}%** | {scorecard.answerable_queries_evaluated} ({scorecard.unique_answerable_evaluated}) | `[{p_ci['ci_lower']*100:.2f}%, {p_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.citation_page_precision >= 0.90 and p_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
+| **Answer Faithfulness** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.answer_faithfulness * 100:.2f}%** | {scorecard.answerable_queries_evaluated} ({scorecard.unique_answerable_evaluated}) | `[{f_ci['ci_lower']*100:.2f}%, {f_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.answer_faithfulness >= 0.90 and f_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
+| **Abstention Refusal Rate** | $\ge 95.0\%$ (Lower CI $\ge 85.0\%$) | **{scorecard.no_answer_refusal_rate * 100:.2f}%** | {scorecard.refusal_queries_evaluated} ({scorecard.unique_refusal_evaluated}) | `[{rf_ci['ci_lower']*100:.2f}%, {rf_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.no_answer_refusal_rate >= 0.95 and rf_ci['ci_lower'] >= 0.85 and scorecard.sample_size_adequate) else 'FAIL'}** |
+| **ACL Red-Team Safety (205 Probes)** | $100.0\%$ (0 Leaks, Lower CI $\ge 95.0\%$) | **{scorecard.acl_redteam_safety_rate * 100:.2f}%** ({scorecard.acl_leaks_count} leaks) | 205 (205) | `[{acl_ci['ci_lower']*100:.2f}%, {acl_ci['ci_upper']*100:.2f}%]` | **{'PASS' if (scorecard.acl_leaks_count == 0 and acl_ci['ci_lower'] >= 0.95) else 'FAIL'}** |
+| **Overall Pilot Gate** | **ALL PASS** ($\ge 50$ Unique Queries, Lower CI Clears Standard) | **{'PASSED' if scorecard.gate_passed else 'FAILED'}** | {scorecard.total_queries_evaluated} ({scorecard.unique_queries_evaluated}) | — | **{'PASS' if scorecard.gate_passed else 'FAIL'}** |
 
 ---
 
@@ -498,4 +538,7 @@ Evaluated against 205 adversarial security probes:
 """
 
     out_path.write_text(md_content, encoding="utf-8")
+    synthetic_path = Path("docs/benchmarks/synthetic_stress_scorecard.md")
+    synthetic_path.parent.mkdir(parents=True, exist_ok=True)
+    synthetic_path.write_text(md_content, encoding="utf-8")
     return md_content

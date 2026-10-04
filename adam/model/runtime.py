@@ -6,6 +6,7 @@ Per Phase 04 specification:
 - 'The selected model must abstain correctly on all curated unanswerable/high-risk test cases.'
 """
 
+import hashlib
 import json
 import math
 import os
@@ -16,7 +17,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Tuple
 
 import httpx
 
@@ -896,6 +897,103 @@ def is_test_environment(backend: Optional[str] = None, env_backend: Optional[str
     return False
 
 
+def find_ollama_blob_path(digest_or_artifact: Union[str, ModelArtifact]) -> Optional[Path]:
+    """Locate local Ollama blob file on disk for a given digest or model artifact."""
+    if isinstance(digest_or_artifact, ModelArtifact):
+        chk = (digest_or_artifact.checksum_sha256 or "").strip().lower()
+    else:
+        chk = str(digest_or_artifact).strip().lower()
+
+    if chk.startswith("sha256:"):
+        chk = chk[7:]
+    elif chk.startswith("sha256-"):
+        chk = chk[7:]
+
+    if not chk or len(chk) != 64:
+        return None
+
+    candidate_dirs: List[Path] = []
+    env_models = os.getenv("OLLAMA_MODELS")
+    if env_models:
+        candidate_dirs.append(Path(env_models) / "blobs")
+    candidate_dirs.extend([
+        Path.home() / ".ollama" / "models" / "blobs",
+        Path.home() / "Library" / "Application Support" / "Ollama" / "models" / "blobs",
+        Path("/usr/share/ollama/.ollama/models/blobs"),
+    ])
+
+    blob_name = f"sha256-{chk}"
+    for d in candidate_dirs:
+        candidate = d / blob_name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def verify_ollama_blob_integrity(artifact: ModelArtifact) -> Tuple[bool, Optional[str]]:
+    """Verify cryptographic integrity of an Ollama model blob against registered checksum."""
+    chk = (artifact.checksum_sha256 or "").strip().lower()
+    if not chk or len(chk) != 64:
+        return True, None
+
+    blob_path = find_ollama_blob_path(chk)
+    if not blob_path:
+        # Check if manifest points to a blob
+        candidate_dirs: List[Path] = []
+        env_models = os.getenv("OLLAMA_MODELS")
+        if env_models:
+            candidate_dirs.append(Path(env_models))
+        candidate_dirs.extend([
+            Path.home() / ".ollama" / "models",
+            Path.home() / "Library" / "Application Support" / "Ollama" / "models",
+        ])
+        tags = [artifact.id] + list(getattr(artifact, "deployment_aliases", None) or [])
+        for mdir in candidate_dirs:
+            for tag in tags:
+                parts = tag.split(":")
+                name = parts[0]
+                sub = parts[1] if len(parts) > 1 else "latest"
+                manifest_file = mdir / "manifests" / "registry.ollama.ai" / "library" / name / sub
+                if manifest_file.is_file():
+                    try:
+                        data = json.loads(manifest_file.read_text("utf-8"))
+                        for layer in data.get("layers", []):
+                            if layer.get("mediaType") == "application/vnd.ollama.image.model":
+                                layer_digest = layer.get("digest", "")
+                                if layer_digest.startswith("sha256:"):
+                                    manifest_chk = layer_digest[7:].lower()
+                                    if manifest_chk != chk:
+                                        return False, f"Manifest model layer digest {manifest_chk} does not match registered checksum {chk}"
+                                    matched_blob = mdir / "blobs" / f"sha256-{manifest_chk}"
+                                    if matched_blob.is_file():
+                                        blob_path = matched_blob
+                                        break
+                    except Exception:
+                        pass
+                if blob_path:
+                    break
+            if blob_path:
+                break
+
+    if not blob_path:
+        return False, f"Ollama model blob sha256-{chk} not found on disk"
+
+    # Fast check: size
+    if artifact.file_size_bytes and blob_path.stat().st_size != artifact.file_size_bytes:
+        return False, f"Size mismatch for {blob_path.name}: expected {artifact.file_size_bytes} bytes, got {blob_path.stat().st_size}"
+
+    # Cryptographic sha256 verification
+    hasher = hashlib.sha256()
+    with open(blob_path, "rb") as f:
+        while chunk := f.read(1024 * 1024):
+            hasher.update(chunk)
+    actual_hash = hasher.hexdigest()
+    if actual_hash != chk:
+        return False, f"Cryptographic SHA-256 mismatch for {blob_path}: expected {chk}, calculated {actual_hash}"
+
+    return True, None
+
+
 class SingleModelLifecycleManager:
     """Enforces single-model concurrency: strictly at most one LLM loaded in memory.
 
@@ -1086,6 +1184,18 @@ class SingleModelLifecycleManager:
                             "or switch to Google Gemini in the top-right model selector."
                         )
                 else:
+                    # Enforce cryptographic checksum verification on local Ollama blob
+                    chk = (artifact.checksum_sha256 or "").strip().lower()
+                    if chk and len(chk) == 64:
+                        ok, err_msg = verify_ollama_blob_integrity(artifact)
+                        if not ok:
+                            if "not found on disk" in (err_msg or ""):
+                                if os.getenv("ADAM_ENV") == "production":
+                                    raise ValueError(f"Production model integrity verification failed for '{model_id}': {err_msg}")
+                                import logging
+                                logging.getLogger(__name__).warning(f"Ollama blob verification notice for '{model_id}': {err_msg}")
+                            else:
+                                raise ValueError(f"Model integrity verification failed for '{model_id}': {err_msg}")
                     self._active_runtime = ollama_rt
             else:
                 self._active_runtime = DeterministicModelRuntime(artifact)

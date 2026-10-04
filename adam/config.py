@@ -142,10 +142,33 @@ def get_memory_encryption_key() -> str:
     return mem_key or signing_secret or "adam-uk-gov-default-memory-encryption-key-2026"
 
 
+def get_gateway_signing_secret() -> str:
+    """Retrieve gateway HMAC signature secret with production separation checks."""
+    env = os.getenv("ADAM_ENV", os.getenv("ENV", "development")).lower()
+    gw_secret = os.getenv("GATEWAY_SIGNING_SECRET", "").strip()
+    signing_secret = os.getenv("SIGNING_SECRET", "").strip()
+    if env in ("production", "prod"):
+        if not gw_secret or gw_secret in KNOWN_INSECURE_SECRETS:
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: "
+                "GATEWAY_SIGNING_SECRET must be explicitly set to a secure key in production. "
+                f"Current value is {'empty' if not gw_secret else 'a known insecure placeholder'}."
+            )
+        if gw_secret == signing_secret:
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: "
+                "GATEWAY_SIGNING_SECRET must be separate and distinct from SIGNING_SECRET in production."
+            )
+        return gw_secret
+    # Development / test default: fallback to separate dev key or provided key
+    return gw_secret or "adam-uk-gov-default-gateway-signing-secret-2026"
+
+
 # Cryptographic signing secret for inventory manifests and auth tokens
 SIGNING_SECRET = get_signing_secret()
 validate_production_database_url(DATABASE_URL)
 MEMORY_ENCRYPTION_KEY = get_memory_encryption_key()
+GATEWAY_SIGNING_SECRET = get_gateway_signing_secret()
 
 # CORS allowed origins
 DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]

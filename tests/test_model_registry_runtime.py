@@ -491,3 +491,37 @@ def test_load_model_verifies_file_checksum(tmp_path):
     lifecycle.unload_model()
 
 
+def test_all_local_models_have_authentic_unique_sha256_checksums():
+    """Verify that all local serving models in the registry have authentic, valid 64-char hex digests."""
+    registry = ModelRegistry()
+    all_models = registry.list_all()
+
+    seen_checksums = set()
+    local_count = 0
+
+    for model in all_models:
+        if model.serving_runtime == "gemini":
+            continue
+
+        local_count += 1
+        chk = (model.checksum_sha256 or "").strip().lower()
+
+        # 1. Must be exact 64 characters hex
+        assert len(chk) == 64, f"Model {model.id} checksum length is {len(chk)}, expected 64"
+        assert all(c in "0123456789abcdef" for c in chk), f"Model {model.id} checksum contains non-hex characters: {chk}"
+
+        # 2. Must not be placeholder repeating characters
+        for dummy in ["0" * 8, "f" * 8, "a" * 8]:
+            assert dummy not in chk, f"Model {model.id} contains suspicious repeating dummy pattern '{dummy}' in {chk}"
+
+        # 3. Must be unique across all registered models
+        assert chk not in seen_checksums, f"Model {model.id} reuses duplicate checksum {chk}"
+        seen_checksums.add(chk)
+
+        # 4. Byte size must be positive
+        assert model.file_size_bytes > 0, f"Model {model.id} has invalid non-positive file size {model.file_size_bytes}"
+
+    assert local_count >= 5, f"Expected at least 5 local models evaluated, found {local_count}"
+
+
+

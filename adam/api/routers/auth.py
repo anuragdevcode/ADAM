@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta, timezone
 import os
 import time
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from adam.api.deps import get_db, get_user_context
@@ -17,6 +19,28 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _FAILED_LOGIN_ATTEMPTS: Dict[str, List[float]] = {}
 _MAX_FAILED_LOGINS = 5
 _LOCKOUT_WINDOW_SEC = 300.0  # 5 minutes
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP respecting X-Forwarded-For and X-Real-IP reverse proxy headers."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def is_registration_allowed() -> bool:
+    """Registration policy: default false in production, true in development/test."""
+    env_val = os.getenv("ADAM_ALLOW_REGISTRATION")
+    if env_val is not None:
+        return env_val.strip().lower() in ("true", "1", "yes")
+    is_prod = os.getenv("ADAM_ENV", "").strip().lower() == "production"
+    return not is_prod
 
 
 class LoginRequest(BaseModel):
@@ -42,20 +66,48 @@ class TokenResponse(BaseModel):
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """Authenticate with username and password, returning signed JWT bearer token."""
-    client_ip = request.client.host if (request.client and request.client.host) else "unknown"
-    throttle_key = f"{client_ip}:{req.username.strip().lower()}"
-    now = time.time()
-    recent_attempts = [t for t in _FAILED_LOGIN_ATTEMPTS.get(throttle_key, []) if now - t < _LOCKOUT_WINDOW_SEC]
-    if len(recent_attempts) >= _MAX_FAILED_LOGINS:
+    client_ip = get_client_ip(request)
+    username_norm = req.username.strip().lower()
+    window_start = datetime.now(timezone.utc) - timedelta(seconds=_LOCKOUT_WINDOW_SEC)
+
+    # Database-persisted failed attempt rate-limiting surviving worker reboots
+    failed_attempts_count = (
+        db.query(AuditEvent)
+        .filter(
+            AuditEvent.entity_type == "AUTH",
+            AuditEvent.action == "LOGIN_FAILED",
+            or_(
+                AuditEvent.actor == username_norm,
+                AuditEvent.entity_id == client_ip,
+            ),
+            AuditEvent.timestamp >= window_start,
+        )
+        .count()
+    )
+
+    if failed_attempts_count >= _MAX_FAILED_LOGINS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed login attempts. Account temporarily locked. Please try again later.",
         )
 
+    throttle_key = f"{client_ip}:{username_norm}"
     user = authenticate_user(db, req.username, req.password)
     if not user:
-        recent_attempts.append(now)
-        _FAILED_LOGIN_ATTEMPTS[throttle_key] = recent_attempts
+        _FAILED_LOGIN_ATTEMPTS.setdefault(throttle_key, []).append(time.time())
+        # Record tamper-evident failed attempt in persistent database audit log
+        failed_event = AuditEvent(
+            entity_type="AUTH",
+            entity_id=client_ip,
+            action="LOGIN_FAILED",
+            actor=username_norm,
+            details_json={
+                "ip": client_ip,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        db.add(failed_event)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",
@@ -79,7 +131,11 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         entity_id=user.id,
         action="LOGIN",
         actor=user.username,
-        details_json={"roles": user.roles, "clearance": user.clearance_level},
+        details_json={
+            "roles": user.roles,
+            "clearance": user.clearance_level,
+            "ip": client_ip,
+        },
     )
     db.add(audit)
     db.commit()
@@ -103,8 +159,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
     """Register a new user account."""
-    is_reg_allowed = os.getenv("ADAM_ALLOW_REGISTRATION", "true").lower() in ("true", "1", "yes")
-    if not is_reg_allowed:
+    if not is_registration_allowed():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User registration is disabled by administrator.",

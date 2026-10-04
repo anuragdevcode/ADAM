@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 import bcrypt
 import jwt
 
-from adam.config import SIGNING_SECRET
+from adam.config import SIGNING_SECRET, GATEWAY_SIGNING_SECRET
 
 ALGORITHM = "HS256"
 DEFAULT_ACCESS_TOKEN_EXPIRE_HOURS = 24
@@ -71,7 +71,7 @@ def sign_gateway_payload(
     """Generate HMAC-SHA256 signature for trusted proxy gateway headers."""
     ts = timestamp if timestamp is not None else int(time.time())
     message = f"{user_id}:{role}:{clearance}:{dept}:{ts}".encode("utf-8")
-    sig = hmac.new(SIGNING_SECRET.encode("utf-8"), message, hashlib.sha256).hexdigest()
+    sig = hmac.new(GATEWAY_SIGNING_SECRET.encode("utf-8"), message, hashlib.sha256).hexdigest()
     return sig, ts
 
 

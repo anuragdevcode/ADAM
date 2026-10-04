@@ -140,8 +140,35 @@ def run_doctor() -> Dict[str, Any]:
     stt_engine = get_stt_engine()
     tts_engine = get_tts_engine()
 
+    # Model Artifact & Blob Integrity Diagnostics
+    from adam.model.registry import ModelRegistry
+    from adam.model.runtime import verify_ollama_blob_integrity, find_ollama_blob_path
+
+    model_registry = ModelRegistry()
+    primary_model = model_registry.get_primary()
+    model_checks = {}
+    model_integrity_ok = True
+
+    for m in model_registry.list_all():
+        if m.serving_runtime == "ollama":
+            blob_path = find_ollama_blob_path(m)
+            blob_found = blob_path is not None
+            verified, err = verify_ollama_blob_integrity(m) if blob_found else (False, "Blob not found on disk")
+            if blob_found and not verified:
+                model_integrity_ok = False
+            model_checks[m.id] = {
+                "name": m.name,
+                "runtime": m.serving_runtime,
+                "blob_present": blob_found,
+                "blob_path": str(blob_path) if blob_path else None,
+                "verified": verified,
+                "error": err,
+                "expected_sha256": m.checksum_sha256,
+                "file_size_bytes": m.file_size_bytes,
+            }
+
     # Determine overall status
-    if not db_ok or not disk_ok:
+    if not db_ok or not disk_ok or not model_integrity_ok:
         status = "CRITICAL"
     elif not headroom_ok or not tesseract_available:
         status = "WARNING"
@@ -181,6 +208,10 @@ def run_doctor() -> Dict[str, Any]:
             "is_busy": is_busy,
             "active_task": active_task,
             "lock_engaged": lock_active,
+        },
+        "model_integrity": {
+            "all_verified": model_integrity_ok,
+            "models": model_checks,
         },
     }
 

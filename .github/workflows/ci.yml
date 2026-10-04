@@ -43,6 +43,12 @@ jobs:
         run: |
           ruff check .
 
+      - name: Database Schema Migration & Drift Gate – alembic check
+        run: |
+          DATABASE_URL="sqlite:///ci_alembic_check.db" alembic upgrade head
+          DATABASE_URL="sqlite:///ci_alembic_check.db" alembic check
+          rm -f ci_alembic_check.db
+
       - name: Type Check – mypy (non-blocking, warnings only)
         run: |
           mypy --ignore-missing-imports adam/ || true

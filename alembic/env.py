@@ -45,6 +45,22 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def compare_type_filter(context, inspected_column, metadata_column, inspected_type, metadata_type):
+    # In SQLite, pgvector VECTOR is reflected as NUMERIC, which is expected
+    if context.connection.dialect.name == "sqlite":
+        meta_str = str(metadata_type).upper()
+        ins_str = str(inspected_type).upper()
+        if "VECTOR" in meta_str and "NUMERIC" in ins_str:
+            return False
+    return None
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and name in ("schema_migrations", "spatial_ref_sys"):
+        return False
+    return True
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     configuration = config.get_section(config.config_ini_section, {})
@@ -67,6 +83,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            compare_type=compare_type_filter,
+            include_object=include_object,
         )
 
         with context.begin_transaction():
