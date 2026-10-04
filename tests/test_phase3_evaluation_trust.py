@@ -202,7 +202,7 @@ def test_acl_red_team_execution_zero_leaks(p3_session):
     assert ci["ci_upper"] == 1.00
 
 
-# ── 5. Held-Out Real Uttarakhand Corpus & Questions (E1) ────────────────────
+# ── 5. Held-Out Synthetic Uttarakhand Corpus & Questions (E1) ────────────────
 
 
 def test_held_out_dataset_scale_and_diversity():
@@ -229,10 +229,10 @@ def test_held_out_dataset_scale_and_diversity():
 
 
 def test_held_out_evaluation_quality_gates(p3_session):
-    """Execute held-out evaluation runner and verify all quality gates pass."""
-    scorecard = evaluate_held_out_dataset(p3_session, max_queries=40)
+    """Execute held-out evaluation runner and verify all quality gates pass with adequate sample size."""
+    scorecard = evaluate_held_out_dataset(p3_session)
 
-    # 1. Retrieval Recall@10 >= 90%
+    # 1. Retrieval Recall@10 >= 90% and CI lower bound >= 85%
     assert scorecard.recall_at_10 >= 0.90, f"Recall@10 failed: {scorecard.recall_at_10}"
     assert scorecard.recall_at_10_ci["ci_lower"] >= 0.85
 
@@ -242,14 +242,23 @@ def test_held_out_evaluation_quality_gates(p3_session):
     # 3. Answer Faithfulness >= 90%
     assert scorecard.answer_faithfulness >= 0.90, f"Faithfulness failed: {scorecard.answer_faithfulness}"
 
-    # 4. Abstention Refusal Rate >= 95%
+    # 4. Abstention Refusal Rate >= 95% and CI lower bound >= 85%
     assert scorecard.no_answer_refusal_rate >= 0.95, f"Refusal failed: {scorecard.no_answer_refusal_rate}"
+    assert scorecard.no_answer_refusal_ci["ci_lower"] >= 0.85
 
     # 5. ACL Red-Team Zero Leaks
     assert scorecard.acl_leaks_count == 0
 
-    # 6. Overall Quality Gate
+    # 6. Overall Quality Gate and Sample Size Adequacy
+    assert scorecard.sample_size_adequate is True
     assert scorecard.gate_passed is True
+
+
+def test_held_out_evaluation_insufficient_sample_size_fails_gate(p3_session):
+    """Evaluation on small samples (e.g. 10 queries) must fail quality gate due to inadequate statistical power."""
+    scorecard = evaluate_held_out_dataset(p3_session, max_queries=10)
+    assert scorecard.sample_size_adequate is False
+    assert scorecard.gate_passed is False
 
 
 # ── 6. Target Hardware Model Bake-Off ────────────────────────────────────────
@@ -295,6 +304,22 @@ def test_model_bakeoff_live_inference():
     assert "Live Measured" in live_p.display_name
     assert live_p.english_faithfulness > 0.0
     assert mock_runtime.generate.called
+
+
+def test_model_bakeoff_live_inference_raises_on_failure():
+    """Verify live inference raises RuntimeError on failure rather than silently falling back to constants."""
+    from unittest.mock import MagicMock
+
+    mock_runtime = MagicMock()
+    mock_runtime.generate.side_effect = RuntimeError("Ollama connection timed out")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        run_model_bakeoff(live_inference=True, model_runtime=mock_runtime)
+    assert "Live model bake-off execution failed" in str(exc_info.value)
+
+    with pytest.raises(ValueError) as exc_missing:
+        run_model_bakeoff(live_inference=True, model_runtime=None)
+    assert "model_runtime is required" in str(exc_missing.value)
 
 
 # ── 7. CLI Commands (adam eval heldout / redteam / bakeoff) ──────────────────

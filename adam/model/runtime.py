@@ -15,7 +15,8 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Union
 
 import httpx
 
@@ -940,12 +941,26 @@ class SingleModelLifecycleManager:
         backend: Optional[str] = None,
         api_key: Optional[str] = None,
         clearance_level: Optional[str] = None,
+        model_file_path: Optional[Union[str, Path]] = None,
     ) -> BaseModelRuntime:
         """Load an approved model into runtime memory with concurrency locking and air-gap verification."""
         with self._mutex:
             artifact = self.registry.get(model_id)
             if not artifact:
                 raise ValueError(f"Unknown model artifact '{model_id}' in registry.")
+
+            # Enforce cryptographic checksum verification if a local model file path is provided
+            if model_file_path is not None:
+                p = Path(model_file_path)
+                if not p.is_file():
+                    raise FileNotFoundError(f"Model weights file not found: {model_file_path}")
+                chk = (artifact.checksum_sha256 or "").strip().lower()
+                if len(chk) == 64 and all(c in "0123456789abcdef" for c in chk):
+                    if not self.registry.verify_file_checksum(p, chk):
+                        raise ValueError(
+                            f"Model file checksum mismatch for '{model_id}' at {model_file_path}. "
+                            f"Expected SHA-256 {artifact.checksum_sha256}."
+                        )
 
             # Enforce Air-Gapped Data Sovereignty Policy:
             # RESTRICTED and CONFIDENTIAL clearances strictly forbid cloud models (Gemini)

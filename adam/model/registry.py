@@ -200,8 +200,8 @@ QWEN3_5_4B_INSTRUCT = ModelArtifact(
     revision="v3.5-gguf-q4km",
     quantization="Q4_K_M",
     model_format="GGUF",
-    checksum_sha256="8a5c317f09de23405b07289f688e1467f53a4798c199859f518e38f906471e9a",
-    file_size_bytes=3_450_000_000,  # ~3.45 GB (Qwen 3.5 4B Instruct Q4_K_M)
+    checksum_sha256="81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490",
+    file_size_bytes=3_389_971_840,  # ~3.39 GB (authentic Ollama layer digest)
     license_id="Apache-2.0",
     license_status=LicenseStatus.APPROVED,
     requires_legal_review=False,
@@ -256,7 +256,7 @@ QWEN3_5_4B_INSTRUCT = ModelArtifact(
     sbom={
         "vendor": "Alibaba Cloud / Qwen Team",
         "base_model": "Qwen3.5-4B-Instruct",
-        "parameters": "4.0B",
+        "parameters": "4.66B",
         "architecture": "Hybrid Linear-Attention (Gated DeltaNet) + Transformer",
         "quantizer": "llama.cpp-kquants / ollama",
         "tokenizer": "BPE tiktoken-derived vocab 151646",
@@ -282,8 +282,8 @@ QWEN2_5_3B_INSTRUCT = ModelArtifact(
     revision="v2.5-gguf-q4km",
     quantization="Q4_K_M",
     model_format="GGUF",
-    checksum_sha256="4d715b706df8b8e0a112dfad96beeeae1c8a14b1f66c071a9ee55de0dfa6c766",
-    file_size_bytes=1_930_000_000,  # ~1.93 GB
+    checksum_sha256="5ee4f07cdb9beadbbb293e85803c569b01bd37ed059d2715faa7bb405f31caa6",
+    file_size_bytes=1_929_903_008,  # ~1.93 GB (authentic Ollama layer digest)
     license_id="Apache-2.0",
     license_status=LicenseStatus.APPROVED,
     requires_legal_review=False,
@@ -348,7 +348,7 @@ LLAMA_3_2_3B_INSTRUCT = ModelArtifact(
     revision="v1.0.0-gguf-q4km",
     quantization="Q4_K_M",
     model_format="GGUF",
-    checksum_sha256="5b3a987d65ef43210987654321fedcba0123456789abcdef0123456789abcdef",
+    checksum_sha256="9f3c7e7b686d113f9c6146ff47f48e3547a469bbda6c761e88029c78bb9dc31d",
     file_size_bytes=2_200_000_000,  # ~2.20 GB
     license_id="Llama 3.2 Community License",
     license_status=LicenseStatus.RESTRICTED,

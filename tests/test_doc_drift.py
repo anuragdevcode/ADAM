@@ -171,3 +171,34 @@ def test_benchmark_api_matches_canonical():
     assert data2["total_queries"] == 215
     assert "reranker_ablation" in data2
 
+
+# ── 6. Benchmark Provenance & Honesty Safeguard (Audit v4 E1) ─────────────────
+
+def test_no_misleading_provenance_claims():
+    """Ensure repo docs and evaluation files never claim synthetic benchmarks are real government documents."""
+    forbidden_phrases = [
+        "real uttarakhand government documents",
+        "real uttarakhand administrative documents",
+        "held-out real uttarakhand",
+        "domain-reviewed queries",
+        "206 real",
+    ]
+
+    target_files = [
+        BASE_DIR / "README.md",
+        BASE_DIR / "docs" / "benchmarks" / "held_out_scorecard.md",
+        BASE_DIR / "adam" / "evaluation" / "held_out_dataset.py",
+        BASE_DIR / "adam" / "evaluation" / "held_out_runner.py",
+    ]
+
+    for p in target_files:
+        if not p.is_file():
+            continue
+        text = p.read_text(encoding="utf-8").lower()
+        for phrase in forbidden_phrases:
+            assert phrase not in text, (
+                f"Provenance integrity violation in {p.relative_to(BASE_DIR)}! "
+                f"Found misleading claim '{phrase}'. Must state synthetic provenance generated across templates."
+            )
+
+

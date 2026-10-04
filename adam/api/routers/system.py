@@ -1,7 +1,8 @@
 """System metadata, model registry, and taxonomy endpoints."""
 
+import time
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from adam.api.deps import get_db, get_user_context, require_roles
@@ -276,19 +277,29 @@ def _build_dynamic_model_info(discovered: DiscoveredModel, attestation_status: O
     }
 
 
+_LAST_DISCOVERY_TS: float = 0.0
+_DISCOVERY_COOLDOWN_SEC: float = 10.0
+
+
 @router.post("/system/models/discover")
 def trigger_model_discovery(
     db: Session = Depends(get_db),
+    user_ctx: UserContext = Depends(require_roles("ADMIN")),
 ) -> Dict[str, Any]:
     """Scan local runtimes (Ollama) for installed models and register new discoveries.
 
-    Returns immediately with the discovered model list.  Technical validation
-    and behavioural attestation run in a background thread.
-
-    Response schema is a superset of the existing GET /api/system/models response
-    — all existing fields are present, new fields are additive.
+    Requires ADMIN role and enforces a 10s cooldown rate limit to prevent thread exhaustion DoS.
     """
+    global _LAST_DISCOVERY_TS
+    now = time.time()
     with _DISCOVERY_LOCK:
+        if now - _LAST_DISCOVERY_TS < _DISCOVERY_COOLDOWN_SEC:
+            remaining = int(_DISCOVERY_COOLDOWN_SEC - (now - _LAST_DISCOVERY_TS))
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Model discovery is rate-limited. Please wait {remaining}s before retrying.",
+            )
+        _LAST_DISCOVERY_TS = now
         discovered = run_local_discovery()
 
     # Build a canonical ModelInfo response for each discovered model.

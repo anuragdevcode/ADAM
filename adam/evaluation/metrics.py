@@ -322,19 +322,21 @@ def compute_continuous_ci(
         z = 1.95996  # default 95%
 
     variance = sum((x - mean) ** 2 for x in values) / (n - 1)
-    std_err = math.sqrt(variance / n) if variance > 0.0 else 0.0
-    margin = z * std_err
+    if variance > 0.0:
+        std_err = math.sqrt(variance / n)
+        margin = z * std_err
+    else:
+        # Finite-sample Bayesian bound for zero-variance bounded samples:
+        # Uncertainty diminishes with sample size n, avoiding false zero-width certainty
+        margin = z / (2.0 * math.sqrt(n))
 
     ci_lower = max(0.0, mean - margin)
     ci_upper = min(1.0, mean + margin)
 
-    low = min(round(ci_lower, 4), est)
-    high = max(round(ci_upper, 4), est)
-
     return {
         "estimate": est,
-        "ci_lower": low,
-        "ci_upper": high,
+        "ci_lower": round(ci_lower, 4),
+        "ci_upper": round(ci_upper, 4),
         "n": n,
         "confidence": confidence,
     }

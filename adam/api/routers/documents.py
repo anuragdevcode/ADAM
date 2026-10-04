@@ -35,7 +35,9 @@ from adam.vocabularies import (
     DocType,
     LifecycleStatus,
     ProvenanceStatus,
+    RefreshCadence,
     ReviewStatus,
+    SourceStatus,
 )
 
 router = APIRouter()
@@ -329,8 +331,24 @@ async def upload_document(
         storage.store(storage_key, content, expected_sha256=sha256)
 
         # 5. Create or find default source
-        default_source = db.query(Source).first()
-        source_id = default_source.id if default_source else "src_upload_manual"
+        default_source = db.query(Source).filter_by(id="src_upload_manual").first() or db.query(Source).first()
+        if not default_source:
+            default_source = Source(
+                id="src_upload_manual",
+                name="Manual Document Uploads",
+                department_id=department_id,
+                owner_name="System",
+                owner_contact="admin@uk.gov.in",
+                written_authority_ref="AUTH-MANUAL-UPLOAD",
+                permitted_domains=["local"],
+                permitted_path_prefixes=["/uploads/"],
+                access_classification=classification,
+                refresh_cadence=RefreshCadence.MANUAL.value,
+                status=SourceStatus.APPROVED.value,
+            )
+            db.add(default_source)
+            db.flush()
+        source_id = default_source.id
 
         now = datetime.now(timezone.utc)
         doc = Document(

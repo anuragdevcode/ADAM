@@ -200,10 +200,15 @@ def backfill_audit_chain_if_needed(eng: Engine) -> None:
 
 def init_db(engine: Optional[Engine] = None) -> None:
     """Create all registered database tables and run versioned migrations."""
-    from adam.db.models import Base  # ensure all models are imported
     eng = engine or get_engine()
-    Base.metadata.create_all(bind=eng)
-    from adam.db.migrations import apply_ingestion_migrations
-    apply_ingestion_migrations(eng)
+    import os
+    is_prod = os.environ.get("ADAM_ENV") == "production"
+    if is_prod:
+        run_alembic_migrations()
+    else:
+        from adam.db.models import Base  # ensure all models are imported
+        Base.metadata.create_all(bind=eng)
+        from adam.db.migrations import apply_ingestion_migrations
+        apply_ingestion_migrations(eng)
     backfill_audit_chain_if_needed(eng)
 

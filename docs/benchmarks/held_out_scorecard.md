@@ -1,6 +1,6 @@
 # ADAM Empirical Held-Out Benchmark Scorecard
 
-> **Evaluation Run Date:** `2026-10-04T16:50:25.984641+00:00`  
+> **Evaluation Run Date:** `2026-10-04T19:22:26.772399+00:00`  
 > **Target Jurisdiction:** Uttarakhand State Public Records Intelligence  
 > **Evaluation Mode:** Held-Out Gold Evaluation (Outside Model Tuning Loop)
 
@@ -8,16 +8,16 @@
 
 ## 1. Executive Summary & Quality Gates
 
-This benchmark is evaluated over **206 real Uttarakhand Government documents** (206 extracted pages) across **10 domain-reviewed queries** written without verbatim government order numbers. All point estimates include **Wilson score 95% confidence intervals** ($z=1.96$).
+This benchmark is evaluated over **206 synthetic Uttarakhand Government administrative orders** (206 extracted pages) generated across 22 departmental templates across **10 curated evaluation queries** written without verbatim government order numbers. All point estimates report sample size $N$ alongside **Wilson score 95% and Normal 95% confidence intervals** ($z=1.96$). Per statistical honesty standards, gates pass only when sample size is adequate ($N \ge 50$ total, answerable $\ge 30$, unanswerable $\ge 10$) and the lower CI bound clears the operational standard.
 
-| Evaluation Gate | Pilot Standard | Held-Out Result | Wilson 95% Confidence Interval | Gate Verdict |
-| :--- | :--- | :--- | :--- | :--- |
-| **Retrieval Recall@10** | $\ge 90.0\%$ | **100.00%** | `[70.09%, 100.00%]` | **PASS** |
-| **Citation Page Precision** | $\ge 90.0\%$ | **100.00%** | `[70.09%, 100.00%]` | **PASS** |
-| **Answer Faithfulness** | $\ge 90.0\%$ | **98.17%** | `[96.38%, 99.97%]` | **PASS** |
-| **Abstention Refusal Rate** | $\ge 95.0\%$ | **100.00%** | `[20.65%, 100.00%]` | **PASS** |
-| **ACL Red-Team Safety (205 Probes)** | $100.0\%$ (0 Leaks) | **100.00%** (0 leaks) | `[98.16%, 100.00%]` | **PASS** |
-| **Overall Pilot Gate** | **ALL PASS** | **PASSED** | — | **PASS** |
+| Evaluation Gate | Pilot Standard | Held-Out Result | $N$ Evaluated | 95% Confidence Interval | Gate Verdict |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Retrieval Recall@10** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **100.00%** | 8 | `[67.56%, 100.00%]` | **FAIL** |
+| **Citation Page Precision** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **100.00%** | 8 | `[67.56%, 100.00%]` | **FAIL** |
+| **Answer Faithfulness** | $\ge 90.0\%$ (Lower CI $\ge 85.0\%$) | **96.37%** | 8 | `[93.60%, 99.15%]` | **FAIL** |
+| **Abstention Refusal Rate** | $\ge 95.0\%$ (Lower CI $\ge 85.0\%$) | **100.00%** | 2 | `[34.24%, 100.00%]` | **FAIL** |
+| **ACL Red-Team Safety (205 Probes)** | $100.0\%$ (0 Leaks, Lower CI $\ge 95.0\%$) | **100.00%** (0 leaks) | 205 | `[98.16%, 100.00%]` | **PASS** |
+| **Overall Pilot Gate** | **ALL PASS** ($\ge 50$ Queries, Lower CI Clears Standard) | **FAILED** | 10 | — | **FAIL** |
 
 ---
 
@@ -43,11 +43,11 @@ This benchmark is evaluated over **206 real Uttarakhand Government documents** (
 
 ## 4. Latency Distribution (Retriever Engine)
 
-- **p50 Latency:** `14.65 ms`
-- **p90 Latency:** `14.94 ms`
-- **p95 Latency:** `18.28 ms`
-- **p99 Latency:** `18.28 ms`
-- **Mean Latency:** `13.23 ms`
+- **p50 Latency:** `24.88 ms`
+- **p90 Latency:** `30.64 ms`
+- **p95 Latency:** `140.25 ms`
+- **p99 Latency:** `140.25 ms`
+- **Mean Latency:** `31.73 ms`
 
 ---
 
@@ -55,11 +55,14 @@ This benchmark is evaluated over **206 real Uttarakhand Government documents** (
 
 Benchmarked on Apple Silicon (M-series) / Intel 8 GB RAM target nodes with local Ollama runtime:
 
+> [!NOTE]
+> Table entries marked *(Illustrative Reference Target)* denote baseline architectural design targets. Live benchmarks directly measure active hardware RSS and tokens/second.
+
 | Model | Parameters | License | Hindi Faithfulness | English Faithfulness | Composite | Latency p50 / p95 | Throughput | Memory (RAM) | Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qwen 3.5 4B Instruct** (`qwen3.5:4b`) | 4.0B | Apache-2.0 | 96.2% | 98.1% | **97.2%** | 445 ms / 920 ms | 40.5 tok/s | 2650 MB | `ACTIVE_LOCAL_DEFAULT` |
-| **Qwen 3 4B Instruct** (`qwen3:4b`) | 4.02B | Apache-2.0 | 96.3% | 98.1% | **97.2%** | 530 ms / 1050 ms | 36.8 tok/s | 2880 MB | `PRIMARY_PRODUCTION_TARGET` |
-| **Qwen 3 1.7B Instruct** (`qwen3:1.7b`) | 1.72B | Apache-2.0 | 88.4% | 91.2% | **89.8%** | 210 ms / 450 ms | 74.2 tok/s | 1280 MB | `LOW_RESOURCE_FALLBACK` |
+| **Qwen 3.5 4B Instruct (Illustrative Reference Target)** (`qwen3.5:4b`) | 4.66B | Apache-2.0 | 96.2% | 98.1% | **97.2%** | 445 ms / 920 ms | 40.5 tok/s | 2650 MB | `ACTIVE_LOCAL_DEFAULT` |
+| **Qwen 3 4B Instruct (Illustrative Reference Target)** (`qwen3:4b`) | 4.02B | Apache-2.0 | 96.3% | 98.1% | **97.2%** | 530 ms / 1050 ms | 36.8 tok/s | 2880 MB | `PRIMARY_PRODUCTION_TARGET` |
+| **Qwen 3 1.7B Instruct (Illustrative Reference Target)** (`qwen3:1.7b`) | 1.72B | Apache-2.0 | 88.4% | 91.2% | **89.8%** | 210 ms / 450 ms | 74.2 tok/s | 1280 MB | `LOW_RESOURCE_FALLBACK` |
 
 ---
 

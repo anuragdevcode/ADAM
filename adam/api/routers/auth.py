@@ -1,7 +1,7 @@
-"""Authentication and session token endpoints."""
-
+import os
+import time
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,10 @@ from adam.rag.models import UserContext
 from adam.vocabularies import Classification, DepartmentId
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_FAILED_LOGIN_ATTEMPTS: Dict[str, List[float]] = {}
+_MAX_FAILED_LOGINS = 5
+_LOCKOUT_WINDOW_SEC = 300.0  # 5 minutes
 
 
 class LoginRequest(BaseModel):
@@ -36,15 +40,29 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """Authenticate with username and password, returning signed JWT bearer token."""
+    client_ip = request.client.host if (request.client and request.client.host) else "unknown"
+    throttle_key = f"{client_ip}:{req.username.strip().lower()}"
+    now = time.time()
+    recent_attempts = [t for t in _FAILED_LOGIN_ATTEMPTS.get(throttle_key, []) if now - t < _LOCKOUT_WINDOW_SEC]
+    if len(recent_attempts) >= _MAX_FAILED_LOGINS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Account temporarily locked. Please try again later.",
+        )
+
     user = authenticate_user(db, req.username, req.password)
     if not user:
+        recent_attempts.append(now)
+        _FAILED_LOGIN_ATTEMPTS[throttle_key] = recent_attempts
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    _FAILED_LOGIN_ATTEMPTS.pop(throttle_key, None)
 
     # Issue cryptographically signed token
     token = create_access_token({
@@ -85,6 +103,21 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
     """Register a new user account."""
+    is_reg_allowed = os.getenv("ADAM_ALLOW_REGISTRATION", "true").lower() in ("true", "1", "yes")
+    if not is_reg_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User registration is disabled by administrator.",
+        )
+
+    # Password complexity policy: >= 8 characters, at least one letter, at least one digit
+    pwd = req.password
+    if len(pwd) < 8 or not any(c.isalpha() for c in pwd) or not any(c.isdigit() for c in pwd):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long and contain both letters and digits.",
+        )
+
     existing = get_user_by_username(db, req.username)
     if existing:
         raise HTTPException(

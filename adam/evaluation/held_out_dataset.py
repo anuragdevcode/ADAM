@@ -1,10 +1,10 @@
-"""Held-Out Real Uttarakhand Evaluation Dataset (>=200 Docs, >=300 Questions) per Phase 03/E1 Specification.
+"""Synthetic Uttarakhand Evaluation Dataset (>=200 Docs, >=300 Questions) per Phase 03/E1 Specification.
 
 Features:
-- Held-out corpus outside the tuning loop containing >=200 real Uttarakhand administrative documents.
+- Synthetic evaluation corpus generated across 22 departmental templates containing >=200 administrative documents.
 - Spans 8 state departments: Finance, Rural Development, Revenue, General Administration, Education, Health, Irrigation, Women & Child.
 - Realistic GO numbering, issue & effective dates, multiline articles, and scanned Hindi OCR variations.
-- >=300 domain-reviewed evaluation questions with:
+- >=300 curated evaluation questions with:
   1. Non-verbatim paraphrases (no GO numbers).
   2. Hinglish & transliterated queries.
   3. Multi-document synthesis across amendments & circulars.

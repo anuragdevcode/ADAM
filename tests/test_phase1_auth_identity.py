@@ -368,3 +368,79 @@ def test_production_docs_disabled(monkeypatch):
     client = TestClient(prod_app)
     assert client.get("/docs").status_code == 404
     assert client.get("/openapi.json").status_code == 404
+
+
+# ── 9. A1 / A2 Security Hardening Verification (Audit v4) ────────────────────
+
+def test_models_discover_requires_admin_and_rate_limit(p1_client):
+    """POST /system/models/discover requires ADMIN role and enforces cooldown rate-limiting (A1)."""
+    # 1. Unauthenticated request must fail
+    res_unauth = p1_client.post("/api/system/models/discover")
+    assert res_unauth.status_code in (401, 403)
+
+    # 2. Non-admin request must be forbidden
+    officer_tok = create_access_token({"sub": "officer1", "roles": ["OFFICER"]})
+    res_officer = p1_client.post(
+        "/api/system/models/discover",
+        headers={"Authorization": f"Bearer {officer_tok}"},
+    )
+    assert res_officer.status_code == 403
+
+    # 3. Admin request succeeds
+    admin_tok = create_access_token({"sub": "admin1", "roles": ["ADMIN"]})
+    res_admin = p1_client.post(
+        "/api/system/models/discover",
+        headers={"Authorization": f"Bearer {admin_tok}"},
+    )
+    assert res_admin.status_code == 200
+
+    # 4. Immediate second call is rate-limited
+    res_throttled = p1_client.post(
+        "/api/system/models/discover",
+        headers={"Authorization": f"Bearer {admin_tok}"},
+    )
+    assert res_throttled.status_code == 429
+    assert "rate-limited" in res_throttled.text.lower()
+
+
+def test_auth_registration_toggle_and_password_policy(p1_client, monkeypatch):
+    """User registration enforces password complexity policy and can be administratively disabled (A2)."""
+    # 1. Weak password (no digits) rejected with 400
+    res_weak = p1_client.post(
+        "/api/auth/register",
+        json={"username": "testuser_weak", "password": "onlyletters"},
+    )
+    assert res_weak.status_code == 400
+    assert "letters and digits" in res_weak.text.lower()
+
+    # 2. Registration disabled via ADAM_ALLOW_REGISTRATION=false
+    monkeypatch.setenv("ADAM_ALLOW_REGISTRATION", "false")
+    res_disabled = p1_client.post(
+        "/api/auth/register",
+        json={"username": "testuser_blocked", "password": "ValidPass123!"},
+    )
+    assert res_disabled.status_code == 403
+    assert "disabled" in res_disabled.text.lower()
+
+
+def test_login_rate_limiting_lockout(p1_client):
+    """Repeated failed logins trigger 429 account lockout throttling (A2)."""
+    from adam.api.routers import auth as auth_router
+    auth_router._FAILED_LOGIN_ATTEMPTS.clear()
+
+    # Send 5 failed attempts
+    for _ in range(5):
+        res = p1_client.post(
+            "/api/auth/login",
+            json={"username": "badactor", "password": "wrongpassword123"},
+        )
+        assert res.status_code == 401
+
+    # 6th attempt must be blocked by rate limiter
+    res_locked = p1_client.post(
+        "/api/auth/login",
+        json={"username": "badactor", "password": "wrongpassword123"},
+    )
+    assert res_locked.status_code == 429
+    assert "too many failed login attempts" in res_locked.text.lower()
+

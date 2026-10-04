@@ -408,3 +408,86 @@ def test_qwen3_5_key_capabilities_registry_and_runtime():
     )
     assert "```python" in res_coding.answer
 
+
+def test_model_registry_checksum_integrity_and_provenance():
+    """Verify that all pinned local model artifacts have valid, authentic, unique SHA-256 checksums."""
+    from adam.model.registry import CANONICAL_MODELS
+
+    seen_checksums = {}
+    fake_patterns = ["0123456789abcdef", "abcdef0123456789", "0000000000000000"]
+
+    for model_id, artifact in CANONICAL_MODELS.items():
+        chk = (artifact.checksum_sha256 or "").strip()
+        assert chk, f"Model {model_id} has empty checksum_sha256"
+
+        # Cloud models are managed by endpoints
+        if artifact.serving_runtime == "gemini" or chk == "cloud-endpoint-managed":
+            continue
+
+        # Local model weights must be valid 64-char hex SHA-256
+        assert len(chk) == 64, f"Model {model_id} checksum '{chk}' is not 64 hex characters"
+        assert all(c in "0123456789abcdefABCDEF" for c in chk), f"Model {model_id} checksum '{chk}' is not valid hex"
+
+        # Must not contain dummy repeating patterns
+        for pattern in fake_patterns:
+            assert pattern not in chk.lower(), f"Model {model_id} contains fake placeholder pattern '{pattern}'"
+
+        # Unique checksums across distinct models
+        assert chk not in seen_checksums, (
+            f"Duplicate checksum detected: {model_id} shares checksum '{chk}' with {seen_checksums[chk]}"
+        )
+        seen_checksums[chk] = model_id
+
+
+def test_load_model_verifies_file_checksum(tmp_path):
+    """SingleModelLifecycleManager.load_model must verify checksum when local model file is provided."""
+    registry = ModelRegistry()
+    lifecycle = SingleModelLifecycleManager(registry)
+    lifecycle.unload_model()
+
+    # Create dummy file with mismatching content
+    bad_model_file = tmp_path / "model_weights.gguf"
+    bad_model_file.write_bytes(b"corrupted or wrong weights binary data")
+
+    with pytest.raises(ValueError) as exc_info:
+        lifecycle.load_model(
+            QWEN3_4B_INSTRUCT.id,
+            backend="deterministic",
+            model_file_path=bad_model_file,
+        )
+    assert "checksum mismatch" in str(exc_info.value).lower()
+    assert str(bad_model_file) in str(exc_info.value)
+
+    # Now create file matching expected hash for a custom test model
+    valid_data = b"authentic-signed-model-binary-gguf"
+    valid_hash = registry.compute_sha256(valid_data)
+    good_model_file = tmp_path / "good_model.gguf"
+    good_model_file.write_bytes(valid_data)
+
+    custom_artifact = ModelArtifact(
+        id="verified-local-custom-model",
+        name="Verified/Custom-Model",
+        revision="v1.0",
+        quantization="Q4_K_M",
+        model_format="GGUF",
+        checksum_sha256=valid_hash,
+        file_size_bytes=len(valid_data),
+        license_id="Apache-2.0",
+        license_status=LicenseStatus.APPROVED,
+        requires_legal_review=False,
+        context_window=4096,
+        languages=["en", "hi"],
+        serving_runtime="deterministic",
+        prompt_template=QWEN3_CHATML_TEMPLATE,
+    )
+    registry.register_artifact(custom_artifact)
+
+    rt = lifecycle.load_model(
+        custom_artifact.id,
+        backend="deterministic",
+        model_file_path=good_model_file,
+    )
+    assert rt is not None
+    lifecycle.unload_model()
+
+
