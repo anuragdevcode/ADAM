@@ -305,8 +305,9 @@ def test_paddle_ocr_graceful_failures():
             assert res.confidence == 0.0
 
 
-def test_get_ocr_engine_factory():
+def test_get_ocr_engine_factory(monkeypatch):
     """Verify engine selection priority: Tesseract -> PaddleOCR -> Null."""
+    monkeypatch.delenv("ADAM_OCR_ENGINE", raising=False)
     # 1. Tesseract available -> select Tesseract
     with patch.object(TesseractOcrEngine, "is_available", return_value=True):
         with patch.object(PaddleOcrEngine, "is_available", return_value=True):

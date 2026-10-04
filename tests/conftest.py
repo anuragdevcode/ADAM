@@ -25,6 +25,8 @@ if not os.environ.get("ADAM_STORAGE_DIR"):
 # Allow legacy unit tests that provide raw mock headers (X-User-Role) to run without token fixtures.
 # Phase 1 and security hardening suites explicitly monkeypatch ADAM_TRUST_UNVERIFIED_HEADERS=false.
 os.environ.setdefault("ADAM_TRUST_UNVERIFIED_HEADERS", "true")
+# Default OCR engine to null in test suite to avoid executing heavy Tesseract subprocesses on test fixtures.
+os.environ.setdefault("ADAM_OCR_ENGINE", "null")
 
 import httpx
 import pytest

@@ -639,8 +639,9 @@ def get_ocr_engine(preferred_engine: Optional[str] = None) -> BaseOcrEngine:
         BaseOcrEngine: The selected OCR engine instance.
     """
     global _WARNED_NO_OCR
-    if preferred_engine:
-        name = preferred_engine.strip().lower()
+    selected_pref = preferred_engine or os.getenv("ADAM_OCR_ENGINE")
+    if selected_pref:
+        name = selected_pref.strip().lower()
         if name in ("tesseract", "tesseractocr"):
             engine = TesseractOcrEngine()
             if engine.is_available():

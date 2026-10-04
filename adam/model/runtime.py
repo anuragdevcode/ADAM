@@ -806,7 +806,7 @@ class LlamaCppServerRuntime(BaseModelRuntime):
         """Check if llama-server is healthy and running."""
         try:
             client = self._get_client()
-            resp = client.get("/health")
+            resp = client.get("/health", timeout=1.0)
             return resp.status_code == 200
         except Exception:
             return False

@@ -145,8 +145,15 @@ class SessionManager:
         """Retrieve and decrypt all turns for an authorized session."""
         session = self.get_session(session_id, requesting_user_id=requesting_user_id)
 
+        turns = (
+            self.db.query(ChatTurn)
+            .filter(ChatTurn.session_id == session.id)
+            .order_by(ChatTurn.created_at.asc())
+            .all()
+        )
+
         decrypted_turns: List[DecryptedTurn] = []
-        for t in session.turns:
+        for t in turns:
             plaintext = self.cipher.decrypt(t.content_ciphertext)
             decrypted_turns.append(
                 DecryptedTurn(

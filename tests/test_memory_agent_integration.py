@@ -45,12 +45,14 @@ def test_agent_memory_multi_turn_flow(db_session):
     assert resp2.session_id == session_id
 
     # Turns should now be 4
+    db_session.expire_all()
     turns_after = manager.get_turns(session_id, requesting_user_id="desk_officer_1")
     assert len(turns_after) == 4
     assert turns_after[2].role == "user"
     assert "BPL applicants" in turns_after[2].content
 
     # Summary should now track all 4 turns
+    db_session.expire_all()
     summary_after = summarizer.get_summary(session_id, requesting_user_id="desk_officer_1")
     assert summary_after is not None
     assert len(summary_after.source_turn_ids) == 4
