@@ -26,7 +26,7 @@ cachetools==5.5.2
 certifi==2026.2.25
 cffi==2.0.0
 cfgv==3.5.0
-chardet==5.2.0
+chardet==7.6.0
 charset-normalizer==3.4.3
 chart-studio==1.1.0
 click==8.5.0
